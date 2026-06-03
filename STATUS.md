@@ -16,6 +16,11 @@ avec administration des comptes, ingestion de fichiers persistée, portage des c
 - Rédaction du **cahier des charges V2** (`specs/cahier-des-charges-v2.md`)
 - Mise à jour du CONTEXT (passage en markdown, correction du rôle de Y2, direction V2)
 - Conversion en markdown : `CONTEXT.md`, `architecture/decisions.md`
+- **Correctifs V1 appliqués** (avant scaffolding V2) :
+  - TT (taux de transformation) : sessions désormais résolues par période (`getSessionsForPeriod`) ; affiché « — » + note quand la période filtrée n'est pas datable (export GA par canal). Plus de TT faux.
+  - KPIs GA rendus visibles : bandeau Sessions / Utilisateurs / Nvx users / Engagement / Revenu (avec Δ N-1) ajouté dans la carte GA — ces valeurs étaient calculées mais jamais affichées.
+  - Code mort supprimé : `renderGA()` (115 l., ciblait des éléments inexistants), `renderKPIs()` (ciblait `#krow`), doublon cassé `runAnnexeAnalysis()`. Diff : +51 / −233 lignes.
+  - Calculs cœur inchangés (CA Global/EShop/Marketplace/famille/top produits) → CA Global 916 k€ préservé. Syntaxe JS validée (`node --check`).
 
 ### Décisions prises (V2 — cf. ADR-005)
 - Hébergement : **Render** (free tier pour démarrer)
@@ -49,4 +54,4 @@ avec administration des comptes, ingestion de fichiers persistée, portage des c
 5. Reportings quotidien / hebdo / mensuel / saison (comparaison N-1)
 6. (Phase 2) Connecteur GA4 API
 7. (Phase 3) Connecteur API wshop
-8. (Optionnel) Correctifs V1 : dashboard GA, TT, code mort
+8. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)

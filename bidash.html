@@ -483,6 +483,23 @@ function getTotalSessions(gaFile){
   return gaFile.rows.reduce((sum, r) => sum + (parseInt((r[sessionIdx]||'').replace(/\s/g,''))||0), 0);
 }
 
+// Sessions sur la période sélectionnée.
+// - période complète ("Tout") → total du fichier
+// - sous-période → uniquement si l'export GA est journalier (colonne Date) ; sinon null
+//   (un export GA "par canal" n'a pas de date : impossible de filtrer → TT non calculable)
+function getSessionsForPeriod(gaFile, fromISO_, toISO_, isAll){
+  if(!gaFile) return null;
+  if(isAll) return getTotalSessions(gaFile);
+  const daily = getGADaily(gaFile);
+  if(!daily) return null;
+  const fo=isoToD(fromISO_), to=isoToD(toISO_);
+  let s=0;
+  for(const [iso,v] of Object.entries(daily)){
+    if(inRng(isoToD(iso), fo, to)) s+=v;
+  }
+  return s;
+}
+
 // ═══════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════
@@ -845,85 +862,6 @@ function openAnalyse(){
   }catch(e){ toast('Erreur analyse : '+e.message); console.error(e); }
   finally{ showLoad(false); }
   },50);
-}
-
-// ancienne fonction conservée pour compatibilité
-function runAnnexeAnalysis(fileN, fileN1){
-
-  // Construire le HTML de la modal d'analyse
-  let html = '';
-  res.families.forEach(fam=>{
-    if(fam==='—') return;
-    const prodsN  = Object.entries(res.dataN[fam]||{}).sort((a,b)=>b[1].qte-a[1].qte);
-    const prodsN1 = res.dataN1 ? Object.entries(res.dataN1[fam]||{}).sort((a,b)=>b[1].qte-a[1].qte) : null;
-
-    const allProds=[...new Set([
-      ...prodsN.map(([p])=>p),
-      ...(prodsN1||[]).map(([p])=>p)
-    ])];
-
-    // Classer : présents N et N-1, manquants en N, nouveaux en N
-    const rows_both  = allProds.filter(p=>(res.dataN[fam]?.[p]?.qte||0)>0 && (res.dataN1?.[fam]?.[p]?.qte||0)>0)
-                                .sort((a,b)=>(res.dataN[fam][b]?.qte||0)-(res.dataN[fam][a]?.qte||0));
-    const rows_new   = allProds.filter(p=>(res.dataN[fam]?.[p]?.qte||0)>0 && !(res.dataN1?.[fam]?.[p]?.qte));
-    const rows_miss  = allProds.filter(p=>!(res.dataN[fam]?.[p]?.qte) && (res.dataN1?.[fam]?.[p]?.qte||0)>0);
-
-    const totN  = prodsN.reduce((s,[,v])=>s+v.qte,0);
-    const totN1 = prodsN1?prodsN1.reduce((s,[,v])=>s+v.qte,0):null;
-    const totDlt= totN1?((totN-totN1)/totN1*100).toFixed(0):null;
-
-    const makeRow=(prod,isNew,isMiss)=>{
-      const vN  = res.dataN[fam]?.[prod];
-      const vN1 = res.dataN1?.[fam]?.[prod];
-      const dlt = (vN&&vN1&&vN1.qte>0)?((vN.qte-vN1.qte)/vN1.qte*100).toFixed(0):null;
-      const dltC= dlt?(+dlt>=0?'var(--g)':'var(--r)'):'var(--t3)';
-      const sign= dlt&&+dlt>=0?'+':'';
-      const label = isMiss
-        ? `<span style="color:var(--r)">⚠ ${prod}</span>`
-        : isNew
-        ? `<span style="color:var(--g)">★ ${prod}</span>`
-        : prod;
-      return`<tr style="${isMiss?'opacity:.7':''}">
-        <td style="padding:5px 8px;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${prod}">${label}</td>
-        <td style="text-align:right;padding:5px 8px;font-size:11px">${vN?vN.qte.toLocaleString('fr-FR'):'—'}</td>
-        ${res.dataN1?`<td style="text-align:right;padding:5px 8px;font-size:11px;color:var(--t2)">${vN1?vN1.qte.toLocaleString('fr-FR'):'—'}</td>
-        <td style="text-align:right;padding:5px 8px;font-size:10px;color:${dltC}">${dlt?sign+dlt+'%':isMiss?'<span style="color:var(--r)">manquant</span>':isNew?'<span style="color:var(--g)">nouveau</span>':'—'}</td>`:''}
-      </tr>`;
-    };
-
-    html += `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-weight:700;font-size:13px">${fam}</div>
-        <div style="font-size:11px">
-          <span style="font-weight:700">${totN.toLocaleString('fr-FR')} pièces N</span>
-          ${totN1!==null?`<span style="color:var(--t3);margin-left:8px">${totN1.toLocaleString('fr-FR')} N-1</span>`:''}
-          ${totDlt!==null?`<span style="margin-left:6px;color:${+totDlt>=0?'var(--g)':'var(--r)'};">${+totDlt>=0?'+':''}${totDlt}%</span>`:''}
-        </div>
-      </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="border-bottom:1px solid var(--br)">
-          <th style="text-align:left;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase">Produit</th>
-          <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Qté N</th>
-          ${res.dataN1?`<th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Qté N-1</th>
-          <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Évol.</th>`:''}
-        </tr></thead>
-        <tbody>
-          ${rows_both.slice(0,10).map(p=>makeRow(p,false,false)).join('')}
-          ${rows_new.slice(0,5).map(p=>makeRow(p,true,false)).join('')}
-          ${rows_miss.slice(0,5).map(p=>makeRow(p,false,true)).join('')}
-        </tbody>
-      </table>
-      ${rows_miss.length>0?`<div style="margin-top:6px;font-size:10px;color:var(--r)">⚠ ${rows_miss.length} pièce(s) vendues N-1 absentes ou non vendues en N</div>`:''}
-    </div>`;
-  });
-
-  // Afficher dans la modal dédiée à l'analyse
-  document.getElementById('analyse-subtitle').innerHTML=
-    '<b>'+fileN.fname.slice(0,40)+'</b>'+(fileN1?' vs '+fileN1.fname.slice(0,30):'');
-  document.getElementById('analyse-content').innerHTML=html||
-    '<div style="color:var(--t3);text-align:center;padding:30px">Aucune famille détectée — vérifiez les colonnes du fichier (attendus : Regroupement/Famille, Désignation/Article, Quantité)</div>';
-  document.getElementById('mov-analyse').style.display='flex';
-  document.getElementById('mov-analyse').style.flexDirection='column';
 }
 
 function showLoad(v){document.getElementById('loading').classList.toggle('on',v);}
@@ -1344,7 +1282,8 @@ function calcKPIEShop(rows, map, sessions){
 
   const commandes = ni!==undefined ? ordersSet.size : 0;
   const pm = commandes > 0 ? ca / commandes : 0;
-  const tt = sessions > 0 ? commandes / sessions : 0;
+  // sessions peut être null (période filtrée non datable) → TT non calculable
+  const tt = (sessions!==null && sessions>0) ? commandes / sessions : null;
 
   return {ca, commandes, pieces, pm, sessions, tt,
           caFP: hasFPOP?caFP:null, caOP: hasFPOP?caOP:null};
@@ -1373,16 +1312,18 @@ function renderKPIEShop(kpiN, kpiN1){
 
   // Récupérer caFP/caOP depuis l'objet OMS passé séparément via renderMainKPIs
   // (kpiN est un objet calcKPIEShop — on accède à caFP/caOP via G_kOMS injecté plus bas)
+  // hideIfNull : seules les lignes Full/Off Price disparaissent si non détectées.
+  // Sessions/TT restent affichées avec "—" si non calculables (période non datable).
   const rows = [
     {label:'CA',          n:kpiN.ca,         n1:kpiN1?.ca,         type:'eur'},
-    {label:'CA Full Price',n:kpiN.caFP??null,n1:kpiN1?.caFP??null, type:'eur', sub:true},
-    {label:'CA Off Price', n:kpiN.caOP??null,n1:kpiN1?.caOP??null, type:'eur', sub:true},
+    {label:'CA Full Price',n:kpiN.caFP??null,n1:kpiN1?.caFP??null, type:'eur', sub:true, hideIfNull:true},
+    {label:'CA Off Price', n:kpiN.caOP??null,n1:kpiN1?.caOP??null, type:'eur', sub:true, hideIfNull:true},
     {label:'Commandes',   n:kpiN.commandes,   n1:kpiN1?.commandes,  type:'int'},
     {label:'Nbre Pièces', n:kpiN.pieces,      n1:kpiN1?.pieces,     type:'int'},
     {label:'PM',          n:kpiN.pm,          n1:kpiN1?.pm,         type:'eur'},
     {label:'Sessions',    n:kpiN.sessions,    n1:kpiN1?.sessions,   type:'int'},
     {label:'TT',          n:kpiN.tt,          n1:kpiN1?.tt,         type:'pct'},
-  ].filter(r=>r.n!==null&&r.n!==undefined);
+  ].filter(r=>!(r.hideIfNull && (r.n===null||r.n===undefined)));
 
   document.getElementById('kpi-eshop-body').innerHTML = rows.map(r=>`
     <tr style="${r.sub?'background:rgba(255,255,255,.02)':''}">
@@ -1391,12 +1332,15 @@ function renderKPIEShop(kpiN, kpiN1){
       </td>
       <td class="val-n">${fmt(r.n, r.type)}</td>
       <td class="val-n1">${r.n1!==null&&r.n1!==undefined ? fmt(r.n1, r.type) : '<span class="no-data">—</span>'}</td>
-      <td>${r.n1!==null&&r.n1!==undefined ? delta(r.n, r.n1) : '<span class="delta-na">—</span>'}</td>
+      <td>${(r.n!==null&&r.n!==undefined&&r.n1!==null&&r.n1!==undefined) ? delta(r.n, r.n1) : '<span class="delta-na">—</span>'}</td>
     </tr>
   `).join('');
 
   // Note sur les sources disponibles
-  const gaNote = kpiN.sessions > 0 ? '' : ' · ⚠ Sessions : charger un fichier GA';
+  let gaNote;
+  if(!FILES['ga-n']) gaNote = ' · ⚠ Sessions : charger un fichier GA';
+  else if(kpiN.sessions===null) gaNote = ' · ⚠ Sessions/TT non datables sur une période filtrée (export GA par canal) — utiliser « Tout »';
+  else gaNote = '';
   const n1Note = kpiN1 ? '' : ' · ⚠ N-1 : charger OMS N-1 et GA N-1 pour la comparaison';
   document.getElementById('kpi-eshop-note').textContent =
     `Sources : OMS${gaNote}${n1Note}`;
@@ -1630,121 +1574,6 @@ function calcGA(file){
           totalEvents, totalRevenue, engRateTotal, byCanal};
 }
 
-function renderGA(kN, kN1){
-  const sec=document.getElementById('ga-section');
-  if(!kN){ sec.style.display='none'; return; }
-  sec.style.display='block';
-
-  const fInt  = v => (v||0).toLocaleString('fr-FR');
-  const fPct  = v => ((v||0)*100).toFixed(1)+'%';
-  const fEur  = v => (v||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
-  const delta = (n, n1, isPct=false) => {
-    if(n1===null||n1===undefined||n1===0) return '<span style="color:var(--t3)">—</span>';
-    const p = (n-n1)/n1*100;
-    const s = p>=0?'+':'';
-    return `<span style="color:${p>=0?'var(--g)':'var(--r)'};font-weight:700">${s}${p.toFixed(0)}%</span>`;
-  };
-
-  // KPI cards
-  const kpis=[
-    {l:'Sessions',         n:kN.totalSessions,   n1:kN1?.totalSessions,   fmt:fInt},
-    {l:'Utilisateurs',     n:kN.totalUsers,       n1:kN1?.totalUsers,      fmt:fInt},
-    {l:'Nvx utilisateurs', n:kN.totalNewUsers,    n1:kN1?.totalNewUsers,   fmt:fInt},
-    {l:'Taux engagement',  n:kN.engRateTotal,     n1:kN1?.engRateTotal,    fmt:fPct},
-    {l:'Événements clés',  n:kN.totalEvents,      n1:kN1?.totalEvents,     fmt:fInt},
-    {l:'Revenu GA',        n:kN.totalRevenue,     n1:kN1?.totalRevenue,    fmt:fEur},
-  ];
-
-  // Trier par canal par sessions desc
-  const sorted=[...kN.byCanal].sort((a,b)=>b.sessions-a.sessions);
-
-  document.getElementById('ga-content').innerHTML=`
-    <!-- KPI cards GA -->
-    <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px">
-      ${kpis.map(k=>{
-        const pv=k.n1??null;
-        const pct=pv!==null&&pv!==0?((k.n-pv)/pv*100).toFixed(0):null;
-        const sign=pct&&+pct>0?'+':'';
-        const cls=pct?(+pct>=0?'var(--g)':'var(--r)'):'var(--t3)';
-        return `<div class="kc" style="min-width:140px;flex:0 0 auto">
-          <div class="kl">${k.l}</div>
-          <div class="kv" style="font-size:18px">${k.fmt(k.n)}</div>
-          ${pct!==null?`<div class="kd" style="color:${cls}">${sign}${pct}% vs N-1</div>`:
-            pv!==null?`<div class="kd na">—</div>`:''}
-        </div>`;
-      }).join('')}
-    </div>
-
-    <!-- Graphique + tableau côte à côte -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="cc" style="height:280px">
-        <div class="ct">Sessions par canal</div>
-        <div style="position:relative;flex:1;min-height:0"><canvas id="ga-chart"></canvas></div>
-      </div>
-      <div style="background:var(--s);border:1px solid var(--br);border-radius:11px;padding:14px;overflow-y:auto;max-height:280px">
-        <div class="ct">Détail par canal</div>
-        <table class="kpi-table" style="font-size:11px">
-          <thead><tr>
-            <th>Canal</th>
-            <th style="text-align:right">Sessions</th>
-            <th style="text-align:right">Eng.</th>
-            <th style="text-align:right">Évén.</th>
-            <th style="text-align:right">Revenu</th>
-          </tr></thead>
-          <tbody>
-            ${sorted.map(c=>`<tr>
-              <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.canal}">${c.canal}</td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums">${fInt(c.sessions)}</td>
-              <td style="text-align:right">${fPct(c.engRate)}</td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums">${fInt(c.events)}</td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums">${fEur(c.revenue)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  // Graphique horizontal sessions par canal (top 8)
-  const top8 = sorted.slice(0,8);
-  if(CHARTS.ga) CHARTS.ga.destroy();
-  CHARTS.ga = new Chart(document.getElementById('ga-chart').getContext('2d'),{
-    type:'bar',
-    data:{
-      labels: top8.map(c=>c.canal.length>18?c.canal.slice(0,18)+'…':c.canal),
-      datasets:[{
-        label:'Sessions',
-        data: top8.map(c=>c.sessions),
-        backgroundColor:'rgba(74,158,255,.55)',
-        borderColor:'#4a9eff', borderWidth:1, borderRadius:3
-      },
-      // Si N-1 dispo : barres de comparaison
-      ...(kN1?[{
-        label:'N-1',
-        data: top8.map(c=>{
-          const found = kN1.byCanal.find(x=>x.canal===c.canal);
-          return found?found.sessions:0;
-        }),
-        backgroundColor:'rgba(74,158,255,.2)',
-        borderColor:'rgba(74,158,255,.4)', borderWidth:1, borderRadius:3
-      }]:[])
-      ]
-    },
-    options:{
-      indexAxis:'y',
-      responsive:true, maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:!!kN1, labels:{color:'#94a3b8',font:{size:10}}},
-        tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toLocaleString('fr-FR')+' sessions'}}
-      },
-      scales:{
-        x:{ticks:{color:'#64748b',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},grid:{color:'rgba(46,51,80,.4)'}},
-        y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{display:false}}
-      }
-    }
-  });
-}
 
 // ═══════════════════════════════════════════════════════
 // RENDER PRINCIPAL
@@ -1762,13 +1591,13 @@ function render(){
 
   if(omsN){
     const rowsN = filterRows(omsN.rows, omsN.map, from, to, isAll);
-    const sessionsN = getTotalSessions(gaN);
+    const sessionsN = getSessionsForPeriod(gaN, from, to, isAll);
     const kpiEShopN = calcKPIEShop(rowsN, omsN.map, sessionsN);
 
     let kpiEShopN1 = null;
     if(omsN1){
       const rowsN1 = filterRows(omsN1.rows, omsN1.map, cf, ct, false);
-      const sessionsN1 = getTotalSessions(gaN1);
+      const sessionsN1 = getSessionsForPeriod(gaN1, cf, ct, false);
       kpiEShopN1 = calcKPIEShop(rowsN1, omsN1.map, sessionsN1);
     }
     renderKPIEShop(kpiEShopN, kpiEShopN1);
@@ -2049,8 +1878,27 @@ function renderGACanaux(kGaN, kGaN1){
   const fInt=v=>(v||0).toLocaleString('fr-FR');
   const fPct=v=>((v||0)*100).toFixed(1)+'%';
   const fEur=v=>(v||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+  const gd=(n,n1)=>{
+    if(n1===null||n1===undefined||n1===0) return '';
+    const p=(n-n1)/n1*100, s=p>=0?'+':'';
+    return `<span style="color:${p>=0?'var(--g)':'var(--r)'};font-size:10px;margin-left:4px">${s}${p.toFixed(0)}%</span>`;
+  };
+  // Bandeau KPIs GA (auparavant calculés mais jamais affichés — renderGA() était mort)
+  const gaKpis=[
+    {l:'Sessions',     disp:fInt(kGaN.totalSessions), n:kGaN.totalSessions, n1:kGaN1?.totalSessions},
+    {l:'Utilisateurs', disp:fInt(kGaN.totalUsers),    n:kGaN.totalUsers,    n1:kGaN1?.totalUsers},
+    {l:'Nvx users',    disp:fInt(kGaN.totalNewUsers), n:kGaN.totalNewUsers, n1:kGaN1?.totalNewUsers},
+    {l:'Engagement',   disp:fPct(kGaN.engRateTotal),  n:kGaN.engRateTotal,  n1:kGaN1?.engRateTotal},
+    {l:'Revenu GA',    disp:fEur(kGaN.totalRevenue),  n:kGaN.totalRevenue,  n1:kGaN1?.totalRevenue},
+  ];
+  const kpiStrip=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">${
+    gaKpis.map(k=>`<div style="background:var(--s2);border-radius:8px;padding:7px 10px;min-width:90px;flex:1 0 auto">
+      <div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">${k.l}</div>
+      <div style="font-size:15px;font-weight:800;white-space:nowrap">${k.disp}${gd(k.n,k.n1)}</div>
+    </div>`).join('')
+  }</div>`;
   const sorted=[...kGaN.byCanal].sort((a,b)=>b.sessions-a.sessions);
-  el.innerHTML=`<table class="kpi-table" style="font-size:11px">
+  el.innerHTML=kpiStrip+`<table class="kpi-table" style="font-size:11px">
     <thead><tr>
       <th>Canal</th>
       <th style="text-align:right">Sessions</th>
@@ -2074,36 +1922,6 @@ function renderGACanaux(kGaN, kGaN1){
       </tr>`;
     }).join('')}</tbody>
   </table>`;
-}
-
-// ═══════════════════════════════════════════════════════
-// RENDER KPIs
-// ═══════════════════════════════════════════════════════
-function renderKPIs(k,ck,hasN1File){
-  const defs=[
-    {key:'caGlob',l:'CA GLOBAL',i:'💰',hl:true},
-    {key:'caEShop',l:'CA ESHOP',i:'🌐'},
-    {key:'caFR',l:'CA FRANCE',i:'🇫🇷'},
-    {key:'caInt',l:'CA INTERNATIONAL',i:'✈️'},
-    {key:'caEnt',l:'CA ENTREPÔT',i:'🏭'},
-    {key:'caSFS',l:'CA SFS',i:'🏪'},
-    {key:'caMkt',l:'CA MARKETPLACE',i:'🛒'},
-    {key:'caOmni',l:'CA OMNICANAL',i:'🔄'},
-  ];
-  document.getElementById('krow').innerHTML=defs.map(d=>{
-    const v=k[d.key]||0;
-    const pv=ck?ck[d.key]||0:null;
-    const noComp=pv===null;
-    const pct=!noComp?((v-pv)/pv*100).toFixed(1):null;
-    const sign=pct&&+pct>0?'+':'';
-    const cls=pct?(+pct>=0?'up':'dn'):'na';
-    return `<div class="kc${d.hl?' hl':''}${noComp?' dim':''}">
-      <div class="ki">${d.i}</div>
-      <div class="kl">${d.l}</div>
-      <div class="kv">${fCA(v)}</div>
-      ${!noComp?`<div class="kd ${cls}">${sign}${pct}% vs N-1</div>`:`<div class="kd na">${hasN1File?'—':'Charger N-1'}</div>`}
-    </div>`;
-  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
