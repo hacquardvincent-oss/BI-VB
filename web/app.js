@@ -15,6 +15,10 @@ function delta(n, n1) {
   return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
+const pc = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : (n - n1) / n1 * 100;
+const sgn = p => (p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(0) + '%');
+const PALETTE = ['#f5a623', '#4a9eff', '#22c55e', '#ef4444', '#a78bfa', '#f472b6', '#34d399', '#fbbf24'];
 
 const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS)', periods: ['N', 'N1'] },
@@ -88,6 +92,7 @@ async function loadReport() {
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   box.innerHTML = renderReport(rep);
   renderDailyChart(rep.daily);
+  renderCharts(rep);
 }
 
 function renderReport(rep) {
@@ -171,6 +176,7 @@ function renderReport(rep) {
     ? `<div class="card"><h3>Efficacité par canal d'acquisition (GA4)</h3>
        <table><thead><tr><th>Canal</th><th>Sessions</th><th>% trafic</th><th>Conv.</th><th>Revenu</th><th>% revenu</th><th>CA/sess.</th></tr></thead>
        <tbody>${ch.map(c => `<tr><td>${esc(c.canal)}</td><td>${fInt(c.sessions)}</td><td>${fPct(c.shareTraffic)}</td><td>${fPct(c.convRate)}</td><td>${fEur(c.revenue)}</td><td>${fPct(c.shareRevenue)}</td><td>${f2(c.caPerSession)}</td></tr>`).join('')}</tbody></table>
+       <div style="height:220px;margin-top:10px"><canvas id="chDonut"></canvas></div>
        <div class="note">Un canal dont la <b>part de revenu &gt; part de trafic</b> est efficace ; l'inverse signale un trafic peu qualifié.</div></div>`
     : '';
 
@@ -232,6 +238,7 @@ function renderReport(rep) {
     }
     const manq = (P.manquants || []).map(m => `<tr><td>${esc(m.produit)}</td><td>${fEur(m.caN)}</td><td>${fEur(m.caN1)}</td><td class="dn">−${fEur(m.perte)}</td></tr>`).join('');
     produitsCard = `<div class="card"><h3>Top produits — N vs N-1</h3>
+      <div style="height:240px;margin-bottom:10px"><canvas id="prodChart"></canvas></div>
       <table><thead><tr><th>#</th><th>Produit (N)</th><th>CA N</th><th>Qté N</th><th>Produit (N-1)</th><th>CA N-1</th></tr></thead><tbody>${topRows}</tbody></table>
       ${manq ? `<h3 style="margin-top:14px">🎯 Produits à reconquérir (forts en N-1, en retrait en N)</h3>
         <table><thead><tr><th>Produit</th><th>CA N</th><th>CA N-1</th><th>CA perdu</th></tr></thead><tbody>${manq}</tbody></table>
@@ -272,12 +279,12 @@ function renderReport(rep) {
       <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
       ${ttNote}</div>`;
-  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div></div>`;
+  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div><div style="height:200px;margin-top:12px"><canvas id="caMixChart"></canvas></div></div>`;
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
-  const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
+  const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
 
   // Cartes nommées + layout adapté à la cadence
   const C = {
@@ -293,7 +300,123 @@ function renderReport(rep) {
     week: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'pages', 'pays'], // Hebdo : tendances
     month: FULL, ytd: FULL, all: FULL,                                          // Mensuel/YTD/Tout : complet
   };
-  return (LAYOUTS[CURRENT] || FULL).map(k => C[k] || '').join('\n');
+  return (LAYOUTS[CURRENT] || FULL).map(k => {
+    let html = C[k] || ''; if (!html) return '';
+    const a = ana(k, rep);
+    if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
+    return html;
+  }).join('\n');
+}
+
+// ── Analyse / recommandation auto par tableau ───────────────────────────────
+function ana(key, rep) {
+  try {
+    if (key === 'kpi') {
+      const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1; if (!k1) return 'Charge un fichier N-1 pour l’analyse comparative.';
+      const pCA = pc(k.ca, k1.ca), pCmd = pc(k.commandes, k1.commandes), pPM = pc(k.pm, k1.pm), pTT = pc(k.tt, k1.tt);
+      let s = `CA ${sgn(pCA)} vs N-1`;
+      if (pCmd != null) s += `, commandes ${sgn(pCmd)}`;
+      if (pPM != null) s += `, panier ${sgn(pPM)}`;
+      s += '. ';
+      if (pTT != null && pTT < 0) s += 'Conversion en recul → prioriser la transformation (UX, prix, réassort).';
+      else if (pPM != null && pPM > 0 && pCmd != null && pCmd < 0) s += 'Moins de commandes mais panier plus élevé : enjeu d’acquisition/conversion.';
+      else s += 'Tendance globalement favorable.';
+      return s;
+    }
+    if (key === 'funnel') {
+      const f = rep.funnel && rep.funnel.n; if (!f) return '';
+      return `Chaque visite rapporte ${f2(f.caPerSession)} (CA/session).` + (f.tt != null ? ` TT ${fPct(f.tt)} : ${f.tt < 0.01 ? 'marge de progression sur la conversion.' : 'conversion solide.'}` : '');
+    }
+    if (key === 'gafunnel') {
+      const g = rep.gaFunnel && rep.gaFunnel.n; if (!g) return '';
+      return `Ajout panier ${fPct(g.addToCartRate)} des sessions, dont ${fPct(g.cartToOrder)} convertis en commande → ${(g.cartToOrder != null && g.cartToOrder < 0.3) ? 'déperdition panier→paiement à réduire (frais, création de compte, paiement).' : 'parcours panier sain.'}`;
+    }
+    if (key === 'channels') {
+      const ch = rep.channels && rep.channels.n; if (!ch || !ch.length) return '';
+      const eff = ch.filter(c => c.shareRevenue > c.shareTraffic).sort((a, b) => (b.shareRevenue - b.shareTraffic) - (a.shareRevenue - a.shareTraffic))[0];
+      const ineff = ch.filter(c => c.shareTraffic > c.shareRevenue + 0.03).sort((a, b) => (b.shareTraffic - b.shareRevenue) - (a.shareTraffic - a.shareRevenue))[0];
+      let s = '';
+      if (eff) s += `${eff.canal} sur-performe (${fPct(eff.shareRevenue)} du revenu pour ${fPct(eff.shareTraffic)} du trafic) → renforcer.`;
+      if (ineff) s += ` ${ineff.canal} sous-performe (${fPct(ineff.shareTraffic)} du trafic, ${fPct(ineff.shareRevenue)} du revenu) → qualifier le trafic.`;
+      return s || 'Trafic et revenu équilibrés entre canaux.';
+    }
+    if (key === 'device') {
+      const d = rep.device && rep.device.n; if (!d || d.length < 2) return '';
+      const m = d.find(x => /mobile/i.test(x.device)), o = d.find(x => /desktop/i.test(x.device));
+      if (m && o) return `Mobile = ${fPct(m.share)} des sessions mais convertit ${fPct(m.convRate)} vs ${fPct(o.convRate)} sur desktop → ${m.convRate < o.convRate ? 'écart mobile à corriger (vitesse, checkout mobile).' : 'mobile performant.'}`;
+      return '';
+    }
+    if (key === 'ca') {
+      const c = rep.ca.n; const omni = (c.caEnt + c.caSFS) || 1; const esh = (c.caFR + c.caInt) || 1;
+      return `Entrepôt ${fPct(c.caEnt / omni)} vs SFS ${fPct(c.caSFS / omni)} ; France ${fPct(c.caFR / esh)} du CA EShop.`;
+    }
+    if (key === 'pays') {
+      const p = rep.pays; if (!p || !p.length) return '';
+      const tot = p.reduce((s, x) => s + x.n.ca, 0) || 1;
+      const exp = p.filter(x => !/france/i.test(x.pays)).slice(0, 3).map(x => x.pays).join(', ');
+      return `${p[0].pays} = ${fPct(p[0].n.ca / tot)} du CA.` + (exp ? ` Top export : ${exp}.` : '');
+    }
+    if (key === 'saison') { const s = rep.saison; return (s && s.length) ? `Collection ${s[0].saison} en tête (${fEur(s[0].n)}).` : ''; }
+    if (key === 'produits') {
+      const m = rep.produits && rep.produits.manquants; if (!rep.produits) return '';
+      if (!m || !m.length) return 'Aucun produit majeur en retrait vs N-1.';
+      const perte = m.reduce((s, x) => s + x.perte, 0);
+      return `${m.length} produits forts en N-1 en retrait (CA manquant ${fEur(perte)}) → relance/réassort prioritaire, à commencer par « ${m[0].produit} ».`;
+    }
+    if (key === 'renta') {
+      const r = rep.produits && rep.produits.topRetournes; if (!r || !r.length) return '';
+      const worst = r.filter(x => x.qteVendue >= 3).sort((a, b) => b.tauxRetour - a.tauxRetour)[0] || r[0];
+      return `Plus retourné en valeur : « ${r[0].produit} » (${fEur(r[0].caRetourne)}). À surveiller : « ${worst.produit} » (${fPct(worst.tauxRetour)} de retour).`;
+    }
+    if (key === 'retours') {
+      const rt = rep.returns; if (!rt) return '';
+      const top = rt.n.reasons[0];
+      return `Taux de retour ${fPct(rt.tauxRetour)}. 1ʳᵉ cause : « ${top ? top.reason : '—'} » → agir (guide des tailles, fiches produit, qualité).`;
+    }
+    if (key === 'annulations') {
+      const c = rep.cancellations && rep.cancellations.n; if (!c) return '';
+      return `${fInt(c.qteAnnulee)} pièces non expédiées (${fPct(c.tauxPieces)}) sur ${fInt(c.commandesImpactees)} commandes → fiabiliser stock/préparation.`;
+    }
+    if (key === 'pages') {
+      const p = rep.topPages; if (!p || !p.length) return '';
+      const drop = p.filter(x => x.viewsN1 > 0).map(x => ({ page: x.page, d: pc(x.viewsN, x.viewsN1) })).filter(x => x.d != null).sort((a, b) => a.d - b.d)[0];
+      return `Page la plus vue : ${p[0].page}.` + (drop && drop.d < -15 ? ` Forte baisse sur ${drop.page} (${sgn(drop.d)}) → à investiguer.` : '');
+    }
+    if (key === 'marketplace') {
+      const mk = rep.marketplace.n; const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);
+      return `Marketplace ${fEur(mk.total)} ; 1er canal : ${arr[0][0]} (${fEur(arr[0][1])}).`;
+    }
+    return '';
+  } catch (e) { return ''; }
+}
+
+// Graphiques de synthèse (donuts + barres) — Lot D
+function renderCharts(rep) {
+  if (typeof Chart === 'undefined') return;
+  const mk = (id, cfg) => { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); };
+  const donutOpts = { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 }, padding: 8, usePointStyle: true } } } };
+  const barOpts = {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } },
+  };
+  const cut = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+
+  if (rep.ca) {
+    const c = rep.ca.n;
+    mk('caMixChart', { type: 'doughnut', data: { labels: ['Entrepôt', 'SFS', 'Marketplace'], datasets: [{ data: [Math.round(c.caEnt), Math.round(c.caSFS), Math.round(c.caMkt)], backgroundColor: ['#f5a623', '#4a9eff', '#22c55e'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
+    const s = [...rep.ga.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
+    mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  if (rep.famille && rep.famille.length) {
+    const f = rep.famille.slice(0, 8);
+    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets: [{ data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+  }
+  if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
+    const p = rep.produits.topN.slice(0, 8);
+    mk('prodChart', { type: 'bar', data: { labels: p.map(x => cut(x.des, 22)), datasets: [{ data: p.map(x => Math.round(x.ca)), backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+  }
 }
 
 // Graphiques quotidiens (CA+Sessions, et TT)

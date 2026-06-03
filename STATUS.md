@@ -2,8 +2,8 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Lot D (plus de graphiques + 1 analyse/recommandation auto par tableau).
-Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
+Lots A→D terminés. Prochaines pistes : retour d'une base (persistance + comptes), objectifs/
+atterrissage (% d'atteinte), puis évolutions fines de chaque lot selon retours d'usage.
 
 ---
 
@@ -121,9 +121,10 @@ Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
 - ga4.js : helper `post` + fetchPages/fetchPagesBySource, stockés en slots `gapages`/`gapagesrc` ; calcGA agrège addToCarts
 - ⚠️ Pages alimentées par l'API uniquement → nécessite « Rafraîchir GA4 »
 
-### Lot D — Visuel & reco
-- Plus de **graphiques** (donut canaux, barres familles/top produits, courbes)
-- **1 tableau = 1 analyse/recommandation** auto (insight généré par règle)
+### Lot D — Visuel & reco ✅ FAIT (03/06)
+- ✅ **Graphiques** ajoutés : donut mix CA (Entrepôt/SFS/Mkt), donut sessions par canal, barres CA par famille, barres top produits (+ courbes quotidiennes existantes)
+- ✅ **1 tableau = 1 analyse/recommandation** : fonction `ana()` génère un insight (règles) injecté sous chaque carte (KPI, funnel, canaux, device, pays, saison, produits, rentabilité, retours, annulations, pages, marketplace)
+- 100 % client (web/app.js + styles.css) ; aucun changement serveur
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop
