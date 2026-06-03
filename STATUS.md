@@ -2,12 +2,18 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Finaliser le déploiement Render (mode sans base) et tester avec les vrais fichiers. Puis : vue
-saison + graphiques dans l'UI ; et planifier le retour d'une base (persistance + comptes).
+Implémenter le connecteur GA4 API (ADR-007) dès réception des accès Google (property ID + service
+account). En parallèle : vue saison + graphiques dans l'UI V2.
 
 ---
 
 ## Session du 03/06/2026
+### Réalisé — mise en prod + CA par pays + cadrage GA4
+- ✅ **Application V2 déployée sur Render** (mode sans base) : login, dépôt fichiers, reporting, PDF — testée en prod par Vincent
+- ✅ **CA par pays** ajouté (calcul + report + UI + PDF + test) : CA / commandes / panier par pays, hors marketplace, comparaison N-1
+- 📋 **GA4 API priorisé** → ADR-007 rédigé + prérequis Google listés (en attente property ID + service account)
+- 📋 Recommandations business proposées (retours/annulations, CA pays, saison, objectifs, graphiques)
+
 ### Réalisé — bascule mode SANS base de données (ADR-006)
 - Déploiement Render bloqué : free tier limité à 1 base gratuite (déjà utilisée)
 - Décision : démarrer **sans base**, archiver les reportings via **PDF**
@@ -70,9 +76,11 @@ saison + graphiques dans l'UI ; et planifier le retour d'une base (persistance +
 3. ~~Ingestion persistée + anonymisation~~ ✅ fait
 4. ~~Portage des calculs V1 testés~~ ✅ fait
 5. ~~Reportings J/hebdo/mensuel + export PDF~~ ✅ fait (vue **saison** restant à brancher)
-6. **Déployer sur Render** (mode sans base) + tester avec les vrais fichiers
-7. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
-8. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
-9. (Phase 2) Connecteur GA4 API
-10. (Phase 3) Connecteur API wshop
-11. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)
+6. ~~Déployer sur Render~~ ✅ fait (03/06, mode sans base)
+7. ~~CA par pays~~ ✅ fait (03/06)
+8. **Connecteur GA4 API** (ADR-007) — en attente accès Google (property ID + service account)
+9. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
+10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
+11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
+12. (Phase 3) Connecteur API wshop
+13. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)

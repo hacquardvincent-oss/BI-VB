@@ -161,3 +161,40 @@ gratuite active ; le free tier en autorise une seule). Décision de l'utilisateu
 Dès que possible : libérer la base gratuite existante, OU passer à une base payante, OU réutiliser
 une base existante. À ce moment : réintroduire `db.js` (schéma users + datasets), remplacer
 `store.js` par des accès SQL, restaurer la gestion de comptes.
+
+---
+
+## ADR-007 — Connecteur GA4 via l'API Analytics Data (priorisé)
+
+**Date** : 03/06/2026
+**Statut** : Accepté (à implémenter — en attente des prérequis Google)
+
+### Contexte
+L'export GA fourni est agrégé **par canal, sans date** → sessions non filtrables par période, TT non
+calculable en sous-période. Décision : prioriser une **connexion directe à l'API GA4** pour obtenir
+des données datées (jour) et dimensionnées (canal, device, pays).
+
+### Décision
+- Utiliser l'**API Google Analytics Data v1** (GA4) en **service account** (auth serveur-à-serveur,
+  pas d'OAuth interactif).
+- Module `server/ga4.js` : `runReport` avec dimensions `date`, `sessionDefaultChannelGroup`,
+  `deviceCategory`, `country` et métriques `sessions`, `activeUsers`, `newUsers`, `keyEvents`,
+  `totalRevenue`, `engagementRate`. Le résultat alimente le même `store` que le dépôt GA (slot `ga`).
+- Déclenchement : à la demande (bouton « Rafraîchir GA4 ») et/ou planifié ultérieurement.
+- Le dépôt de fichier GA reste disponible en repli.
+
+### Configuration (variables d'environnement, jamais dans le repo)
+- `GA4_PROPERTY_ID` : identifiant numérique de la propriété GA4
+- `GA4_SA_KEY` : clé JSON du service account (en base64 de préférence)
+
+### Prérequis à fournir (côté Vincent / Google)
+1. **Property ID GA4** (numérique). _Indice : l'URL GA dans « Accès VB » contient `p358326945` → property `358326945` à confirmer._
+2. Un **projet Google Cloud** avec l'**API Google Analytics Data activée**.
+3. Un **service account** + sa **clé JSON**.
+4. Ajouter l'**email du service account** comme **Lecteur** sur la propriété GA4 (Admin → Accès à la propriété).
+5. Me transmettre `GA4_PROPERTY_ID` et la clé (je la configure en variable Render, jamais commitée).
+
+### Conséquences
+- Nouvelle dépendance (`@google-analytics/data` ou appel REST + `google-auth-library`).
+- Implémentation **non testable sans ces prérequis** → livrée dès réception des accès.
+- Secrets gérés via Render uniquement (cohérent avec ADR-005/006).

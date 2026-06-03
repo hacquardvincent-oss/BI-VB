@@ -330,6 +330,24 @@ function buildTopProdMap(rows, map) {
   return by;
 }
 
+// ── CA par pays (hors marketplace) — CA / commandes / pièces / panier ───────
+function calcByCountry(rows, map) {
+  const pi = map.prix, pai = map.pays, ni = map.num, qi = map.qte, ti = map.type;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const pays = (r[pai] || '').trim() || '(inconnu)';
+    if (!by[pays]) by[pays] = { ca: 0, pieces: 0, orders: new Set() };
+    by[pays].ca += fN(r[pi]);
+    by[pays].pieces += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    if (ni !== undefined && r[ni]) by[pays].orders.add(r[ni]);
+  });
+  return Object.entries(by).map(([pays, v]) => ({
+    pays, ca: v.ca, pieces: v.pieces, commandes: v.orders.size,
+    pm: v.orders.size > 0 ? v.ca / v.orders.size : 0,
+  })).sort((a, b) => b.ca - a.ca);
+}
+
 // ── Bornes de dates d'un jeu OMS ────────────────────────────────────────────
 function dateBounds(rows, map) {
   const di = map.date; if (di === undefined) return { min: null, max: null };
@@ -349,5 +367,5 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  buildRefMap, calcCAFamille, buildTopProdMap, dateBounds,
+  buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
 };

@@ -41,4 +41,14 @@ assert.strictEqual(mkt.glOMS, 30, 'GL.com OMS');
 assert.strictEqual(mkt.printemps, 50, 'Printemps OMS');
 assert.strictEqual(mkt.total, 80, 'Total marketplace (OMS seul)');
 
+const pays = calc.calcByCountry(rows, map);
+// hors marketplace : France (row1, 100€, 1 cmd, 1 pièce) et Royaume-Uni (row2, 80€, 1 cmd, 2 pièces)
+assert.strictEqual(pays.length, 2, 'nombre de pays (hors mkt)');
+assert.strictEqual(pays[0].pays, 'France', 'pays #1 par CA');
+assert.strictEqual(pays[0].ca, 100, 'CA France');
+assert.strictEqual(pays[0].commandes, 1, 'commandes France');
+const uk = pays.find(p => p.pays === 'Royaume-Uni');
+assert.strictEqual(uk.ca, 80, 'CA UK');
+assert.strictEqual(uk.pieces, 2, 'pièces UK');
+
 console.log('✅ calc.test.js : tous les calculs OK');

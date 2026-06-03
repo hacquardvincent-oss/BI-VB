@@ -89,6 +89,13 @@ function renderReport(doc, rep) {
   ];
   mkRows.forEach((r, i) => row4(doc, r[0], fEur(r[1]), fEur(r[2]), fDelta(r[1], r[2]), { bold: i === mkRows.length - 1 }));
 
+  // CA par pays
+  if (rep.pays && rep.pays.length) {
+    sectionTitle(doc, 'CA par pays (top 15)');
+    row4(doc, 'Pays', 'CA N', 'CA N-1', 'Δ', { bold: true, color: '#666', size: 9 });
+    rep.pays.slice(0, 15).forEach(p => row4(doc, p.pays, fEur(p.n.ca), p.n1 ? fEur(p.n1.ca) : '—', p.n1 ? fDelta(p.n.ca, p.n1.ca) : '—'));
+  }
+
   // Familles
   if (rep.famille && rep.famille.length) {
     sectionTitle(doc, 'CA par famille (top 15)');

@@ -63,9 +63,10 @@ async function buildReport({ preset, from, to, isAll }) {
   const mktN = calc.calcMarketplace(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {});
   const famNobj = calc.calcCAFamille(rowsN, omsN.map, refMap);
   const topNobj = calc.buildTopProdMap(rowsN, omsN.map);
+  const paysNarr = calc.calcByCountry(rowsN, omsN.map);
 
   // ── N-1 ──
-  let kpiEShopN1 = null, caN1 = null, mktN1 = null, famN1obj = null, topN1obj = null;
+  let kpiEShopN1 = null, caN1 = null, mktN1 = null, famN1obj = null, topN1obj = null, paysN1arr = null;
   let rowsN1 = null, mapN1 = null;
   if (omsN1) {
     mapN1 = omsN1.map; calc.ensureRefExtIdx(omsN1.hdrs, mapN1);
@@ -81,7 +82,17 @@ async function buildReport({ preset, from, to, isAll }) {
     mktN1 = calc.calcMarketplace(rowsN1, mapN1, y2N1 ? y2N1.rows : (omsN1 ? [] : (y2N ? y2N.rows : [])), y2N1 ? y2N1.map : (y2N ? y2N.map : {}));
     famN1obj = calc.calcCAFamille(rowsN1, mapN1, refMap);
     topN1obj = calc.buildTopProdMap(rowsN1, mapN1);
+    paysN1arr = calc.calcByCountry(rowsN1, mapN1);
   }
+
+  // CA par pays fusionné N / N-1
+  const paysMap = {};
+  paysNarr.forEach(p => { paysMap[p.pays] = { pays: p.pays, n: p, n1: null }; });
+  if (paysN1arr) paysN1arr.forEach(p => {
+    if (!paysMap[p.pays]) paysMap[p.pays] = { pays: p.pays, n: { ca: 0, commandes: 0, pieces: 0, pm: 0 }, n1: p };
+    else paysMap[p.pays].n1 = p;
+  });
+  const pays = Object.values(paysMap).sort((a, b) => b.n.ca - a.n.ca);
 
   // Familles fusionnées N / N-1
   let famille = null;
@@ -102,6 +113,7 @@ async function buildReport({ preset, from, to, isAll }) {
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     marketplace: { n: mktN, n1: mktN1 },
+    pays,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
     ga: gaN ? calc.calcGA(gaN) : null,
