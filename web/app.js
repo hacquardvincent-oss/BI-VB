@@ -25,8 +25,7 @@ async function me() {
   const r = await fetch('/auth/me');
   if (!r.ok) { location.href = '/login.html'; return null; }
   const u = await r.json();
-  document.getElementById('who').textContent = `${u.username} (${u.role})`;
-  if (u.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
+  document.getElementById('who').textContent = `${u.username}`;
   return u;
 }
 

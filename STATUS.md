@@ -2,12 +2,20 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Déployer la V2 sur Render (créer le service + la base) et tester l'ingestion + les reportings
-sur les vrais fichiers (OMS/Y2/GA). Brancher ensuite les vues hebdo/saison et le connecteur GA4.
+Finaliser le déploiement Render (mode sans base) et tester avec les vrais fichiers. Puis : vue
+saison + graphiques dans l'UI ; et planifier le retour d'une base (persistance + comptes).
 
 ---
 
 ## Session du 03/06/2026
+### Réalisé — bascule mode SANS base de données (ADR-006)
+- Déploiement Render bloqué : free tier limité à 1 base gratuite (déjà utilisée)
+- Décision : démarrer **sans base**, archiver les reportings via **PDF**
+- App basculée en mode mémoire : `server/store.js` (datasets en RAM, partagés, perdus au redémarrage)
+- Auth simplifiée : login partagé par env (`ADMIN_USERNAME`/`ADMIN_PASSWORD`), suppression de `db.js`/`users.js`/page admin
+- `render.yaml` sans base ; `pg`/`bcryptjs` retirés ; anonymisation à l'ingestion conservée
+- Flux validé end-to-end (login → upload OMS avec PII écartées → report → **PDF 200 application/pdf**)
+
 ### Réalisé — scaffolding V2
 - Application Node/Express + PostgreSQL créée (`server/`, `web/`, `render.yaml`, `package.json`)
 - Auth par session cookie + **administration des comptes** (admin crée/active/désactive/supprime, reset MDP) — compte admin seedé depuis `ADMIN_USERNAME`/`ADMIN_PASSWORD`
@@ -62,8 +70,9 @@ sur les vrais fichiers (OMS/Y2/GA). Brancher ensuite les vues hebdo/saison et le
 3. ~~Ingestion persistée + anonymisation~~ ✅ fait
 4. ~~Portage des calculs V1 testés~~ ✅ fait
 5. ~~Reportings J/hebdo/mensuel + export PDF~~ ✅ fait (vue **saison** restant à brancher)
-6. **Déployer sur Render** + tester avec les vrais fichiers
+6. **Déployer sur Render** (mode sans base) + tester avec les vrais fichiers
 7. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
-8. (Phase 2) Connecteur GA4 API
-9. (Phase 3) Connecteur API wshop
-10. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)
+8. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
+9. (Phase 2) Connecteur GA4 API
+10. (Phase 3) Connecteur API wshop
+11. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)

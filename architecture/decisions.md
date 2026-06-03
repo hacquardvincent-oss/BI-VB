@@ -126,3 +126,38 @@ mensuel / analyse de saison, et à terme des **connecteurs** (GA4 API, API e-com
 - **Python/Flask + Pandas** : obligerait à réécrire la logique métier V1 (perte de réutilisation).
 - **Supabase/Firebase (BaaS)** : moins de contrôle sur la logique de calcul serveur ; à reconsidérer si l'auth maison devient lourde.
 - **VPS / serveur interne** : plus souple sur la confidentialité mais coût et administration immédiats — reporté (Render d'abord).
+
+---
+
+## ADR-006 — Démarrage SANS base de données (mode mémoire + archivage PDF)
+
+**Date** : 03/06/2026
+**Statut** : Accepté (intérimaire — remplace partiellement ADR-005 tant qu'aucune base n'est branchée)
+
+### Contexte
+Au déploiement Render, la création de la base PostgreSQL gratuite a échoué :
+**« cannot have more than one active free tier database »** (le compte Render a déjà une base
+gratuite active ; le free tier en autorise une seule). Décision de l'utilisateur : démarrer
+**sans base**, et utiliser **l'export PDF pour archiver** les reportings.
+
+### Décision
+- **Pas de PostgreSQL** pour l'instant. Les jeux de données déposés sont stockés **en mémoire**
+  (`server/store.js`), partagés pour l'équipe, **perdus au redémarrage / à la mise en veille** du
+  service Render free → re-déposer les fichiers en début de session.
+- **Authentification partagée par variables d'environnement** (`ADMIN_USERNAME` / `ADMIN_PASSWORD`),
+  sans table users. La **gestion de comptes multi-utilisateurs (ADR-005, point 5) est suspendue**
+  jusqu'au retour d'une base.
+- **Archivage** des reportings via **export PDF** (déjà en place).
+- L'**anonymisation à l'ingestion** (ADR-005 point 6) reste appliquée (données en mémoire dans le cloud).
+
+### Conséquences
+- Aucune persistance des données entre sessions ni partage différé : modèle proche de la V1
+  (fichiers (re)déposés à chaque session), mais en ligne et multi-postes.
+- `render.yaml` ne crée plus de base ; `pg` et `bcryptjs` retirés des dépendances.
+- Code structuré pour réactiver la persistance facilement : seules les couches `store` (mémoire) et
+  `auth` (env) sont à remplacer par leurs équivalents base de données.
+
+### Retour à la persistance (quand ?)
+Dès que possible : libérer la base gratuite existante, OU passer à une base payante, OU réutiliser
+une base existante. À ce moment : réintroduire `db.js` (schéma users + datasets), remplacer
+`store.js` par des accès SQL, restaurer la gestion de comptes.

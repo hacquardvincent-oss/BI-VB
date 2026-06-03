@@ -4,17 +4,16 @@
 // des jeux de données persistés, en réutilisant la logique de calcul V1.
 // ============================================================================
 const express = require('express');
-const { pool } = require('./db');
+const store = require('./store');
 const { requireAuth } = require('./auth');
 const calc = require('./calc');
 
 const router = express.Router();
 
 async function loadDataset(source, period) {
-  const { rows } = await pool.query('SELECT * FROM datasets WHERE source=$1 AND period=$2', [source, period]);
-  if (!rows.length) return null;
-  const d = rows[0];
-  return { hdrs: d.hdrs, rows: d.rows, map: d.colmap || {}, filename: d.filename, dateMin: d.date_min, dateMax: d.date_max, uploadedAt: d.uploaded_at };
+  const d = store.getDataset(source, period);
+  if (!d) return null;
+  return { hdrs: d.hdrs, rows: d.rows, map: d.map || {}, filename: d.filename, dateMin: d.date_min, dateMax: d.date_max, uploadedAt: d.uploaded_at };
 }
 
 const shiftYear = (iso, delta) => { if (!iso) return ''; const p = iso.split('-'); return `${+p[0] + delta}-${p[1]}-${p[2]}`; };

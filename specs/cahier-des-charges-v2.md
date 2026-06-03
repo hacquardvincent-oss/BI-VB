@@ -1,6 +1,12 @@
 # Cahier des charges — BiDash V2
-_Version : DRAFT 0.1 — 03/06/2026_
-_Référence architecture : `architecture/decisions.md` (ADR-005)_
+_Version : DRAFT 0.2 — 03/06/2026_
+_Référence architecture : `architecture/decisions.md` (ADR-005, ADR-006)_
+
+> ⚠️ **Démarrage intérimaire SANS base de données** (ADR-006) : le free tier Render limite à 1 base
+> gratuite (déjà prise). Tant qu'aucune base n'est branchée :
+> - F2/F3 **persistance suspendue** → données en mémoire (perdues au redémarrage), archivage via **PDF (F6)**
+> - F1 **gestion de comptes suspendue** → login partagé par variable d'environnement
+> Le reste (ingestion, anonymisation, calculs, reportings, PDF) est opérationnel.
 
 ---
 

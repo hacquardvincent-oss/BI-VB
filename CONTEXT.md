@@ -28,10 +28,15 @@ remplaçant un besoin BI aujourd'hui non couvert.
 
 ### V2 (cible)
 - **Backend Node.js** (Express) — réutilise la logique de calcul JS de la V1
-- **PostgreSQL** — persistance des données (les équipes ne re-déposent pas à chaque fois)
-- **Authentification** par comptes, avec **création/modération d'utilisateurs** par un admin
 - **Hébergement Render** (free tier pour démarrer)
-- Frontend : réutilisation de l'UI V1, alimentée par l'API
+- Frontend : UI dédiée (login + dashboard) alimentée par l'API
+
+### V2 — état de démarrage (intérimaire, cf. ADR-006)
+- ⚠️ **Sans base de données pour l'instant** : le free tier Render limite à 1 base gratuite (déjà prise).
+  - Données déposées **en mémoire** (perdues au redémarrage / veille) → re-déposer en début de session
+  - **Archivage des reportings via export PDF**
+  - **Auth partagée** par variable d'env (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) ; comptes multi-utilisateurs suspendus
+- Cibles dès qu'une base est dispo : **PostgreSQL** (persistance) + **gestion de comptes** (admin crée/modère)
 
 ## Sources de données
 | Source | Système | Format | Contenu réel | Mode V2 |
