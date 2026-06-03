@@ -1,0 +1,2280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>BI Project</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0f1117;--s:#1a1d27;--s2:#22263a;--br:#2e3350;--a:#f5a623;--b:#4a9eff;--g:#22c55e;--r:#ef4444;--t:#e2e8f0;--t2:#94a3b8;--t3:#64748b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;font-size:13px}
+
+/* ── HEADER ── */
+#hdr{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--s);border-bottom:1px solid var(--br);height:48px}
+#logo{font-size:16px;font-weight:800;letter-spacing:-.5px}#logo b{color:var(--a)}
+#fbadge{display:none;align-items:center;gap:6px;font-size:11px;color:var(--t2);background:var(--s2);border:1px solid var(--br);border-radius:20px;padding:3px 10px}
+#fbadge.on{display:inline-flex}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--g);flex-shrink:0}
+#hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.tab{font-size:11px;padding:4px 12px;border-radius:6px;border:1px solid var(--br);background:var(--s2);color:var(--t2);cursor:pointer;font-weight:600}
+.tab.on{background:var(--a);color:#000;border-color:var(--a)}
+#btn-reload{font-size:11px;padding:4px 12px;border-radius:6px;border:1px solid var(--br);background:var(--s2);color:var(--t2);cursor:pointer;display:none}
+#btn-reload.on{display:block}
+#btn-reload:hover{border-color:var(--a);color:var(--a)}
+
+/* ── STAGING SCREEN ── */
+#staging{padding:32px 24px;min-height:calc(100vh - 48px);display:none;flex-direction:column;gap:24px;align-items:center}
+#staging.on{display:flex}
+#staging-title{text-align:center}
+#staging-title h2{font-size:20px;font-weight:700;margin-bottom:6px}
+#staging-title p{font-size:13px;color:var(--t2)}
+#sources-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:880px}
+.source-col{background:var(--s);border:1px solid var(--br);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.source-col-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;margin-bottom:2px}
+.source-col-title .ico{font-size:18px}
+.source-col-title .badge-src{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600}
+.badge-oms{background:rgba(245,166,35,.15);color:var(--a)}
+.badge-y2{background:rgba(74,158,255,.15);color:var(--b)}
+.badge-ga{background:rgba(34,197,94,.15);color:var(--g)}
+/* slot de drop */
+.slot{border:1.5px dashed var(--br);border-radius:10px;padding:14px 12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;min-height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.slot:hover{border-color:var(--a);background:rgba(245,166,35,.04)}
+.slot.dragover{border-color:var(--a);background:rgba(245,166,35,.07)}
+.slot.loaded{border-color:var(--g);border-style:solid;background:rgba(34,197,94,.05);cursor:default}
+.slot.loaded:hover{border-color:var(--g);background:rgba(34,197,94,.07)}
+.slot-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3)}
+.slot-label.n{color:var(--a)}.slot-label.n1{color:var(--b)}
+.slot-icon{font-size:20px}
+.slot-hint{font-size:11px;color:var(--t3)}
+.slot-file{font-size:11px;font-weight:600;color:var(--g);word-break:break-all;text-align:center}
+.slot-meta{font-size:10px;color:var(--t2)}
+.slot-remove{position:absolute;top:6px;right:8px;background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;line-height:1;padding:2px}
+.slot-remove:hover{color:var(--r)}
+.slot-input{display:none}
+/* pied de page staging */
+#staging-footer{display:flex;align-items:center;gap:16px;width:100%;max-width:880px}
+#staging-status{font-size:12px;color:var(--t2);flex:1}
+#staging-status span{font-weight:600}
+#btn-launch{background:var(--a);color:#000;border:none;padding:11px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;opacity:.4;pointer-events:none;transition:opacity .2s}
+#btn-launch.ready{opacity:1;pointer-events:all}
+#btn-launch.ready:hover{filter:brightness(1.1)}
+
+/* ── FILTRES ── */
+#fbar{display:none;background:var(--s);border-bottom:1px solid var(--br);padding:8px 20px;gap:6px;flex-direction:column}
+#fbar.on{display:flex}
+.frow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fl{font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;min-width:70px}
+.pb{font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--br);background:var(--s2);color:var(--t2);cursor:pointer}
+.pb:hover{border-color:var(--b)}.pb.on{background:var(--a);color:#000;border-color:var(--a);font-weight:700}
+input[type=date]{background:var(--s2);border:1px solid var(--br);color:var(--t);padding:4px 8px;border-radius:5px;font-size:11px}
+input[type=date]:focus{outline:none;border-color:var(--b)}
+.arr{color:var(--t3);font-size:11px}
+#cwarn{font-size:11px;color:var(--a);display:none}#cwarn.on{display:inline}
+
+/* ── DASHBOARD ── */
+#main{display:none;padding:14px 20px;gap:12px;flex-direction:column}
+#main.on{display:flex}
+.sec-hdr{font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;padding:4px 0 2px;border-bottom:1px solid var(--br)}
+/* KPIs */
+#krow{display:flex;gap:9px;overflow-x:auto;padding-bottom:2px}
+#krow::-webkit-scrollbar{height:3px}#krow::-webkit-scrollbar-thumb{background:var(--br);border-radius:2px}
+.kc{background:var(--s);border:1px solid var(--br);border-radius:11px;padding:13px 16px;min-width:148px;flex:0 0 auto}
+.kc.hl{border-color:var(--a)}.kc.dim{opacity:.45}
+.ki{font-size:14px;margin-bottom:5px}
+.kl{font-size:9px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1px;white-space:nowrap}
+.kv{font-size:19px;font-weight:800;white-space:nowrap}
+.kd{font-size:10px;margin-top:2px}.up{color:var(--g)}.dn{color:var(--r)}.na{color:var(--t3)}
+/* Charts */
+#crow{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.cc{background:var(--s);border:1px solid var(--br);border-radius:11px;padding:14px;height:220px;display:flex;flex-direction:column}
+.cc canvas{flex:1;min-height:0}
+.ct{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;flex-shrink:0}
+/* Table */
+#tcard{background:var(--s);border:1px solid var(--br);border-radius:11px;padding:14px}
+#thdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+#tsearch{background:var(--s2);border:1px solid var(--br);color:var(--t);padding:5px 10px;border-radius:7px;font-size:12px;width:200px}
+#tsearch:focus{outline:none;border-color:var(--b)}
+#twrap{overflow-x:auto;max-height:380px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{position:sticky;top:0;z-index:1}
+th{background:var(--s);text-align:left;padding:7px 9px;color:var(--t3);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--br);white-space:nowrap}
+td{padding:6px 9px;border-bottom:1px solid rgba(46,51,80,.35);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.018)}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
+.bb{background:rgba(74,158,255,.15);color:var(--b)}.bg{background:rgba(34,197,94,.15);color:var(--g)}.bo{background:rgba(245,166,35,.15);color:var(--a)}
+#tfooter{margin-top:7px;font-size:11px;color:var(--t3)}
+/* ── DONNÉES PRINCIPALES (colonne droite) ── */
+.dp-block{background:var(--s);border:1px solid var(--br);border-radius:10px;padding:12px 14px}
+.dp-label{font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.dp-value{font-size:22px;font-weight:800;white-space:nowrap}
+.dp-delta{font-size:11px;margin-top:2px}
+.dp-split{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dp-mini{background:var(--s2);border-radius:8px;padding:10px 12px}
+.dp-mini .dp-label{font-size:9px}
+.dp-mini .dp-value{font-size:16px;font-weight:700}
+.dp-mkt-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(46,51,80,.3);font-size:12px}
+.dp-mkt-row:last-child{border-bottom:none}
+.dp-mkt-name{color:var(--t2)}
+.dp-mkt-val{font-weight:700;font-variant-numeric:tabular-nums}
+.dp-mkt-src{font-size:9px;color:var(--t3);margin-left:4px}
+.dp-mkt-delta{font-size:10px;margin-left:6px}
+
+/* ── REPORTING KPI ESHOP ── */
+#kpi-eshop{background:var(--s);border:1px solid var(--br);border-radius:11px;padding:16px;display:none}
+#kpi-eshop.on{display:block}
+#kpi-eshop .sec-hdr{margin-bottom:12px}
+.kpi-table{width:100%;border-collapse:collapse;font-size:13px}
+.kpi-table th{text-align:left;padding:8px 12px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--br)}
+.kpi-table th:not(:first-child){text-align:right}
+.kpi-table td{padding:9px 12px;border-bottom:1px solid rgba(46,51,80,.35)}
+.kpi-table td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.kpi-table tr:last-child td{border-bottom:none}
+.kpi-table tr:hover td{background:rgba(255,255,255,.015)}
+.kpi-table .row-label{font-weight:600;color:var(--t)}
+.kpi-table .val-n{color:var(--t);font-weight:700}
+.kpi-table .val-n1{color:var(--t2)}
+.kpi-table .delta-up{color:var(--g);font-weight:700}
+.kpi-table .delta-dn{color:var(--r);font-weight:700}
+.kpi-table .delta-na{color:var(--t3)}
+.kpi-table .no-data{color:var(--t3);font-style:italic;font-size:11px}
+.kpi-eshop-note{font-size:11px;color:var(--t3);margin-top:8px}
+
+/* Diagnostic */
+#diag{display:none;background:#0d1f0d;border:1px solid #1a4d1a;border-radius:10px;padding:12px 16px;font-size:11px;font-family:monospace;color:#7dd87d;line-height:1.7}
+#diag.on{display:block}
+#diag h4{font-size:12px;font-weight:700;color:var(--g);margin-bottom:8px;font-family:sans-serif}
+.diag-warn{color:var(--a)}.diag-bad{color:var(--r)}
+
+/* ── UTILS ── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--s2);border:1px solid var(--br);color:var(--t);padding:10px 16px;border-radius:9px;font-size:12px;display:none;z-index:200}
+#toast.on{display:block}
+#loading{display:none;position:fixed;inset:0;background:rgba(15,17,23,.85);z-index:150;align-items:center;justify-content:center;flex-direction:column;gap:10px}
+#loading.on{display:flex}
+.spin{width:28px;height:28px;border:3px solid var(--br);border-top-color:var(--a);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <div id="fbadge"><span class="dot"></span><span id="btxt"></span></div>
+  <div id="hdr-actions">
+    <button id="btn-reload" onclick="showStaging()">↩ Changer les fichiers</button>
+    <div class="tab on" id="tab-oms">OMS</div>
+    <div class="tab" id="tab-y2" style="opacity:.35;cursor:not-allowed">Y2</div>
+    <div class="tab" id="tab-ga" style="opacity:.35;cursor:not-allowed">GA</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ÉCRAN DE STAGING — chargement des fichiers
+═══════════════════════════════════════════════ -->
+<div id="staging" class="on">
+  <div id="staging-title">
+    <h2>📂 Chargement des fichiers</h2>
+    <p>Déposez vos exports dans les emplacements correspondants. Au moins un fichier suffit pour démarrer.</p>
+  </div>
+
+  <div id="sources-grid">
+
+    <!-- OMS / EShop -->
+    <div class="source-col">
+      <div class="source-col-title">
+        <span class="ico">🛒</span>
+        <span>EShop (OMS)</span>
+        <span class="badge-src badge-oms">wshop</span>
+      </div>
+      <div class="slot" id="slot-oms-n" data-key="oms-n">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n">Année N (actuelle)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+      <div class="slot" id="slot-oms-n1" data-key="oms-n1">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n1">Année N-1 (comparaison)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+    </div>
+
+    <!-- Y2 / ERP -->
+    <div class="source-col">
+      <div class="source-col-title">
+        <span class="ico">📦</span>
+        <span>Stock (Y2 / ERP)</span>
+        <span class="badge-src badge-y2">Y2</span>
+      </div>
+      <div class="slot" id="slot-y2-n" data-key="y2-n">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n">Année N (actuelle)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+      <div class="slot" id="slot-y2-n1" data-key="y2-n1">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n1">Année N-1 (comparaison)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+    </div>
+
+    <!-- GA -->
+    <div class="source-col">
+      <div class="source-col-title">
+        <span class="ico">📈</span>
+        <span>Trafic (Google Analytics)</span>
+        <span class="badge-src badge-ga">GA</span>
+      </div>
+      <div class="slot" id="slot-ga-n" data-key="ga-n">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n">Année N (actuelle)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+      <div class="slot" id="slot-ga-n1" data-key="ga-n1">
+        <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+        <div class="slot-label n1">Année N-1 (comparaison)</div>
+        <div class="slot-icon">📄</div>
+        <div class="slot-hint">CSV ou XLSX</div>
+      </div>
+    </div>
+
+  </div><!-- /sources-grid -->
+
+  <!-- Fichier complémentaire : Référentiel produit -->
+  <div style="width:100%;max-width:880px;background:var(--s);border:1px solid var(--br);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px">
+    <div style="font-size:18px">📋</div>
+    <div style="flex:1">
+      <div style="font-weight:700;font-size:13px;margin-bottom:2px">Référentiel Produit <span style="font-size:10px;font-weight:400;color:var(--t3)">— facultatif, active le CA par famille</span></div>
+      <div style="font-size:11px;color:var(--t3)">Fichier unique (XLSX) — Ref. Externe → Familles principales</div>
+    </div>
+    <div class="slot" id="slot-ref" data-key="ref" style="min-height:60px;width:260px;flex-shrink:0">
+      <input type="file" class="slot-input" accept=".xlsx,.xls,.csv">
+      <div class="slot-icon" style="font-size:16px">📄</div>
+      <div class="slot-hint">Glisser ou cliquer</div>
+    </div>
+  </div>
+
+  <!-- Analyse annexe -->
+  <div style="width:100%;max-width:880px;background:var(--s);border:1px solid rgba(74,158,255,.3);border-radius:14px;padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:20px">🔬</span>
+      <div>
+        <div style="font-weight:700;font-size:13px">Analyse annexe</div>
+        <div style="font-size:11px;color:var(--t3)">Importe un fichier de données pour une analyse ad-hoc — top produits par famille N vs N-1, pièces manquantes</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Fichier N (année en cours)</div>
+        <div class="slot" id="slot-annexe-n" data-key="annexe-n" style="min-height:60px">
+          <input type="file" class="slot-input" accept=".xlsx,.xls,.csv">
+          <div class="slot-icon" style="font-size:16px">📄</div>
+          <div class="slot-hint">Glisser ou cliquer</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Fichier N-1 (année précédente)</div>
+        <div class="slot" id="slot-annexe-n1" data-key="annexe-n1" style="min-height:60px">
+          <input type="file" class="slot-input" accept=".xlsx,.xls,.csv">
+          <div class="slot-icon" style="font-size:16px">📄</div>
+          <div class="slot-hint">Glisser ou cliquer</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:12px">
+      <div id="annexe-status" style="font-size:11px;color:var(--t2);flex:1">Aucun fichier chargé</div>
+      <button id="btn-analyse" style="background:var(--b);color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;opacity:.4;pointer-events:none" onclick="openAnalyse()">🔬 Analyser</button>
+    </div>
+  </div>
+
+  <div id="staging-footer">
+    <div id="staging-status">Aucun fichier chargé</div>
+    <button id="btn-launch" onclick="launchDashboard()">▶ Charger le dashboard</button>
+  </div>
+</div>
+
+<!-- FILTRES -->
+<div id="fbar">
+  <div class="frow">
+    <span class="fl">Période</span>
+    <button class="pb" data-p="today">Aujourd'hui</button>
+    <button class="pb" data-p="week">Cette semaine</button>
+    <button class="pb" data-p="month">Ce mois</button>
+    <button class="pb" data-p="ytd">YTD</button>
+    <button class="pb on" data-p="all">Tout</button>
+    <input type="date" id="df"> <span class="arr">→</span> <input type="date" id="dt">
+  </div>
+  <div class="frow">
+    <span class="fl">Comparaison</span>
+    <button class="pb on" data-comp="n1auto">N-1 auto</button>
+    <button class="pb" data-comp="none">Aucune</button>
+    <input type="date" id="cf"> <span class="arr">→</span> <input type="date" id="ct">
+    <span id="cwarn">⚠ Pas de données N-1 dans ce fichier</span>
+  </div>
+</div>
+
+<!-- DASHBOARD UNIFIÉ -->
+<div id="main">
+
+  <!-- ROW 1+2 FUSIONNÉES : tableau synthèse gauche + données clés droite -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+
+    <!-- GAUCHE : KPI EShop synthèse -->
+    <div id="kpi-eshop" style="background:var(--s);border:1px solid var(--br);border-radius:11px;padding:14px">
+      <div class="sec-hdr" style="margin-bottom:10px">📊 Vision globale — KPI EShop (FR + Inter)</div>
+      <table class="kpi-table">
+        <thead><tr>
+          <th>Mensuel / FR+INTER</th>
+          <th style="text-align:right">N</th>
+          <th style="text-align:right">N-1</th>
+          <th style="text-align:right">vs N-1</th>
+        </tr></thead>
+        <tbody id="kpi-eshop-body">
+          <tr><td colspan="4" style="text-align:center;color:var(--t3);padding:16px;font-size:12px">Chargez un fichier OMS</td></tr>
+        </tbody>
+      </table>
+      <div class="kpi-eshop-note" id="kpi-eshop-note" style="margin-top:6px"></div>
+    </div>
+
+    <!-- DROITE : Données principales -->
+    <div id="main-kpis" style="display:flex;flex-direction:column;gap:8px">
+      <div style="color:var(--t3);font-size:12px;text-align:center;padding:30px">Chargez un fichier OMS</div>
+    </div>
+
+  </div>
+
+  <!-- ROW 1bis : GA canaux + Marketplace total (sous le KPI EShop) -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <!-- GA sessions par canal -->
+    <div class="cc" style="height:auto;max-height:340px;overflow-y:auto">
+      <div class="ct">📈 Acquisition — Sessions par canal</div>
+      <div id="ga-canaux-content">
+        <div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier GA</div>
+      </div>
+    </div>
+    <!-- Marketplace canaux de distribution -->
+    <div id="y2-section" style="display:none;overflow-y:auto;max-height:340px">
+      <div class="sec-hdr" style="margin-bottom:8px">🏪 Marketplace — Canaux de distribution</div>
+      <div id="y2-content"></div>
+    </div>
+  </div>
+
+  <!-- ROW 2 : CA quotidien + Répartition -->
+  <div id="crow">
+    <div class="cc"><div class="ct">CA quotidien</div><div style="position:relative;flex:1;min-height:0"><canvas id="cdaily"></canvas></div></div>
+    <div class="cc"><div class="ct">Répartition par canal OMS</div><div style="position:relative;flex:1;min-height:0"><canvas id="cpie"></canvas></div></div>
+  </div>
+
+  <!-- ROW 4 : CA par famille + Top 10 N + Top 10 N-1 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <!-- CA par famille -->
+    <div class="cc" id="famille-card" style="height:auto;max-height:320px;overflow-y:auto">
+      <div class="ct">🗂 CA par famille</div>
+      <div id="famille-content"><div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez le référentiel produit</div></div>
+    </div>
+    <!-- Top 10 produits N -->
+    <div class="cc" style="height:auto;max-height:320px;overflow-y:auto">
+      <div class="ct">🏆 Top 10 Produits — N</div>
+      <div id="top-produits-n">
+        <div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier OMS</div>
+      </div>
+    </div>
+    <!-- Top 10 produits N-1 -->
+    <div class="cc" style="height:auto;max-height:320px;overflow-y:auto">
+      <div class="ct">🏆 Top 10 Produits — N-1</div>
+      <div id="top-produits-n1">
+        <div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier OMS N-1</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ROW 6 : Tableau commandes détail -->
+  <div id="tcard">
+    <div id="thdr">
+      <span style="font-size:12px;font-weight:700;color:var(--t2)">📋 Commandes détail</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="tsearch" placeholder="Rechercher…">
+        <button style="font-size:10px;padding:4px 9px;border-radius:5px;border:1px solid var(--br);background:var(--s2);color:var(--t3);cursor:pointer" onclick="document.getElementById('diag').classList.toggle('on')">🔍 Diag</button>
+      </div>
+    </div>
+    <div id="twrap"></div>
+    <div id="tfooter"></div>
+  </div>
+  <div id="diag"><h4>🔍 Diagnostic</h4><div id="diag-content">—</div></div>
+
+</div>
+
+<!-- MODAL MAPPING COLONNES -->
+<div id="mov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:100;align-items:flex-start;justify-content:center;padding:5vh 20px;overflow-y:auto">
+  <div style="background:var(--s);border:1px solid var(--br);border-radius:14px;padding:24px;width:100%;max-width:460px;margin:auto">
+    <h2 style="font-size:16px;font-weight:700;margin-bottom:3px">Mapping des colonnes</h2>
+    <div id="mfi" style="font-size:11px;color:var(--b);margin-bottom:18px"></div>
+    <div id="mfields"></div>
+    <div id="macts" style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">
+      <button style="background:var(--s2);color:var(--t2);border:1px solid var(--br);padding:7px 16px;border-radius:7px;cursor:pointer;font-size:12px" id="bcancel">Annuler</button>
+      <button style="background:var(--a);color:#000;border:none;padding:7px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700" id="bimport">✓ Importer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ANALYSE ANNEXE -->
+<div id="mov-analyse" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:110;overflow-y:auto;padding:24px">
+  <div style="background:var(--s);border:1px solid var(--br);border-radius:14px;padding:24px;max-width:860px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:16px;font-weight:700">🔬 Analyse annexe</div>
+        <div id="analyse-subtitle" style="font-size:11px;color:var(--b);margin-top:2px"></div>
+      </div>
+      <button onclick="document.getElementById('mov-analyse').style.display='none'" style="background:var(--s2);color:var(--t2);border:1px solid var(--br);padding:7px 16px;border-radius:7px;cursor:pointer;font-size:12px">✕ Fermer</button>
+    </div>
+    <div id="analyse-content"></div>
+  </div>
+</div>
+
+<div id="loading"><div class="spin"></div><span style="color:var(--t2);font-size:13px">Chargement…</span></div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// PARSER GA — CSV avec entête commentée (lignes débutant par #)
+// Séparateur virgule (format export GA4)
+// ═══════════════════════════════════════════════════════
+function parseGAcsv(text){
+  text = text.replace(/^﻿/, '');
+  const lines = text.split(/\r?\n/);
+  // Trouver la première ligne qui n'est pas un commentaire
+  let headerIdx = lines.findIndex(l => l.trim() && !l.startsWith('#'));
+  if(headerIdx < 0) return {hdrs:[], rows:[]};
+  const SEP = ',';
+  function splitLine(line){
+    const f=[]; let c='', q=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){if(q&&line[i+1]==='"'){c+='"';i++;}else q=!q;}
+      else if(ch===SEP&&!q){f.push(c.trim());c='';}
+      else c+=ch;
+    }
+    f.push(c.trim()); return f;
+  }
+  const hdrs = splitLine(lines[headerIdx]);
+  const rows = [];
+  for(let i=headerIdx+1; i<lines.length; i++){
+    if(!lines[i].trim() || lines[i].startsWith('#')) continue;
+    const cols = splitLine(lines[i]);
+    while(cols.length < hdrs.length) cols.push('');
+    rows.push(cols);
+  }
+  return {hdrs, rows};
+}
+
+// Extrait le total Sessions depuis les lignes GA (somme de tous les canaux)
+function getTotalSessions(gaFile){
+  if(!gaFile || !gaFile.rows || !gaFile.hdrs) return 0;
+  // Trouver la colonne Sessions
+  const normHdrs = gaFile.hdrs.map(norm);
+  const sessionIdx = normHdrs.findIndex(h => h === 'sessions' || h.includes('sessions'));
+  if(sessionIdx < 0) return 0;
+  return gaFile.rows.reduce((sum, r) => sum + (parseInt((r[sessionIdx]||'').replace(/\s/g,''))||0), 0);
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════
+function norm(s){
+  return (s||'').toLowerCase()
+    .replace(/[àáâãäå]/g,'a').replace(/[èéêë]/g,'e').replace(/[ìíîï]/g,'i')
+    .replace(/[òóôõö]/g,'o').replace(/[ùúûü]/g,'u')
+    .replace(/ç/g,'c').replace(/ñ/g,'n')
+    .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const SEP=';';
+  function splitLine(line){
+    const f=[];let c='',q=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){if(q&&line[i+1]==='"'){c+='"';i++;}else q=!q;}
+      else if(ch===SEP&&!q){f.push(c.trim());c='';}
+      else c+=ch;
+    }
+    f.push(c.trim());return f;
+  }
+  const lines=text.split(/\r?\n/);
+  const hdrs=splitLine(lines[0]);
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    if(!lines[i].trim())continue;
+    const cols=splitLine(lines[i]);
+    while(cols.length<hdrs.length)cols.push('');
+    rows.push(cols);
+  }
+  return{hdrs,rows};
+}
+const parseFrD=s=>{const m=(s||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?{d:+m[1],m:+m[2],y:+m[3]}:null;};
+const toISO=o=>o?`${o.y}-${String(o.m).padStart(2,'0')}-${String(o.d).padStart(2,'0')}`:'';
+const isoToD=s=>{if(!s)return null;const p=s.split('-');return{y:+p[0],m:+p[1],d:+p[2]};};
+const dcmp=(a,b)=>a.y!==b.y?a.y-b.y:a.m!==b.m?a.m-b.m:a.d-b.d;
+const inRng=(o,f,t)=>o&&(!f||dcmp(o,f)>=0)&&(!t||dcmp(o,t)<=0);
+const fN=s=>parseFloat((s||'').replace(/\s/g,'').replace(',','.'))||0;
+const fCA=v=>v>=1e6?(v/1e6).toFixed(2).replace('.',',')+' M €':v>=1e3?(v/1000).toFixed(1).replace('.',',')+' k €':v.toFixed(0)+' €';
+// ═══════════════════════════════════════════════════════
+// MODULE ANALYSE ANNEXE
+// ═══════════════════════════════════════════════════════
+
+// Met à jour le bouton Analyser selon les slots chargés
+function updateAnalyseStatus(){
+  const n=FILES['annexe-n'], n1=FILES['annexe-n1'];
+  const btn=document.getElementById('btn-analyse');
+  const st=document.getElementById('annexe-status');
+  if(n){
+    const parts=[`N: ${n.fname.slice(0,25)}`];
+    if(n1) parts.push(`N-1: ${n1.fname.slice(0,25)}`);
+    st.textContent=parts.join(' · ');
+    btn.style.opacity='1'; btn.style.pointerEvents='auto'; btn.style.cursor='pointer';
+  } else {
+    st.textContent='Aucun fichier chargé';
+    btn.style.opacity='.4'; btn.style.pointerEvents='none';
+  }
+}
+
+// Détecte les colonnes clés dans un fichier annexe
+// ═══════════════════════════════════════════════════════
+// ANALYSE ANNEXE — moteur d'analyse gap produits/familles
+// Supporte fichiers OMS (wshop) détectés automatiquement
+// ═══════════════════════════════════════════════════════
+
+// Détecte si le fichier est un export OMS wshop (colonnes connues)
+function isOMSFile(hdrs){
+  const n = hdrs.map(norm);
+  return n.some(h=>h.includes('prix de vente pay')) && n.some(h=>h.includes('designation'));
+}
+
+// Construit le dataset par famille/produit depuis un fichier OMS
+function buildOmsDataset(rows, map, refMap){
+  const pi=map.prix, di=map.des, qi=map.qte, ti=map.type,
+        ri=map.ref_ext||map._refExt, ryIdx=map.rayon;
+  const byFam={}, totals={ca:0, qte:0, orders:new Set()};
+
+  rows.forEach(r=>{
+    const type=(r[ti]||'').trim();
+    if(isMkt(type)) return; // exclure marketplace
+    const prix = fN(r[pi]);
+    const des  = (r[di]||'').trim();
+    const qty  = parseInt(r[qi]||'1')||1;
+    const ref  = ri!==undefined ? (r[ri]||'').trim() : '';
+    const rayon= ryIdx!==undefined ? (r[ryIdx]||'').trim() : '';
+    if(r[map.num]) totals.orders.add(r[map.num]);
+
+    // Famille : référentiel > rayon OMS > '(sans famille)'
+    const fam = (refMap && ref && refMap[ref]) || rayon || '(sans famille)';
+    const prod = des || ref || '—';
+
+    totals.ca += prix; totals.qte += qty;
+    if(!byFam[fam]) byFam[fam]={ca:0,qte:0,prods:{}};
+    byFam[fam].ca  += prix;
+    byFam[fam].qte += qty;
+    if(!byFam[fam].prods[prod]) byFam[fam].prods[prod]={ca:0,qte:0};
+    byFam[fam].prods[prod].ca  += prix;
+    byFam[fam].prods[prod].qte += qty;
+  });
+  totals.orders = totals.orders.size;
+  return {byFam, totals};
+}
+
+// Construit le dataset générique (fichier non-OMS)
+function buildGenericDataset(rows, hdrs){
+  const n=hdrs.map(norm);
+  const find=als=>{ let b=-1,bl=0; n.forEach((nh,i)=>als.forEach(a=>{if(nh===a&&bl<999){b=i;bl=999;}else if(bl<999&&nh.includes(a)&&a.length>bl){b=i;bl=a.length;}})); return b>=0?b:undefined; };
+  const fi=find(['regroupement','famille','famille principale','rayon','category']);
+  const pi=find(['designation','libelle','article','produit','reference','libelle article']);
+  const qi=find(['quantite','qte','nb pieces','pieces','quantite vendue']);
+  const ci=find(['ca','chiffre affaires','montant','total ttc','prix de vente pay']);
+  const byFam={}, totals={ca:0,qte:0,orders:0};
+  rows.forEach(r=>{
+    const fam=(fi!==undefined?(r[fi]||''):'—').trim()||'(sans famille)';
+    const prod=(pi!==undefined?(r[pi]||''):'—').trim()||'—';
+    const qty=qi!==undefined?Math.abs(parseInt(r[qi])||0):1;
+    const ca=ci!==undefined?Math.abs(fN(r[ci])):0;
+    totals.ca+=ca; totals.qte+=qty;
+    if(!byFam[fam]) byFam[fam]={ca:0,qte:0,prods:{}};
+    byFam[fam].ca+=ca; byFam[fam].qte+=qty;
+    if(!byFam[fam].prods[prod]) byFam[fam].prods[prod]={ca:0,qte:0};
+    byFam[fam].prods[prod].ca+=ca; byFam[fam].prods[prod].qte+=qty;
+  });
+  return {byFam, totals};
+}
+
+function detectAnnexeMap(hdrs){
+  const n=hdrs.map(norm);
+  const find=(aliases)=>{
+    let best=-1,bestL=0;
+    n.forEach((nh,i)=>aliases.forEach(a=>{
+      if(nh===a&&bestL<999){best=i;bestL=999;}
+      else if(bestL<999&&nh.includes(a)&&a.length>bestL){best=i;bestL=a.length;}
+    }));
+    return best>=0?best:undefined;
+  };
+  return {
+    famille:    find(['regroupement','famille','famille principale','famille produit','category','categorie']),
+    produit:    find(['designation','libelle','article','produit','reference','libelle article','libelle abrege']),
+    ref:        find(['ref. externe','reference article saisie','code article','ref externe']),
+    qte:        find(['quantite','qte','nb pieces','pieces','quantite vendue','quantites vendues']),
+    ca:         find(['ca','chiffre affaires','montant','total ttc','prix de vente pay']),
+    saison:     find(['saison','season','annee','year','periode']),
+    date:       find(['date']),
+  };
+}
+
+function runAnnexeAnalysis(fileN, fileN1){
+  const mapN  = detectAnnexeMap(fileN.hdrs);
+  const mapN1 = fileN1 ? detectAnnexeMap(fileN1.hdrs) : null;
+
+  const buildData = (rows, map) => {
+    const fi=map.famille, pi=map.produit, ri=map.ref, qi=map.qte, ci=map.ca;
+    const byFam={};
+    rows.forEach(r=>{
+      const fam=(fi!==undefined?r[fi]:'—')||'—';
+      const prod=(pi!==undefined?r[pi]:(ri!==undefined?r[ri]:'—'))||'—';
+      const qte=qi!==undefined?Math.abs(parseInt(r[qi])||0):0;
+      const ca=ci!==undefined?Math.abs(fN(r[ci])):0;
+      if(!byFam[fam]) byFam[fam]={};
+      if(!byFam[fam][prod]) byFam[fam][prod]={qte:0,ca:0};
+      byFam[fam][prod].qte+=qte;
+      byFam[fam][prod].ca+=ca;
+    });
+    return byFam;
+  };
+
+  const dataN  = buildData(fileN.rows,  mapN);
+  const dataN1 = fileN1 ? buildData(fileN1.rows, mapN1) : null;
+
+  // Résultats par famille
+  const families = [...new Set([
+    ...Object.keys(dataN),
+    ...(dataN1?Object.keys(dataN1):[])
+  ])].sort();
+
+  return {dataN, dataN1, families, mapN, mapN1};
+}
+
+function openAnalyse(){
+  const fileN=FILES['annexe-n'], fileN1=FILES['annexe-n1'];
+  if(!fileN){ toast('Chargez au moins un fichier N dans la zone Analyse annexe'); return; }
+
+  showLoad(true);
+  setTimeout(()=>{ // setTimeout pour laisser le spinner s'afficher
+  try{
+  // Référentiel disponible ?
+  const refMap = FILES['ref'] ? buildRefMap(FILES['ref']) : {};
+
+  // Détecter le format
+  const omsN  = isOMSFile(fileN.hdrs);
+  const omsN1 = fileN1 && isOMSFile(fileN1.hdrs);
+
+  let dsN, dsN1;
+  if(omsN){
+    const mapN = autoMap(fileN.hdrs, OMS_ALIASES);
+    dsN = buildOmsDataset(fileN.rows, mapN, refMap);
+  } else {
+    dsN = buildGenericDataset(fileN.rows, fileN.hdrs);
+  }
+  if(fileN1){
+    if(omsN1){
+      const mapN1 = autoMap(fileN1.hdrs, OMS_ALIASES);
+      dsN1 = buildOmsDataset(fileN1.rows, mapN1, refMap);
+    } else {
+      dsN1 = buildGenericDataset(fileN1.rows, fileN1.hdrs);
+    }
+  }
+
+  const hasN1 = !!dsN1;
+  const fE2 = v => v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+  const fI  = v => v.toLocaleString('fr-FR');
+  const dlt = (n,n1) => {
+    if(!n1||n1===0) return '';
+    const p=(n-n1)/n1*100, s=p>=0?'+':'', c=p>=0?'#22c55e':'#ef4444';
+    return ' <span style="color:'+c+';font-size:10px">'+s+p.toFixed(0)+'%</span>';
+  };
+
+  // === RÉSUMÉ GLOBAL ===
+  const totN=dsN.totals, totN1=dsN1?.totals;
+  let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:20px">';
+  const kpis=[
+    {l:'CA Total',vN:totN.ca,vN1:totN1?.ca,fmt:fE2},
+    {l:'Pièces',  vN:totN.qte,vN1:totN1?.qte,fmt:fI},
+    {l:'Commandes',vN:totN.orders,vN1:totN1?.orders,fmt:fI},
+    {l:'PM',vN:totN.orders>0?totN.ca/totN.orders:0,vN1:(totN1?.orders>0?totN1.ca/totN1.orders:null),fmt:fE2},
+  ];
+  html += kpis.map(k=>'<div style="background:#22263a;border-radius:8px;padding:10px 12px">'
+    +'<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:3px">'+k.l+'</div>'
+    +'<div style="font-size:18px;font-weight:800">'+k.fmt(k.vN||0)+(hasN1&&k.vN1?dlt(k.vN,k.vN1):'')+'</div>'
+    +(hasN1&&k.vN1?'<div style="font-size:10px;color:#94a3b8">N-1 : '+k.fmt(k.vN1)+'</div>':'')
+    +'</div>').join('');
+  html += '</div>';
+
+  // === ANALYSE PAR FAMILLE ===
+  const families = [...new Set([...Object.keys(dsN.byFam),...(dsN1?Object.keys(dsN1.byFam):[])])]
+    .filter(f=>f&&f!=='(sans famille)').sort();
+
+  // Trier par CA N décroissant
+  families.sort((a,b)=>(dsN.byFam[b]?.ca||0)-(dsN.byFam[a]?.ca||0));
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+
+  // Panneau 1 : CA par famille
+  html += '<div style="background:#22263a;border-radius:10px;padding:14px">';
+  html += '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">📊 CA par famille</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<thead><tr style="border-bottom:1px solid #2e3350"><th style="text-align:left;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase">Famille</th><th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">CA N</th>'+(hasN1?'<th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">N-1</th><th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">Δ</th>':'')+'</tr></thead><tbody>';
+  families.forEach(f=>{
+    const vN=dsN.byFam[f]?.ca||0, vN1=dsN1?.byFam[f]?.ca||0;
+    const pct=hasN1&&vN1>0?((vN-vN1)/vN1*100).toFixed(0):null;
+    const s=pct!==null&&+pct>=0?'+':'', c=pct!==null?(+pct>=0?'#22c55e':'#ef4444'):'#64748b';
+    html += '<tr style="border-bottom:1px solid rgba(46,51,80,.3)">'
+      +'<td style="padding:5px 6px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f+'</td>'
+      +'<td style="text-align:right;padding:5px 6px;font-weight:700">'+fE2(vN)+'</td>'
+      +(hasN1?'<td style="text-align:right;padding:5px 6px;color:#94a3b8">'+fE2(vN1)+'</td><td style="text-align:right;padding:5px 6px;font-size:10px;color:'+c+'">'+(pct!==null?s+pct+'%':vN>0?'<span style="color:#22c55e">NEW</span>':'<span style="color:#ef4444">MANQ.</span>')+'</td>':'')
+      +'</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // Panneau 2 : Familles en retrait (top opportunités manquées)
+  if(hasN1){
+    const manquantes = families.filter(f=>(dsN1.byFam[f]?.ca||0)>0)
+      .map(f=>({f, caN:dsN.byFam[f]?.ca||0, caN1:dsN1.byFam[f]?.ca||0}))
+      .filter(x=>x.caN1>0)
+      .sort((a,b)=>(b.caN1-b.caN)-(a.caN1-a.caN)) // tri par CA perdu
+      .slice(0,8);
+
+    html += '<div style="background:#22263a;border-radius:10px;padding:14px">';
+    html += '<div style="font-size:11px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">⚠ Familles en retrait</div>';
+    html += '<div style="font-size:10px;color:#64748b;margin-bottom:10px">CA manquant vs N-1</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><tbody>';
+    manquantes.forEach(x=>{
+      const perte=x.caN1-x.caN, pct=x.caN1>0?((x.caN-x.caN1)/x.caN1*100).toFixed(0):null;
+      const c=pct!==null&&+pct>=0?'#22c55e':'#ef4444';
+      html += '<tr style="border-bottom:1px solid rgba(46,51,80,.3)">'
+        +'<td style="padding:5px 6px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+x.f+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;font-weight:700">'+fE2(x.caN)+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;color:#94a3b8">'+fE2(x.caN1)+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;font-size:10px;color:'+c+'">'+(pct!==null?(+pct>=0?'+':'')+pct+'%':'—')+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;font-size:10px;color:#ef4444">'+(perte>0?'−'+fE2(perte):'')+'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="background:#22263a;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px">Chargez un fichier N-1 pour voir les opportunités manquées</div>';
+  }
+  html += '</div>'; // fin grid familles
+
+  // === DÉTAIL PAR FAMILLE ===
+  html += '<div style="margin-top:4px">';
+  families.forEach(fam=>{
+    const prodsN  = Object.entries(dsN.byFam[fam]?.prods||{}).sort((a,b)=>b[1].ca-a[1].ca);
+    const prodsN1Map = dsN1?.byFam[fam]?.prods||{};
+    const allProdKeys = [...new Set([...prodsN.map(([p])=>p),...Object.keys(prodsN1Map)])];
+    const missing = allProdKeys.filter(p=>!(dsN.byFam[fam]?.prods[p]?.qte)&&(prodsN1Map[p]?.qte||0)>0)
+                               .sort((a,b)=>(prodsN1Map[b]?.ca||0)-(prodsN1Map[a]?.ca||0));
+
+    const famCaN  = dsN.byFam[fam]?.ca||0;
+    const famCaN1 = dsN1?.byFam[fam]?.ca||0;
+    const famPct  = hasN1&&famCaN1>0?((famCaN-famCaN1)/famCaN1*100).toFixed(0):null;
+    const famC    = famPct!==null?(+famPct>=0?'#22c55e':'#ef4444'):'#94a3b8';
+
+    html += '<details style="background:#1a1d27;border:1px solid #2e3350;border-radius:10px;padding:0;margin-bottom:8px">';
+    html += '<summary style="padding:12px 14px;cursor:pointer;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:space-between;list-style:none">'
+      +'<span>'+fam+'</span>'
+      +'<span style="display:flex;gap:12px;align-items:center">'
+        +(missing.length>0?'<span style="font-size:10px;background:rgba(239,68,68,.15);color:#ef4444;padding:2px 8px;border-radius:10px">⚠ '+missing.length+' manquant(s)</span>':'')
+        +'<span style="font-size:12px">'+fE2(famCaN)+(hasN1?'<span style="color:'+famC+';margin-left:6px;font-size:11px">'+(famPct!==null?(+famPct>=0?'+':'')+famPct+'%':'NEW')+'</span>':'')+'</span>'
+      +'</span>'
+      +'</summary>';
+    html += '<div style="padding:0 14px 14px">';
+
+    // Produits manquants (vendus N-1, absents N)
+    if(hasN1&&missing.length>0){
+      html += '<div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px;margin-bottom:10px">';
+      html += '<div style="font-size:10px;font-weight:700;color:#ef4444;margin-bottom:6px">⚠ PRODUITS VENDUS N-1 MAIS ABSENTS EN N</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><tbody>';
+      missing.slice(0,10).forEach(p=>{
+        const v=prodsN1Map[p];
+        html += '<tr><td style="padding:4px 6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fca5a5">'+p+'</td>'
+          +'<td style="text-align:right;padding:4px 6px;color:#94a3b8">'+fI(v?.qte||0)+' pièces</td>'
+          +'<td style="text-align:right;padding:4px 6px;color:#94a3b8">'+fE2(v?.ca||0)+'</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // Top 10 produits N
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:1px solid #2e3350">'
+      +'<th style="text-align:left;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase">#</th>'
+      +'<th style="text-align:left;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase">Produit</th>'
+      +'<th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">CA N</th>'
+      +'<th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">Qté N</th>'
+      +(hasN1?'<th style="text-align:right;padding:4px 6px;font-size:9px;color:#64748b;font-weight:700">Δ CA</th>':'')
+      +'</tr></thead><tbody>';
+    prodsN.slice(0,10).forEach(([p,v],i)=>{
+      const v1=prodsN1Map[p];
+      const pct=v1&&v1.ca>0?((v.ca-v1.ca)/v1.ca*100).toFixed(0):null;
+      const c=pct!==null?(+pct>=0?'#22c55e':'#ef4444'):'#64748b';
+      html += '<tr style="border-bottom:1px solid rgba(46,51,80,.25)">'
+        +'<td style="padding:5px 6px;color:#64748b;font-size:10px">'+(i+1)+'</td>'
+        +'<td style="padding:5px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p+'">'+p+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;font-weight:600">'+fE2(v.ca)+'</td>'
+        +'<td style="text-align:right;padding:5px 6px;color:#94a3b8">'+fI(v.qte)+'</td>'
+        +(hasN1?'<td style="text-align:right;padding:5px 6px;font-size:10px;color:'+c+'">'+(pct!==null?(+pct>=0?'+':'')+pct+'%':!v1?'<span style="color:#22c55e">NEW</span>':'—')+'</td>':'')
+        +'</tr>';
+    });
+    html += '</tbody></table></div></details>';
+  });
+  html += '</div>';
+
+  // Afficher
+  document.getElementById('analyse-subtitle').innerHTML=
+    '<b>'+(omsN?'Format OMS détecté':'Format générique')+' · '+fileN.fname.slice(0,35)+'</b>'
+    +(fileN1?' vs '+fileN1.fname.slice(0,30):'<span style="color:#f5a623;margin-left:8px">Chargez N-1 pour l\'analyse des manques</span>');
+  document.getElementById('analyse-content').innerHTML=html;
+  document.getElementById('mov-analyse').style.display='block';
+  }catch(e){ toast('Erreur analyse : '+e.message); console.error(e); }
+  finally{ showLoad(false); }
+  },50);
+}
+
+// ancienne fonction conservée pour compatibilité
+function runAnnexeAnalysis(fileN, fileN1){
+
+  // Construire le HTML de la modal d'analyse
+  let html = '';
+  res.families.forEach(fam=>{
+    if(fam==='—') return;
+    const prodsN  = Object.entries(res.dataN[fam]||{}).sort((a,b)=>b[1].qte-a[1].qte);
+    const prodsN1 = res.dataN1 ? Object.entries(res.dataN1[fam]||{}).sort((a,b)=>b[1].qte-a[1].qte) : null;
+
+    const allProds=[...new Set([
+      ...prodsN.map(([p])=>p),
+      ...(prodsN1||[]).map(([p])=>p)
+    ])];
+
+    // Classer : présents N et N-1, manquants en N, nouveaux en N
+    const rows_both  = allProds.filter(p=>(res.dataN[fam]?.[p]?.qte||0)>0 && (res.dataN1?.[fam]?.[p]?.qte||0)>0)
+                                .sort((a,b)=>(res.dataN[fam][b]?.qte||0)-(res.dataN[fam][a]?.qte||0));
+    const rows_new   = allProds.filter(p=>(res.dataN[fam]?.[p]?.qte||0)>0 && !(res.dataN1?.[fam]?.[p]?.qte));
+    const rows_miss  = allProds.filter(p=>!(res.dataN[fam]?.[p]?.qte) && (res.dataN1?.[fam]?.[p]?.qte||0)>0);
+
+    const totN  = prodsN.reduce((s,[,v])=>s+v.qte,0);
+    const totN1 = prodsN1?prodsN1.reduce((s,[,v])=>s+v.qte,0):null;
+    const totDlt= totN1?((totN-totN1)/totN1*100).toFixed(0):null;
+
+    const makeRow=(prod,isNew,isMiss)=>{
+      const vN  = res.dataN[fam]?.[prod];
+      const vN1 = res.dataN1?.[fam]?.[prod];
+      const dlt = (vN&&vN1&&vN1.qte>0)?((vN.qte-vN1.qte)/vN1.qte*100).toFixed(0):null;
+      const dltC= dlt?(+dlt>=0?'var(--g)':'var(--r)'):'var(--t3)';
+      const sign= dlt&&+dlt>=0?'+':'';
+      const label = isMiss
+        ? `<span style="color:var(--r)">⚠ ${prod}</span>`
+        : isNew
+        ? `<span style="color:var(--g)">★ ${prod}</span>`
+        : prod;
+      return`<tr style="${isMiss?'opacity:.7':''}">
+        <td style="padding:5px 8px;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${prod}">${label}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px">${vN?vN.qte.toLocaleString('fr-FR'):'—'}</td>
+        ${res.dataN1?`<td style="text-align:right;padding:5px 8px;font-size:11px;color:var(--t2)">${vN1?vN1.qte.toLocaleString('fr-FR'):'—'}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:10px;color:${dltC}">${dlt?sign+dlt+'%':isMiss?'<span style="color:var(--r)">manquant</span>':isNew?'<span style="color:var(--g)">nouveau</span>':'—'}</td>`:''}
+      </tr>`;
+    };
+
+    html += `<div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-weight:700;font-size:13px">${fam}</div>
+        <div style="font-size:11px">
+          <span style="font-weight:700">${totN.toLocaleString('fr-FR')} pièces N</span>
+          ${totN1!==null?`<span style="color:var(--t3);margin-left:8px">${totN1.toLocaleString('fr-FR')} N-1</span>`:''}
+          ${totDlt!==null?`<span style="margin-left:6px;color:${+totDlt>=0?'var(--g)':'var(--r)'};">${+totDlt>=0?'+':''}${totDlt}%</span>`:''}
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--br)">
+          <th style="text-align:left;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase">Produit</th>
+          <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Qté N</th>
+          ${res.dataN1?`<th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Qté N-1</th>
+          <th style="text-align:right;padding:4px 8px;font-size:10px;color:var(--t3);font-weight:700">Évol.</th>`:''}
+        </tr></thead>
+        <tbody>
+          ${rows_both.slice(0,10).map(p=>makeRow(p,false,false)).join('')}
+          ${rows_new.slice(0,5).map(p=>makeRow(p,true,false)).join('')}
+          ${rows_miss.slice(0,5).map(p=>makeRow(p,false,true)).join('')}
+        </tbody>
+      </table>
+      ${rows_miss.length>0?`<div style="margin-top:6px;font-size:10px;color:var(--r)">⚠ ${rows_miss.length} pièce(s) vendues N-1 absentes ou non vendues en N</div>`:''}
+    </div>`;
+  });
+
+  // Afficher dans la modal dédiée à l'analyse
+  document.getElementById('analyse-subtitle').innerHTML=
+    '<b>'+fileN.fname.slice(0,40)+'</b>'+(fileN1?' vs '+fileN1.fname.slice(0,30):'');
+  document.getElementById('analyse-content').innerHTML=html||
+    '<div style="color:var(--t3);text-align:center;padding:30px">Aucune famille détectée — vérifiez les colonnes du fichier (attendus : Regroupement/Famille, Désignation/Article, Quantité)</div>';
+  document.getElementById('mov-analyse').style.display='flex';
+  document.getElementById('mov-analyse').style.flexDirection='column';
+}
+
+function showLoad(v){document.getElementById('loading').classList.toggle('on',v);}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),3500);}
+
+// ═══════════════════════════════════════════════════════
+// ÉTAT GLOBAL
+// ═══════════════════════════════════════════════════════
+// FILES : { 'oms-n': {hdrs, rows, map, minD, maxD, fname}, 'oms-n1': {...}, ... }
+const FILES = {};
+const CHARTS = {};
+
+const EXCL_GLOBAL=['gl.com','printemps'];
+const MKT_ALL=['gl.com','printemps','la redoute','24s'];
+const isExcl=t=>EXCL_GLOBAL.some(m=>(t||'').toLowerCase().includes(m));
+const isMkt=t=>MKT_ALL.some(m=>(t||'').toLowerCase().includes(m));
+
+// Mapping OMS
+const OMS_ALIASES={
+  date:['date commande','date de commande','date'],
+  prix:['prix de vente paye','prix de vente pay','prix vente pay'],
+  pays:['pays livraison','pays de livraison'],
+  mag:['nom magasin'],
+  type:['type paiement','type de paiement'],
+  num:['numeros','num ros','numero commande'],
+  des:['designation produit','d signation produit','signation produit'],
+  qte:['quantites commandees','quantite command','quantit'],
+  rayon:['rayon'],
+  ref_ext:   ['ref. externe','ref externe','reference externe'],
+  // Colonnes Full Price / Off Price — alias stricts (ne pas mettre 'prix de vente' seul, trop générique)
+  pv:        ['prix vente'],         // index 21 — match exact "Prix Vente" (tarif catalogue)
+  pv_remise: ['prix vente remise'],  // index 22 — match exact "Prix Vente Remisé"
+};
+
+// Mapping GA4 — export CSV "Acquisition de trafic: Groupe de canaux"
+// Séparateur virgule, valeurs numériques en format US (point décimal)
+const GA_ALIASES={
+  canal:    ['groupe de canaux principal','groupe de canaux','channel group','default channel group'],
+  sessions: ['sessions'],
+  users:    ['utilisateurs actifs','active users','users'],
+  new_users:['nouveaux utilisateurs','new users'],
+  eng_sessions:['sessions avec engagement','engaged sessions'],
+  events:   ['evenements cles','key events','conversions'],
+  revenue:  ['revenu total','total revenue','revenue'],
+  eng_rate: ['taux d engagement','engagement rate'],
+};
+
+function autoMapGA(hdrs){
+  const normed = hdrs.map(norm);
+  const res = {};
+  for(const [f, als] of Object.entries(GA_ALIASES)){
+    let bIdx=-1, bLen=0;
+    normed.forEach((nh,i)=>{
+      for(const a of als){
+        if(nh===a && bLen<999){ bIdx=i; bLen=999; break; }
+        if(bLen<999 && nh.includes(a) && a.length>bLen){ bIdx=i; bLen=a.length; }
+      }
+    });
+    if(bIdx>=0) res[f]=bIdx;
+  }
+  return res;
+}
+
+// ── RÉFÉRENTIEL PRODUIT ──────────────────────────────────
+// Colonnes : Ref. Externe, Saison, DROP, Regroupement, Familles principales, Détails, TITRE
+const REF_ALIASES={
+  ref_ext: ['ref. externe','ref externe','reference externe','ref.externe'],
+  famille: ['familles principales','famille principale','famille'],
+  regroupement: ['regroupement'],
+};
+
+// Construit le dictionnaire ref_externe → famille depuis le fichier référentiel
+function buildRefMap(file){
+  if(!file||!file.rows||!file.hdrs) return {};
+  if(!file.map||Object.keys(file.map).length===0) file.map=autoMap(file.hdrs,REF_ALIASES);
+  const ri=file.map.ref_ext;
+  // Préférer "Regroupement" (catégorie produit détaillée) sur "Familles principales"
+  const fi=file.map.regroupement!==undefined ? file.map.regroupement : file.map.famille;
+  if(ri===undefined||fi===undefined) return {};
+  const map={};
+  file.rows.forEach(r=>{
+    const ref=(r[ri]||'').trim();
+    const fam=(r[fi]||'').trim();
+    if(ref&&fam) map[ref]=fam;
+  });
+  return map;
+}
+
+// Mapping Y2 — colonnes identifiées sur les fichiers Export Y2 N/N-1
+const Y2_ALIASES={
+  date:   ['date'],
+  etab:   ['etablissement ligne doc','etablissement ligne doc.'],
+  ttc:    ['total ttc ligne'],
+  commercial: ['commercial du doc.','commercial du doc'],
+  // "Référence interne doc." — filtre Lulli : commence par "005"
+  ref:    ['reference interne doc.','reference interne doc','ref. interne doc','ref interne doc','reference interne'],
+};
+
+function autoMap(hdrs, aliases){
+  const normed=hdrs.map(norm);
+  const res={};
+  for(const [f,als] of Object.entries(aliases)){
+    let bIdx=-1,bLen=0;
+    normed.forEach((nh,i)=>{
+      for(const a of als){
+        if(nh===a&&bLen<999){bIdx=i;bLen=999;break;}
+        if(bLen<999&&nh.includes(a)&&a.length>bLen){bIdx=i;bLen=a.length;}
+      }
+    });
+    if(bIdx>=0)res[f]=bIdx;
+  }
+  return res;
+}
+
+// ═══════════════════════════════════════════════════════
+// STAGING — gestion des slots
+// ═══════════════════════════════════════════════════════
+function showStaging(){
+  document.getElementById('staging').classList.add('on');
+  document.getElementById('fbar').classList.remove('on');
+  document.getElementById('main').classList.remove('on');
+  document.getElementById('btn-reload').classList.remove('on');
+}
+
+function updateStagingStatus(){
+  const loaded=Object.keys(FILES);
+  const count=loaded.length;
+  const statusEl=document.getElementById('staging-status');
+  const btnEl=document.getElementById('btn-launch');
+  if(count===0){
+    statusEl.innerHTML='Aucun fichier chargé';
+    btnEl.classList.remove('ready');
+  } else {
+    const parts=[];
+    if(FILES['oms-n']) parts.push('<span>EShop N ✓</span>');
+    if(FILES['oms-n1']) parts.push('<span>EShop N-1 ✓</span>');
+    if(FILES['y2-n']) parts.push('<span>Y2 N ✓</span>');
+    if(FILES['y2-n1']) parts.push('<span>Y2 N-1 ✓</span>');
+    if(FILES['ga-n']) parts.push('<span>GA N ✓</span>');
+    if(FILES['ga-n1']) parts.push('<span>GA N-1 ✓</span>');
+    statusEl.innerHTML=`${count} fichier(s) prêt(s) : ${parts.join(', ')}`;
+    btnEl.classList.add('ready');
+  }
+}
+
+function renderSlotLoaded(key, fname, rows){
+  const slot=document.getElementById('slot-'+key.replace('-','_').replace('-','_'));
+  if(!slot) return;
+  // rebuild slot content
+  const input=slot.querySelector('.slot-input');
+  const label=slot.querySelector('.slot-label').outerHTML;
+  slot.classList.add('loaded');
+  slot.innerHTML=`
+    ${label}
+    <button class="slot-remove" onclick="removeSlot('${key}',event)">✕</button>
+    <div class="slot-icon">✅</div>
+    <div class="slot-file">${fname}</div>
+    <div class="slot-meta">${rows.length.toLocaleString('fr')} lignes</div>
+  `;
+}
+
+function removeSlot(key, e){
+  e.stopPropagation();
+  delete FILES[key];
+  // reset slot UI
+  const slotId='slot-'+key;
+  const slot=document.getElementById(slotId);
+  if(!slot)return;
+  const isN1=key.endsWith('n1');
+  const src=key.split('-')[0];
+  slot.classList.remove('loaded');
+  slot.innerHTML=`
+    <input type="file" class="slot-input" accept=".csv,.xlsx,.xls">
+    <div class="slot-label ${isN1?'n1':'n'}">${isN1?'Année N-1 (comparaison)':'Année N (actuelle)'}</div>
+    <div class="slot-icon">📄</div>
+    <div class="slot-hint">CSV ou XLSX</div>
+  `;
+  initSlot(slot, key);
+  updateStagingStatus();
+}
+
+function loadFileIntoSlot(file, key){
+  if(!file)return;
+  showLoad(true);
+  const ext=file.name.split('.').pop().toLowerCase();
+  const src=key.split('-')[0]; // 'oms','y2','ga'
+  const onText=text=>{
+    try{
+      // GA utilise un parser différent (CSV virgule + lignes commentaires)
+      const parsed = src==='ga' ? parseGAcsv(text) : parseCSV(text);
+      const {hdrs,rows}=parsed;
+      let map={};
+      if(src==='oms') map=autoMap(hdrs,OMS_ALIASES);
+      if(src==='y2')  map=autoMap(hdrs,Y2_ALIASES);
+      if(src==='ga')  map=autoMapGA(hdrs);
+      if(src==='ref') map=autoMap(hdrs,REF_ALIASES);
+      // GA : pas de mapping OMS nécessaire, on somme directement la colonne Sessions
+      let minD=null,maxD=null;
+      const di=map.date;
+      if(di!==undefined){
+        rows.forEach(r=>{
+          const o=parseFrD(r[di]);
+          if(!o)return;
+          if(!minD||dcmp(o,minD)<0)minD=o;
+          if(!maxD||dcmp(o,maxD)>0)maxD=o;
+        });
+      }
+      FILES[key]={hdrs,rows,map,minD,maxD,fname:file.name};
+      renderSlotLoaded(key,file.name,rows);
+      updateStagingStatus();
+      if(key.startsWith('annexe')) updateAnalyseStatus();
+    }catch(err){toast('Erreur: '+err.message);}
+    finally{showLoad(false);}
+  };
+  if(ext==='csv'){
+    const r=new FileReader();
+    r.onload=e=>onText(e.target.result);
+    r.readAsText(file,'windows-1252');
+  }else{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        onText(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]],{FS:';'}));
+      }catch(err){toast('Erreur: '+err.message);showLoad(false);}
+    };
+    r.readAsArrayBuffer(file);
+  }
+}
+
+function initSlot(slot, key){
+  // Click → file picker
+  slot.addEventListener('click', e=>{
+    if(slot.classList.contains('loaded'))return;
+    slot.querySelector('.slot-input').click();
+  });
+  // File input change
+  const inp=slot.querySelector('.slot-input');
+  if(inp) inp.addEventListener('change',e=>{if(e.target.files[0])loadFileIntoSlot(e.target.files[0],key);});
+  // Drag & drop
+  slot.addEventListener('dragover',e=>{e.preventDefault();if(!slot.classList.contains('loaded'))slot.classList.add('dragover');});
+  slot.addEventListener('dragleave',()=>slot.classList.remove('dragover'));
+  slot.addEventListener('drop',e=>{
+    e.preventDefault();slot.classList.remove('dragover');
+    if(slot.classList.contains('loaded'))return;
+    const f=e.dataTransfer.files[0];
+    if(f)loadFileIntoSlot(f,key);
+  });
+}
+
+// Init tous les slots
+document.querySelectorAll('.slot').forEach(slot=>{
+  const key=slot.dataset.key;
+  if(key) initSlot(slot,key);
+});
+
+// ═══════════════════════════════════════════════════════
+// LAUNCH — démarrer le dashboard
+// ═══════════════════════════════════════════════════════
+let G_period='all', G_comp='n1auto';
+
+// ── MODAL MAPPING (appelée si champs requis non auto-détectés) ────────────────
+const FIELDS_CFG={
+  date:{label:'Date commande',req:true}, prix:{label:'Prix de vente payé',req:true},
+  pays:{label:'Pays livraison',req:true}, mag:{label:'NOM MAGASIN',req:true},
+  type:{label:'Type Paiement',req:true}, num:{label:'N° commande',req:false},
+  des:{label:'Désignation produit',req:false}, qte:{label:'Quantité',req:false},
+  rayon:{label:'Rayon',req:false}, ref_ext:{label:'Ref. Externe',req:false},
+  pv:{label:'Prix Vente',req:false}, pv_remise:{label:'Prix Vente Remisé',req:false},
+};
+
+function openModal(fname, hdrs, rows, map){
+  document.getElementById('mfi').textContent = fname+' · '+hdrs.length+' colonnes · '+rows.length.toLocaleString('fr')+' lignes';
+  const c=document.getElementById('mfields'); c.innerHTML='';
+  Object.entries(FIELDS_CFG).forEach(([f,cfg])=>{
+    const div=document.createElement('div');
+    div.style.cssText='display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:start;margin-bottom:10px';
+    const lbl=document.createElement('label');
+    lbl.style.cssText='font-size:11px;color:var(--t2);font-weight:600;padding-top:7px;text-align:right';
+    lbl.innerHTML=cfg.label+(cfg.req?'<span style="color:var(--a)"> *</span>':'');
+    const rgt=document.createElement('div');
+    const sel=document.createElement('select');
+    sel.id='mf-'+f;
+    sel.style.cssText='width:100%;background:var(--s2);border:1px solid var(--br);color:var(--t);padding:6px 8px;border-radius:7px;font-size:11px';
+    sel.add(new Option(cfg.req?'— Sélectionner —':'— Ignorer —','-1'));
+    hdrs.forEach((h,i)=>sel.add(new Option('['+i+'] '+h.slice(0,32), i, false, map[f]===i)));
+    const pv=document.createElement('div');
+    pv.style.cssText='font-size:10px;color:var(--t3);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const upd=()=>{ const i=parseInt(sel.value); pv.textContent=i>=0?rows.slice(0,3).map(r=>(r[i]||'').slice(0,16)).filter(Boolean).join(' · '):''; };
+    sel.addEventListener('change',upd); upd();
+    rgt.appendChild(sel); rgt.appendChild(pv);
+    div.appendChild(lbl); div.appendChild(rgt); c.appendChild(div);
+  });
+  document.getElementById('mov').style.display='flex';
+  document.getElementById('bcancel').onclick=()=>{ document.getElementById('mov').style.display='none'; };
+  document.getElementById('bimport').onclick=()=>{
+    const nm={};
+    Object.keys(FIELDS_CFG).forEach(f=>{ const s=document.getElementById('mf-'+f); if(s&&parseInt(s.value)>=0) nm[f]=parseInt(s.value); });
+    const ms=Object.entries(FIELDS_CFG).filter(([f,c])=>c.req&&nm[f]===undefined);
+    if(ms.length){ toast('Champs requis : '+ms.map(([,c])=>c.label).join(', ')); return; }
+    document.getElementById('mov').style.display='none';
+    // Appliquer le mapping au fichier OMS N déjà chargé
+    const omsKey = Object.keys(FILES).find(k=>k.startsWith('oms-n')&&!k.endsWith('1'));
+    if(omsKey) FILES[omsKey].map=nm;
+    launchDashboard();
+  };
+}
+
+function launchDashboard(){
+  // Cacher staging, montrer dashboard
+  document.getElementById('staging').classList.remove('on');
+  document.getElementById('fbar').classList.add('on');
+  document.getElementById('main').classList.add('on');
+  document.getElementById('btn-reload').classList.add('on');
+
+  // Y2 visible si Y2 ou OMS chargé
+  const showY2 = !!(FILES['y2-n']||FILES['y2-n1']||FILES['oms-n']);
+  document.getElementById('y2-section').style.display = showY2 ? 'block' : 'none';
+
+  // Badge header
+  const names=Object.entries(FILES).map(([k,f])=>k.toUpperCase()+': '+f.fname.slice(0,18)).join(' | ');
+  document.getElementById('fbadge').classList.add('on');
+  document.getElementById('btxt').textContent=`${Object.keys(FILES).length} fichier(s) chargé(s)`;
+
+  // Dates : union des plages disponibles (fichier N en priorité)
+  const omsN=FILES['oms-n'];
+  if(omsN){
+    setupDates(omsN.minD, omsN.maxD, FILES['oms-n1']?.minD, FILES['oms-n1']?.maxD);
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+// DATE PICKERS
+// ═══════════════════════════════════════════════════════
+function setupDates(minD, maxD, compMinD, compMaxD){
+  const mn=toISO(minD),mx=toISO(maxD);
+  ['df','dt'].forEach(id=>{const e=document.getElementById(id);e.min=mn;e.max=mx;});
+  document.getElementById('df').value=mn;
+  document.getElementById('dt').value=mx;
+  // comparaison N-1 : si fichier N-1 chargé, utiliser ses dates ; sinon N-1 auto
+  if(compMinD&&compMaxD){
+    document.getElementById('cf').value=toISO(compMinD);
+    document.getElementById('ct').value=toISO(compMaxD);
+  } else {
+    updComp();
+  }
+  document.getElementById('df').addEventListener('change',()=>{clearP();updComp();render();});
+  document.getElementById('dt').addEventListener('change',()=>{clearP();updComp();render();});
+  document.getElementById('cf').addEventListener('change',render);
+  document.getElementById('ct').addEventListener('change',render);
+  document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{
+    clearP();b.classList.add('on');G_period=b.dataset.p;applyPreset(b.dataset.p,minD,maxD);
+  }));
+  document.querySelectorAll('[data-comp]').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('[data-comp]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');G_comp=b.dataset.comp;updComp();render();
+  }));
+}
+function clearP(){document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on'));}
+function applyPreset(p,minD,maxD){
+  const mx=maxD||{y:2026,m:1,d:1},mxISO=toISO(mx);
+  if(p==='all'){document.getElementById('df').value=toISO(minD);document.getElementById('dt').value=mxISO;}
+  else if(p==='today'){document.getElementById('df').value=mxISO;document.getElementById('dt').value=mxISO;}
+  else if(p==='week'){
+    const t=new Date(mx.y,mx.m-1,mx.d),dw=t.getDay()||7;
+    t.setDate(t.getDate()-dw+1);
+    document.getElementById('df').value=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    document.getElementById('dt').value=mxISO;
+  }
+  else if(p==='month'){document.getElementById('df').value=`${mx.y}-${String(mx.m).padStart(2,'0')}-01`;document.getElementById('dt').value=mxISO;}
+  else if(p==='ytd'){document.getElementById('df').value=`${mx.y}-01-01`;document.getElementById('dt').value=mxISO;}
+  updComp();render();
+}
+function updComp(){
+  const f=isoToD(document.getElementById('df').value),t=isoToD(document.getElementById('dt').value);
+  if(!f||!t)return;
+  document.getElementById('cf').value=toISO({...f,y:f.y-1});
+  document.getElementById('ct').value=toISO({...t,y:t.y-1});
+}
+
+// ═══════════════════════════════════════════════════════
+// FILTRAGE
+// ═══════════════════════════════════════════════════════
+function filterRows(rows, map, fromISO, toISO_, isAll){
+  if(isAll) return rows;
+  const di=map.date;if(di===undefined)return rows;
+  const fo=isoToD(fromISO),to=isoToD(toISO_);
+  return rows.filter(r=>inRng(parseFrD(r[di]),fo,to));
+}
+
+// ═══════════════════════════════════════════════════════
+// CALCUL KPI ESHOP (croisement OMS + GA)
+// ═══════════════════════════════════════════════════════
+function calcKPIEShop(rows, map, sessions){
+  const pi=map.prix, pai=map.pays, ti=map.type, ni=map.num, qi=map.qte;
+  const pvi=map.pv, pvri=map.pv_remise;
+  let ca=0, pieces=0, caFP=0, caOP=0;
+  const ordersSet = new Set();
+  const hasFPOP = pvi!==undefined && pvri!==undefined;
+
+  rows.forEach(r=>{
+    const prix = fN(r[pi]);
+    const type = (r[ti]||'').trim();
+    if(!isMkt(type)){
+      ca += prix;
+      pieces += parseInt((r[qi]||'1').replace(/\s/g,''))||1;
+      if(ni!==undefined && r[ni]) ordersSet.add(r[ni]);
+      // Full Price / Off Price
+      if(hasFPOP){
+        const pv  = fN(r[pvi]);
+        const pvr = fN(r[pvri]);
+        const isFP = (pvr===0) || (Math.abs(pvr-pv)<0.01);
+        if(isFP) caFP+=prix; else caOP+=prix;
+      }
+    }
+  });
+
+  const commandes = ni!==undefined ? ordersSet.size : 0;
+  const pm = commandes > 0 ? ca / commandes : 0;
+  const tt = sessions > 0 ? commandes / sessions : 0;
+
+  return {ca, commandes, pieces, pm, sessions, tt,
+          caFP: hasFPOP?caFP:null, caOP: hasFPOP?caOP:null};
+}
+
+function renderKPIEShop(kpiN, kpiN1){
+  const section = document.getElementById('kpi-eshop');
+  if(!kpiN){ section.classList.remove('on'); return; }
+  section.classList.add('on');
+
+  const fmt = (v, type) => {
+    if(v===null||v===undefined) return '<span class="no-data">—</span>';
+    if(type==='eur') return v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+    if(type==='int') return v.toLocaleString('fr-FR');
+    if(type==='pct') return (v*100).toFixed(2)+'%';
+    return v;
+  };
+
+  const delta = (n, n1) => {
+    if(n1===null||n1===undefined||n1===0) return '<span class="delta-na">—</span>';
+    const p = (n - n1) / n1 * 100;
+    const sign = p >= 0 ? '+' : '';
+    const cls = p >= 0 ? 'delta-up' : 'delta-dn';
+    return `<span class="${cls}">${sign}${p.toFixed(0)}%</span>`;
+  };
+
+  // Récupérer caFP/caOP depuis l'objet OMS passé séparément via renderMainKPIs
+  // (kpiN est un objet calcKPIEShop — on accède à caFP/caOP via G_kOMS injecté plus bas)
+  const rows = [
+    {label:'CA',          n:kpiN.ca,         n1:kpiN1?.ca,         type:'eur'},
+    {label:'CA Full Price',n:kpiN.caFP??null,n1:kpiN1?.caFP??null, type:'eur', sub:true},
+    {label:'CA Off Price', n:kpiN.caOP??null,n1:kpiN1?.caOP??null, type:'eur', sub:true},
+    {label:'Commandes',   n:kpiN.commandes,   n1:kpiN1?.commandes,  type:'int'},
+    {label:'Nbre Pièces', n:kpiN.pieces,      n1:kpiN1?.pieces,     type:'int'},
+    {label:'PM',          n:kpiN.pm,          n1:kpiN1?.pm,         type:'eur'},
+    {label:'Sessions',    n:kpiN.sessions,    n1:kpiN1?.sessions,   type:'int'},
+    {label:'TT',          n:kpiN.tt,          n1:kpiN1?.tt,         type:'pct'},
+  ].filter(r=>r.n!==null&&r.n!==undefined);
+
+  document.getElementById('kpi-eshop-body').innerHTML = rows.map(r=>`
+    <tr style="${r.sub?'background:rgba(255,255,255,.02)':''}">
+      <td class="row-label" style="${r.sub?'padding-left:20px;font-weight:400;color:var(--t2);font-size:12px':''}">
+        ${r.sub?'↳ ':''}<span style="${r.label==='CA Full Price'?'color:#f5a623':r.label==='CA Off Price'?'color:#4a9eff':''}">${r.label}</span>
+      </td>
+      <td class="val-n">${fmt(r.n, r.type)}</td>
+      <td class="val-n1">${r.n1!==null&&r.n1!==undefined ? fmt(r.n1, r.type) : '<span class="no-data">—</span>'}</td>
+      <td>${r.n1!==null&&r.n1!==undefined ? delta(r.n, r.n1) : '<span class="delta-na">—</span>'}</td>
+    </tr>
+  `).join('');
+
+  // Note sur les sources disponibles
+  const gaNote = kpiN.sessions > 0 ? '' : ' · ⚠ Sessions : charger un fichier GA';
+  const n1Note = kpiN1 ? '' : ' · ⚠ N-1 : charger OMS N-1 et GA N-1 pour la comparaison';
+  document.getElementById('kpi-eshop-note').textContent =
+    `Sources : OMS${gaNote}${n1Note}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// KPIs OMS
+// ═══════════════════════════════════════════════════════
+function calcOMS(rows, map){
+  const pi=map.prix, pai=map.pays, mi=map.mag, ti=map.type;
+  // Full Price / Off Price
+  const pvi=map.pv, pvri=map.pv_remise;
+  let caFR=0,caInt=0,caEnt=0,caSFS=0,caMkt=0,caGlob=0,total=0,caFP=0,caOP=0;
+
+  rows.forEach(r=>{
+    const p=fN(r[pi]);
+    const pays=(r[pai]||'').trim().toLowerCase();
+    const mag =(r[mi]||'').trim().toLowerCase();
+    const type=(r[ti]||'').trim();
+    total+=p;
+    if(!isExcl(type)) caGlob+=p;
+    if(isMkt(type)){ caMkt+=p; }
+    else{
+      if(pays==='france') caFR+=p; else caInt+=p;
+      if(mag==='webstore eur') caEnt+=p; else caSFS+=p;
+
+      // Full Price / Off Price — hors marketplace
+      if(pvi!==undefined && pvri!==undefined){
+        const pv  = fN(r[pvi]);
+        const pvr = fN(r[pvri]);
+        // Full Price : remisé = tarif catalogue OU remisé = 0 (pas de démarque)
+        const isFP = (pvr===0) || (Math.abs(pvr-pv)<0.01);
+        if(isFP) caFP+=p; else caOP+=p;
+      }
+    }
+  });
+
+  return{caGlob,caEShop:caFR+caInt,caFR,caInt,caEnt,caSFS,caMkt,caOmni:caEnt+caSFS,total,caFP,caOP};
+}
+
+// ═══════════════════════════════════════════════════════
+// CA PAR FAMILLE (jointure OMS × Référentiel)
+// ═══════════════════════════════════════════════════════
+function calcCAFamille(rows, omsMap, refMap){
+  if(!refMap||Object.keys(refMap).length===0) return null;
+  const pi=omsMap.prix, ri=omsMap.ref_ext, ti=omsMap.type;
+  // Trouver l'index de Ref. externe dans OMS si pas encore mappé
+  // (colonne index 16 selon les fichiers analysés — alias à ajouter dans OMS_ALIASES si besoin)
+  const refIdx = ri!==undefined ? ri : omsMap._refExt;
+  const byFam={};
+  rows.forEach(r=>{
+    if(isMkt((r[ti]||'').trim())) return; // hors marketplace
+    const prix = fN(r[pi]);
+    const ref = refIdx!==undefined ? (r[refIdx]||'').trim() : '';
+    const fam = refMap[ref] || '(non référencé)';
+    byFam[fam] = (byFam[fam]||0) + prix;
+  });
+  return byFam;
+}
+
+function renderCAFamille(byFamN, byFamN1){
+  const el=document.getElementById('famille-content');
+  if(!byFamN||Object.keys(byFamN).length===0){
+    el.innerHTML='<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez le référentiel produit</div>';
+    return;
+  }
+  const sorted=Object.entries(byFamN).filter(([k])=>k!=='(non référencé)').sort((a,b)=>b[1]-a[1]);
+  const total=sorted.reduce((s,[,v])=>s+v,0)||1;
+  const hasN1=byFamN1&&Object.keys(byFamN1).length>0;
+  el.innerHTML=`<table class="kpi-table" style="font-size:11px">
+    <thead><tr>
+      <th>Regroupement</th>
+      <th style="text-align:right">N</th>
+      ${hasN1?'<th style="text-align:right">vs N-1</th>':''}
+    </tr></thead>
+    <tbody>${sorted.map(([f,v])=>{
+      const n1=hasN1?(byFamN1[f]||0):null;
+      const pct=n1!==null&&n1>0?((v-n1)/n1*100):null;
+      const sign=pct!==null&&pct>=0?'+':'';
+      const cls=pct!==null?(pct>=0?'var(--g)':'var(--r)'):'var(--t3)';
+      return`<tr>
+        <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${fCA(v)}</td>
+        ${hasN1?`<td style="text-align:right;font-size:10px;color:${cls}">${pct!==null?`${sign}${pct.toFixed(0)}%`:'—'}</td>`:''}
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MARKETPLACE — Canaux de distribution unifiés
+// OMS : GL.com (dropshipping) + Printemps (dropshipping)
+// Y2  : GL AC HAUSSMANN/674SFS (corner SFS) + PDT/686001 + Lulli/610LULLI
+// ═══════════════════════════════════════════════════════
+function calcMarketplace(omsRows, omsMap, y2Rows, y2Map){
+  const pi=omsMap.prix, ti=omsMap.type;
+  let glOMS=0, printemps=0;
+
+  omsRows.forEach(r=>{
+    const prix=fN(r[pi]);
+    const type=(r[ti]||'').toLowerCase();
+    if(type.includes('gl.com'))     glOMS    += prix;
+    else if(type.includes('printemps')) printemps += prix;
+  });
+
+  let glY2=0, pdt=0, lulli=0;
+  if(y2Rows&&y2Map&&y2Map.ttc!==undefined){
+    const ti2=y2Map.ttc, ei=y2Map.etab, ci=y2Map.commercial, ri=y2Map.ref;
+    y2Rows.forEach(r=>{
+      const ttc=fN(r[ti2]);
+      if(ttc<=0) return;
+      const etab=(r[ei]||'').toLowerCase();
+      const com=(r[ci]||'').toLowerCase();
+      const ref=(r[ri]||'').trim();
+      if(etab.includes('gl ac haussmann')&&com.includes('674sfs'))      glY2  +=ttc;
+      else if(etab.includes('place des tendances')&&com.includes('686001')) pdt   +=ttc;
+      else if(etab.includes('lulli')&&com.includes('610lulli')&&ref.startsWith('005')) lulli +=ttc;
+    });
+  }
+
+  return {
+    glOMS, glY2, glTotal: glOMS+glY2,
+    printemps, pdt, lulli,
+    total: glOMS+glY2+printemps+pdt+lulli
+  };
+}
+
+function renderMarketplace(kN, kN1){
+  const sec=document.getElementById('y2-section');
+  if(!kN){ sec.style.display='none'; return; }
+  sec.style.display='block';
+
+  const fE=v=>(v||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+  const dlt=(n,n1)=>{
+    if(n1===null||n1===undefined||n1===0) return '<span style="color:var(--t3)">—</span>';
+    const p=(n-n1)/n1*100, s=p>=0?'+':'';
+    return `<span style="color:${p>=0?'var(--g)':'var(--r)'};font-weight:700">${s}${p.toFixed(0)}%</span>`;
+  };
+
+  // Ligne normale
+  const row=(label,tag,n,n1,indent=false,sourceBadge='')=>`<tr>
+    <td style="padding:8px 12px;border-bottom:1px solid rgba(46,51,80,.3);${indent?'padding-left:22px;color:var(--t2)':'font-weight:600'}">
+      ${label}${sourceBadge?` <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(255,255,255,.08);color:var(--t3)">${sourceBadge}</span>`:''}
+    </td>
+    <td style="text-align:right;padding:8px 12px;border-bottom:1px solid rgba(46,51,80,.3);font-variant-numeric:tabular-nums;font-weight:${indent?'400':'600'}">${fE(n)}</td>
+    <td style="text-align:right;padding:8px 12px;border-bottom:1px solid rgba(46,51,80,.3);color:var(--t2);font-variant-numeric:tabular-nums">${n1!==null&&n1!==undefined?fE(n1):'<span style="color:var(--t3)">—</span>'}</td>
+    <td style="text-align:right;padding:8px 12px;border-bottom:1px solid rgba(46,51,80,.3)">${n1!==null&&n1!==undefined?dlt(n,n1):'<span style="color:var(--t3)">—</span>'}</td>
+  </tr>`;
+
+  // Ligne total / sous-total
+  const rowTot=(label,n,n1,color='var(--a)')=>`<tr style="background:rgba(255,255,255,.03)">
+    <td style="padding:9px 12px;font-weight:700;color:${color};border-top:1px solid var(--br)">${label}</td>
+    <td style="text-align:right;padding:9px 12px;font-weight:800;color:${color};font-variant-numeric:tabular-nums;border-top:1px solid var(--br)">${fE(n)}</td>
+    <td style="text-align:right;padding:9px 12px;color:var(--t2);font-variant-numeric:tabular-nums;border-top:1px solid var(--br)">${n1!==null&&n1!==undefined?fE(n1):'—'}</td>
+    <td style="text-align:right;padding:9px 12px;border-top:1px solid var(--br)">${n1!==null&&n1!==undefined?dlt(n,n1):'—'}</td>
+  </tr>`;
+
+  const n1=kN1;
+  document.getElementById('y2-content').innerHTML=`
+  <table class="kpi-table">
+    <thead><tr>
+      <th>Canal de distribution</th>
+      <th style="text-align:right">N</th>
+      <th style="text-align:right">N-1</th>
+      <th style="text-align:right">vs N-1</th>
+    </tr></thead>
+    <tbody>
+      <!-- Galeries Lafayette -->
+      ${row('GL Dropshipping',   '',  kN.glOMS,     n1?.glOMS,     true, 'OMS · GL.com')}
+      ${row('GL Corner SFS',     '',  kN.glY2,      n1?.glY2,      true, 'Y2 · 674SFS')}
+      ${rowTot('Galeries Lafayette',   kN.glTotal,   n1?.glTotal,   'var(--a)')}
+      <!-- Printemps -->
+      ${row('Printemps Dropshipping','', kN.printemps, n1?.printemps, true, 'OMS · Printemps')}
+      ${rowTot('Printemps',            kN.printemps, n1?.printemps, 'var(--t2)')}
+      <!-- PDT -->
+      ${row('Place des Tendances e-concession','', kN.pdt, n1?.pdt, true, 'Y2 · 686001')}
+      ${rowTot('Place des Tendances',  kN.pdt,       n1?.pdt,       'var(--t2)')}
+      <!-- Lulli -->
+      ${row('Lulli e-concession', '',  kN.lulli,     n1?.lulli,     true, 'Y2 · 610LULLI')}
+      ${rowTot('Lulli EShop',          kN.lulli,     n1?.lulli,     'var(--t2)')}
+      <!-- TOTAL -->
+      ${rowTot('▶ TOTAL MARKETPLACE',  kN.total,     n1?.total,     'var(--b)')}
+    </tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// CALCUL + RENDU GA
+// ═══════════════════════════════════════════════════════
+// GA : valeurs numériques en format US (point décimal, pas de virgule)
+const fGA = s => parseFloat((s||'').replace(/\s/g,''))||0;
+
+function calcGA(file){
+  if(!file||!file.rows||!file.hdrs) return null;
+  // Appliquer le mapping si pas encore fait
+  if(!file.map || Object.keys(file.map).length===0) file.map=autoMapGA(file.hdrs);
+  const m=file.map;
+  const ci=m.canal, si=m.sessions, ui=m.users, nui=m.new_users,
+        esi=m.eng_sessions, evi=m.events, ri=m.revenue, eri=m.eng_rate;
+
+  let totalSessions=0, totalUsers=0, totalNewUsers=0,
+      totalEngSessions=0, totalEvents=0, totalRevenue=0;
+  const byCanal=[];
+
+  file.rows.forEach(r=>{
+    const sess   = fGA(r[si]);
+    const users  = fGA(r[ui]);
+    const newU   = fGA(r[nui]);
+    const engS   = fGA(r[esi]);
+    const events = fGA(r[evi]);
+    const rev    = fGA(r[ri]);
+    const engR   = fGA(r[eri]);
+    totalSessions    += sess;
+    totalUsers       += users;
+    totalNewUsers    += newU;
+    totalEngSessions += engS;
+    totalEvents      += events;
+    totalRevenue     += rev;
+    byCanal.push({
+      canal: (r[ci]||'').trim(),
+      sessions: sess, users, newUsers: newU,
+      engSessions: engS, events, revenue: rev,
+      engRate: engR
+    });
+  });
+
+  // Taux d'engagement global
+  const engRateTotal = totalSessions>0 ? totalEngSessions/totalSessions : 0;
+
+  return {totalSessions, totalUsers, totalNewUsers, totalEngSessions,
+          totalEvents, totalRevenue, engRateTotal, byCanal};
+}
+
+function renderGA(kN, kN1){
+  const sec=document.getElementById('ga-section');
+  if(!kN){ sec.style.display='none'; return; }
+  sec.style.display='block';
+
+  const fInt  = v => (v||0).toLocaleString('fr-FR');
+  const fPct  = v => ((v||0)*100).toFixed(1)+'%';
+  const fEur  = v => (v||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+  const delta = (n, n1, isPct=false) => {
+    if(n1===null||n1===undefined||n1===0) return '<span style="color:var(--t3)">—</span>';
+    const p = (n-n1)/n1*100;
+    const s = p>=0?'+':'';
+    return `<span style="color:${p>=0?'var(--g)':'var(--r)'};font-weight:700">${s}${p.toFixed(0)}%</span>`;
+  };
+
+  // KPI cards
+  const kpis=[
+    {l:'Sessions',         n:kN.totalSessions,   n1:kN1?.totalSessions,   fmt:fInt},
+    {l:'Utilisateurs',     n:kN.totalUsers,       n1:kN1?.totalUsers,      fmt:fInt},
+    {l:'Nvx utilisateurs', n:kN.totalNewUsers,    n1:kN1?.totalNewUsers,   fmt:fInt},
+    {l:'Taux engagement',  n:kN.engRateTotal,     n1:kN1?.engRateTotal,    fmt:fPct},
+    {l:'Événements clés',  n:kN.totalEvents,      n1:kN1?.totalEvents,     fmt:fInt},
+    {l:'Revenu GA',        n:kN.totalRevenue,     n1:kN1?.totalRevenue,    fmt:fEur},
+  ];
+
+  // Trier par canal par sessions desc
+  const sorted=[...kN.byCanal].sort((a,b)=>b.sessions-a.sessions);
+
+  document.getElementById('ga-content').innerHTML=`
+    <!-- KPI cards GA -->
+    <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px">
+      ${kpis.map(k=>{
+        const pv=k.n1??null;
+        const pct=pv!==null&&pv!==0?((k.n-pv)/pv*100).toFixed(0):null;
+        const sign=pct&&+pct>0?'+':'';
+        const cls=pct?(+pct>=0?'var(--g)':'var(--r)'):'var(--t3)';
+        return `<div class="kc" style="min-width:140px;flex:0 0 auto">
+          <div class="kl">${k.l}</div>
+          <div class="kv" style="font-size:18px">${k.fmt(k.n)}</div>
+          ${pct!==null?`<div class="kd" style="color:${cls}">${sign}${pct}% vs N-1</div>`:
+            pv!==null?`<div class="kd na">—</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Graphique + tableau côte à côte -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="cc" style="height:280px">
+        <div class="ct">Sessions par canal</div>
+        <div style="position:relative;flex:1;min-height:0"><canvas id="ga-chart"></canvas></div>
+      </div>
+      <div style="background:var(--s);border:1px solid var(--br);border-radius:11px;padding:14px;overflow-y:auto;max-height:280px">
+        <div class="ct">Détail par canal</div>
+        <table class="kpi-table" style="font-size:11px">
+          <thead><tr>
+            <th>Canal</th>
+            <th style="text-align:right">Sessions</th>
+            <th style="text-align:right">Eng.</th>
+            <th style="text-align:right">Évén.</th>
+            <th style="text-align:right">Revenu</th>
+          </tr></thead>
+          <tbody>
+            ${sorted.map(c=>`<tr>
+              <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.canal}">${c.canal}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${fInt(c.sessions)}</td>
+              <td style="text-align:right">${fPct(c.engRate)}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${fInt(c.events)}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${fEur(c.revenue)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Graphique horizontal sessions par canal (top 8)
+  const top8 = sorted.slice(0,8);
+  if(CHARTS.ga) CHARTS.ga.destroy();
+  CHARTS.ga = new Chart(document.getElementById('ga-chart').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels: top8.map(c=>c.canal.length>18?c.canal.slice(0,18)+'…':c.canal),
+      datasets:[{
+        label:'Sessions',
+        data: top8.map(c=>c.sessions),
+        backgroundColor:'rgba(74,158,255,.55)',
+        borderColor:'#4a9eff', borderWidth:1, borderRadius:3
+      },
+      // Si N-1 dispo : barres de comparaison
+      ...(kN1?[{
+        label:'N-1',
+        data: top8.map(c=>{
+          const found = kN1.byCanal.find(x=>x.canal===c.canal);
+          return found?found.sessions:0;
+        }),
+        backgroundColor:'rgba(74,158,255,.2)',
+        borderColor:'rgba(74,158,255,.4)', borderWidth:1, borderRadius:3
+      }]:[])
+      ]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:!!kN1, labels:{color:'#94a3b8',font:{size:10}}},
+        tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toLocaleString('fr-FR')+' sessions'}}
+      },
+      scales:{
+        x:{ticks:{color:'#64748b',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},grid:{color:'rgba(46,51,80,.4)'}},
+        y:{ticks:{color:'#94a3b8',font:{size:10}},grid:{display:false}}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER PRINCIPAL
+// ═══════════════════════════════════════════════════════
+function render(){
+  const from=document.getElementById('df').value,to=document.getElementById('dt').value;
+  const cf=document.getElementById('cf').value,ct=document.getElementById('ct').value;
+  const isAll=G_period==='all';
+
+  // ── REPORTING KPI ESHOP ──
+  const omsN=FILES['oms-n'];
+  const omsN1=FILES['oms-n1'];
+  const gaN=FILES['ga-n'];
+  const gaN1=FILES['ga-n1'];
+
+  if(omsN){
+    const rowsN = filterRows(omsN.rows, omsN.map, from, to, isAll);
+    const sessionsN = getTotalSessions(gaN);
+    const kpiEShopN = calcKPIEShop(rowsN, omsN.map, sessionsN);
+
+    let kpiEShopN1 = null;
+    if(omsN1){
+      const rowsN1 = filterRows(omsN1.rows, omsN1.map, cf, ct, false);
+      const sessionsN1 = getTotalSessions(gaN1);
+      kpiEShopN1 = calcKPIEShop(rowsN1, omsN1.map, sessionsN1);
+    }
+    renderKPIEShop(kpiEShopN, kpiEShopN1);
+  } else {
+    renderKPIEShop(null, null);
+  }
+
+  // ── GA ──
+  const kGaN  = calcGA(FILES['ga-n']);
+  const kGaN1 = calcGA(FILES['ga-n1']);
+  renderGACanaux(kGaN, kGaN1);
+
+  // ── RÉFÉRENTIEL + CA PAR FAMILLE ──
+  const refFile = FILES['ref'];
+  const refMap  = refFile ? buildRefMap(refFile) : {};
+  if(omsN){
+    // Trouver l'index Ref. externe dans OMS (chercher dans les headers)
+    const refExtIdx = omsN.hdrs.findIndex(h=>norm(h).includes('ref') && norm(h).includes('externe'));
+    if(refExtIdx>=0) omsN.map._refExt = refExtIdx;
+    const rowsN = filterRows(omsN.rows, omsN.map, from, to, isAll);
+    const byFamN = calcCAFamille(rowsN, omsN.map, refMap);
+    let byFamN1 = null;
+    if(omsN1 && Object.keys(refMap).length>0){
+      const rN1 = filterRows(omsN1.rows, omsN1.map, cf, ct, false);
+      byFamN1 = calcCAFamille(rN1, omsN1.map, refMap);
+    }
+    renderCAFamille(byFamN, byFamN1);
+  } else {
+    renderCAFamille(null, null);
+  }
+
+  // ── MARKETPLACE UNIFIÉE ──
+  const y2N  = FILES['y2-n'];
+  const y2N1 = FILES['y2-n1'];
+  let kMktN=null, kMktN1=null;
+
+  if(omsN){
+    const omsRowsN  = filterRows(omsN.rows, omsN.map, from, to, isAll);
+    // Y2 : les fichiers N et N-1 sont déjà scopés par l'utilisateur → toutes les lignes
+    const y2RowsN   = y2N  ? y2N.rows  : [];
+    kMktN = calcMarketplace(omsRowsN, omsN.map, y2RowsN, y2N?.map || {});
+
+    // Marketplace N-1 : OMS N-1 filtré par dates comparaison + Y2 N-1 toutes lignes
+    if(omsN1 || y2N1){
+      const omsRowsN1 = omsN1 ? filterRows(omsN1.rows, omsN1.map, cf, ct, false) : [];
+      const omsMapN1  = omsN1 ? omsN1.map : omsN.map;
+      const y2RowsN1  = y2N1 ? y2N1.rows : []; // Y2 N-1 : toutes les lignes, pas de filtre date
+      kMktN1 = calcMarketplace(omsRowsN1, omsMapN1, y2RowsN1, y2N1?.map || {});
+    }
+    renderMarketplace(kMktN, kMktN1);
+  } else {
+    document.getElementById('y2-section').style.display='none';
+  }
+
+  // ── OMS détail ──
+  if(omsN){
+    const rows=filterRows(omsN.rows,omsN.map,from,to,isAll);
+    const k=calcOMS(rows,omsN.map);
+    // Comparaison : fichier N-1 chargé → ses données filtrées, sinon N-1 auto dans le même fichier
+    let ck=null;
+    if(omsN1){
+      const cr=filterRows(omsN1.rows,omsN1.map,cf,ct,false);
+      if(cr.length){ck=calcOMS(cr,omsN1.map);document.getElementById('cwarn').classList.remove('on');}
+      else document.getElementById('cwarn').classList.add('on');
+    } else if(G_comp==='n1auto'){
+      const cr=filterRows(omsN.rows,omsN.map,cf,ct,false);
+      if(cr.length){ck=calcOMS(cr,omsN.map);document.getElementById('cwarn').classList.remove('on');}
+      else document.getElementById('cwarn').classList.add('on');
+    } else {
+      document.getElementById('cwarn').classList.remove('on');
+    }
+    // Colonne droite : données principales + marketplace
+    renderMainKPIs(k, ck, kMktN, kMktN1);
+    // Passer N-1 et fichiers GA pour barres N-1 + courbe sessions
+    const rowsN1forChart = ck ? (omsN1 ? filterRows(omsN1.rows,omsN1.map,cf,ct,false) : filterRows(omsN.rows,omsN.map,cf,ct,false)) : null;
+    const mapN1forChart  = omsN1 ? omsN1.map : (ck ? omsN.map : null);
+    renderCharts(rows, omsN.map, k, rowsN1forChart, mapN1forChart, FILES['ga-n'], FILES['ga-n1']);
+    const topRowsN1 = ck ? (omsN1 ? filterRows(omsN1.rows,omsN1.map,cf,ct,false) : filterRows(omsN.rows,omsN.map,cf,ct,false)) : null;
+    renderTopProduits(rows, omsN.map, topRowsN1, omsN1?.map||omsN.map);
+    renderTable(rows,omsN.map);
+    renderDiag(omsN.hdrs,omsN.map,k);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// DONNÉES PRINCIPALES — colonne droite du bloc supérieur
+// ═══════════════════════════════════════════════════════
+// ── FULL PRICE / OFF PRICE — fonction séparée pour éviter les templates imbriqués ──
+function buildFPOP(kOMS, kOMSN1){
+  if(!kOMS || kOMS.caFP===null || kOMS.caFP===undefined) return '';
+  const fpN=kOMS.caFP||0, opN=kOMS.caOP||0;
+  if(fpN+opN<=0) return '';
+  const totN=fpN+opN||1;
+  const fpPctN=((fpN/totN)*100).toFixed(1);
+  const opPctN=((opN/totN)*100).toFixed(1);
+  const fpN1 = kOMSN1 && kOMSN1.caFP!=null ? kOMSN1.caFP : null;
+  const opN1 = kOMSN1 && kOMSN1.caOP!=null ? kOMSN1.caOP : null;
+  const totN1 = fpN1!==null && opN1!==null ? fpN1+opN1 : null;
+  const fpPctN1 = totN1 ? ((fpN1/totN1)*100).toFixed(1) : null;
+  const opPctN1 = totN1 ? ((opN1/totN1)*100).toFixed(1) : null;
+  const dFP = fpN1!==null && fpN1>0 ? ((fpN-fpN1)/fpN1*100).toFixed(0) : null;
+  const dOP = opN1!==null && opN1>0 ? ((opN-opN1)/opN1*100).toFixed(0) : null;
+  const dltSpan = (d) => {
+    if(d===null) return '';
+    const n=Number(d), s=n>=0?'+':'', c=n>=0?'var(--g)':'var(--r)';
+    return '<div style="font-size:10px;color:'+c+'">'+s+d+'% vs N-1</div>';
+  };
+  const fE = v => fCA(v||0);
+  return [
+    '<div class="dp-block">',
+      '<div class="dp-label" style="margin-bottom:8px">🏷 Full Price vs Off Price (EShop hors mkt)</div>',
+      '<div style="height:8px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:10px">',
+        '<div style="width:'+fpPctN+'%;background:#f5a623;transition:width .3s"></div>',
+        '<div style="width:'+opPctN+'%;background:#4a9eff;transition:width .3s"></div>',
+      '</div>',
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">',
+        '<div>',
+          '<div style="font-size:9px;font-weight:700;color:#f5a623;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Full Price</div>',
+          '<div style="font-size:16px;font-weight:800">'+fE(fpN)+'</div>',
+          '<div style="font-size:10px;color:var(--t2)">'+fpPctN+'% du CA'+(fpPctN1?' · N-1: '+fpPctN1+'%':'')+'</div>',
+          dltSpan(dFP),
+        '</div>',
+        '<div>',
+          '<div style="font-size:9px;font-weight:700;color:#4a9eff;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Off Price</div>',
+          '<div style="font-size:16px;font-weight:800">'+fE(opN)+'</div>',
+          '<div style="font-size:10px;color:var(--t2)">'+opPctN+'% du CA'+(opPctN1?' · N-1: '+opPctN1+'%':'')+'</div>',
+          dltSpan(dOP),
+        '</div>',
+      '</div>',
+    '</div>'
+  ].join('');
+}
+
+function renderMainKPIs(kOMS, kOMSN1, kMkt, kMktN1){
+  const el = document.getElementById('main-kpis');
+  if(!kOMS){ el.innerHTML='<div style="color:var(--t3);font-size:12px;text-align:center;padding:30px">Chargez un fichier OMS</div>'; return; }
+
+  const fE  = v => fCA(v||0);
+  const dlt = (n, n1, size=11) => {
+    if(n1===null||n1===undefined||n1===0) return '';
+    const p=(n-n1)/n1*100, s=p>=0?'+':'';
+    return `<div class="dp-delta" style="font-size:${size}px;color:${p>=0?'var(--g)':'var(--r)'}">${s}${p.toFixed(1)}% vs N-1</div>`;
+  };
+  const miniDlt = (n, n1) => {
+    if(!n1) return '';
+    const p=(n-n1)/n1*100, s=p>=0?'+':'';
+    return `<span style="font-size:10px;color:${p>=0?'var(--g)':'var(--r)'};margin-left:4px">${s}${p.toFixed(0)}%</span>`;
+  };
+
+  // Marketplace rows — utilise kMkt si disponible, sinon seulement OMS
+  const mktRows = kMkt ? [
+    {name:'Galeries Lafayette', val:kMkt.glTotal,   n1:kMktN1?.glTotal,   src:'OMS+Y2'},
+    {name:'↳ GL Dropshipping',  val:kMkt.glOMS,     n1:kMktN1?.glOMS,     src:'OMS',  indent:true},
+    {name:'↳ GL Corner SFS',    val:kMkt.glY2,      n1:kMktN1?.glY2,      src:'Y2',   indent:true},
+    {name:'Printemps',          val:kMkt.printemps, n1:kMktN1?.printemps, src:'OMS'},
+    {name:'Place des Tendances',val:kMkt.pdt,       n1:kMktN1?.pdt,       src:'Y2'},
+    {name:'Lulli EShop',        val:kMkt.lulli,     n1:kMktN1?.lulli,     src:'Y2'},
+  ] : [
+    {name:'GL.com',    val:kOMS.caMkt>0?kOMS.caMkt:0, n1:null, src:'OMS'},
+    {name:'Printemps', val:0,                           n1:null, src:'OMS'},
+  ];
+
+  const mktTotal   = kMkt ? kMkt.total   : kOMS.caMkt;
+  const mktTotalN1 = kMktN1 ? kMktN1.total : kOMSN1?.caMkt ?? null;
+
+  el.innerHTML = `
+    <!-- CA Global (hors GL.com + Printemps) -->
+    <div class="dp-block">
+      <div class="dp-label">💰 CA Global <span style="font-size:9px;color:var(--t3);font-weight:400">hors GL.com + Printemps</span></div>
+      <div class="dp-value">${fE(kOMS.caGlob)}</div>
+      ${dlt(kOMS.caGlob, kOMSN1?.caGlob)}
+    </div>
+
+    <!-- CA EShop / CA France / Inter -->
+    <div class="dp-split">
+      <div class="dp-mini">
+        <div class="dp-label">🇫🇷 CA France</div>
+        <div class="dp-value">${fE(kOMS.caFR)}${miniDlt(kOMS.caFR, kOMSN1?.caFR)}</div>
+      </div>
+      <div class="dp-mini">
+        <div class="dp-label">✈️ CA International</div>
+        <div class="dp-value">${fE(kOMS.caInt)}${miniDlt(kOMS.caInt, kOMSN1?.caInt)}</div>
+      </div>
+    </div>
+    <div class="dp-block" style="padding:8px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">🌐 CA EShop <span style="font-weight:400;font-size:9px">(hors 4 mkt)</span></span>
+        <span style="font-weight:800;font-size:14px">${fE(kOMS.caEShop)}${miniDlt(kOMS.caEShop, kOMSN1?.caEShop)}</span>
+      </div>
+    </div>
+
+    <!-- CA Entrepôt / SFS -->
+    <div class="dp-split">
+      <div class="dp-mini">
+        <div class="dp-label">🏭 CA Entrepôt</div>
+        <div class="dp-value">${fE(kOMS.caEnt)}${miniDlt(kOMS.caEnt, kOMSN1?.caEnt)}</div>
+      </div>
+      <div class="dp-mini">
+        <div class="dp-label">🏪 CA SFS</div>
+        <div class="dp-value">${fE(kOMS.caSFS)}${miniDlt(kOMS.caSFS, kOMSN1?.caSFS)}</div>
+      </div>
+    </div>
+
+    <!-- Full Price / Off Price : injecté via fonction dédiée pour éviter templates imbriqués -->
+    ${buildFPOP(kOMS, kOMSN1)}
+
+    <!-- CA Marketplace + zoom -->
+    <div class="dp-block">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="dp-label">🛒 CA Marketplace Total</div>
+          <div class="dp-value" style="font-size:18px">${fE(mktTotal)}${miniDlt(mktTotal, mktTotalN1)}</div>
+        </div>
+      </div>
+      <div>
+        ${mktRows.map(r=>`
+          <div class="dp-mkt-row" style="${r.indent?'padding-left:12px;':''}">
+            <span class="dp-mkt-name" style="${r.indent?'color:var(--t3);font-size:11px':''}">${r.name}<span class="dp-mkt-src">${r.src}</span></span>
+            <span>
+              <span class="dp-mkt-val">${fE(r.val)}</span>
+              ${r.n1!==null&&r.n1!==undefined?`<span class="dp-mkt-delta" style="color:${(r.val-r.n1)/r.n1>=0?'var(--g)':'var(--r)'}">${((r.val-r.n1)/r.n1*100)>=0?'+':''}${((r.val-r.n1)/r.n1*100).toFixed(0)}%</span>`:''}
+            </span>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// TOP PRODUITS
+// ═══════════════════════════════════════════════════════
+function buildTopProdMap(rows, map){
+  const pi=map.prix, di=map.des, qi=map.qte, ti=map.type;
+  const by={};
+  rows.forEach(r=>{
+    if(isMkt((r[ti]||'').trim())) return;
+    const des=(r[di]||'').trim(); if(!des) return;
+    if(!by[des]) by[des]={ca:0,qte:0};
+    by[des].ca  += fN(r[pi]);
+    by[des].qte += parseInt((r[qi]||'1'))||1;
+  });
+  return by;
+}
+
+function renderTopProduits(rows, map, rowsN1, mapN1){
+  const makeTable = (byProd, placeholder) => {
+    if(!byProd) return '<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">'+placeholder+'</div>';
+    const top10=Object.entries(byProd).sort((a,b)=>b[1].ca-a[1].ca).slice(0,10);
+    if(!top10.length) return '<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Aucune donnée</div>';
+    return '<table class="kpi-table" style="font-size:11px"><thead><tr><th>#</th><th>Produit</th><th style="text-align:right">CA</th><th style="text-align:right">Qté</th></tr></thead><tbody>'
+      +top10.map(([des,v],i)=>'<tr>'
+        +'<td style="color:var(--t3);font-size:10px;width:18px">'+( i+1)+'</td>'
+        +'<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+des+'">'+des+'</td>'
+        +'<td style="text-align:right;font-variant-numeric:tabular-nums">'+fCA(v.ca)+'</td>'
+        +'<td style="text-align:right;color:var(--t2);font-size:10px">'+v.qte.toLocaleString('fr-FR')+'</td>'
+        +'</tr>').join('')
+      +'</tbody></table>';
+  };
+  const elN  = document.getElementById('top-produits-n');
+  const elN1 = document.getElementById('top-produits-n1');
+  if(!rows||!rows.length){
+    elN.innerHTML  = '<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier OMS</div>';
+    elN1.innerHTML = '<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier OMS N-1</div>';
+    return;
+  }
+  const byN  = buildTopProdMap(rows, map);
+  const byN1 = (rowsN1&&mapN1) ? buildTopProdMap(rowsN1, mapN1) : null;
+  elN.innerHTML  = makeTable(byN,  'Chargez un fichier OMS');
+  elN1.innerHTML = makeTable(byN1, 'Chargez un fichier OMS N-1');
+}
+
+// ═══════════════════════════════════════════════════════
+// PERFORMANCE GA PAR CANAL
+// ═══════════════════════════════════════════════════════
+function renderGACanaux(kGaN, kGaN1){
+  const el = document.getElementById('ga-canaux-content');
+  if(!kGaN){ el.innerHTML='<div style="color:var(--t3);font-size:12px;text-align:center;padding:20px">Chargez un fichier GA</div>'; return; }
+  const fInt=v=>(v||0).toLocaleString('fr-FR');
+  const fPct=v=>((v||0)*100).toFixed(1)+'%';
+  const fEur=v=>(v||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';
+  const sorted=[...kGaN.byCanal].sort((a,b)=>b.sessions-a.sessions);
+  el.innerHTML=`<table class="kpi-table" style="font-size:11px">
+    <thead><tr>
+      <th>Canal</th>
+      <th style="text-align:right">Sessions</th>
+      <th style="text-align:right">Eng.</th>
+      <th style="text-align:right">Évén.</th>
+      <th style="text-align:right">Revenu</th>
+    </tr></thead>
+    <tbody>${sorted.map(c=>{
+      const n1=kGaN1?.byCanal.find(x=>x.canal===c.canal);
+      const sessD=n1?(((c.sessions-n1.sessions)/n1.sessions)*100).toFixed(0):null;
+      const dCls=sessD?(+sessD>=0?'var(--g)':'var(--r)'):'';
+      return`<tr>
+        <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.canal}">${c.canal}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">
+          ${fInt(c.sessions)}
+          ${sessD!==null?`<span style="font-size:9px;color:${dCls};margin-left:3px">${+sessD>=0?'+':''}${sessD}%</span>`:''}
+        </td>
+        <td style="text-align:right">${fPct(c.engRate)}</td>
+        <td style="text-align:right">${fInt(c.events)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${fEur(c.revenue)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER KPIs
+// ═══════════════════════════════════════════════════════
+function renderKPIs(k,ck,hasN1File){
+  const defs=[
+    {key:'caGlob',l:'CA GLOBAL',i:'💰',hl:true},
+    {key:'caEShop',l:'CA ESHOP',i:'🌐'},
+    {key:'caFR',l:'CA FRANCE',i:'🇫🇷'},
+    {key:'caInt',l:'CA INTERNATIONAL',i:'✈️'},
+    {key:'caEnt',l:'CA ENTREPÔT',i:'🏭'},
+    {key:'caSFS',l:'CA SFS',i:'🏪'},
+    {key:'caMkt',l:'CA MARKETPLACE',i:'🛒'},
+    {key:'caOmni',l:'CA OMNICANAL',i:'🔄'},
+  ];
+  document.getElementById('krow').innerHTML=defs.map(d=>{
+    const v=k[d.key]||0;
+    const pv=ck?ck[d.key]||0:null;
+    const noComp=pv===null;
+    const pct=!noComp?((v-pv)/pv*100).toFixed(1):null;
+    const sign=pct&&+pct>0?'+':'';
+    const cls=pct?(+pct>=0?'up':'dn'):'na';
+    return `<div class="kc${d.hl?' hl':''}${noComp?' dim':''}">
+      <div class="ki">${d.i}</div>
+      <div class="kl">${d.l}</div>
+      <div class="kv">${fCA(v)}</div>
+      ${!noComp?`<div class="kd ${cls}">${sign}${pct}% vs N-1</div>`:`<div class="kd na">${hasN1File?'—':'Charger N-1'}</div>`}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER CHARTS
+// ═══════════════════════════════════════════════════════
+// Extrait sessions par jour depuis un fichier GA si format "date" détecté
+// GA4 daily export a une colonne "Date" (YYYYMMDD) au lieu de "Groupe de canaux"
+function getGADaily(gaFile){
+  if(!gaFile||!gaFile.rows||!gaFile.hdrs) return null;
+  const dateIdx=gaFile.hdrs.findIndex(h=>{const n=norm(h);return n==='date'||n==='jour'||n==='day';});
+  if(dateIdx<0) return null; // export par canal, pas par date
+  if(!gaFile.map||Object.keys(gaFile.map).length===0) gaFile.map=autoMapGA(gaFile.hdrs);
+  const si=gaFile.map.sessions; if(si===undefined) return null;
+  const by={};
+  gaFile.rows.forEach(r=>{
+    const raw=(r[dateIdx]||'').trim();
+    let iso;
+    if(/^\d{8}$/.test(raw)) iso=`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+    else if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) iso=raw;
+    else return;
+    by[iso]=(by[iso]||0)+(parseInt(r[si])||0);
+  });
+  return Object.keys(by).length>0?by:null;
+}
+
+function renderCharts(rows, map, k, rowsN1, mapN1, gaNFile, gaN1File){
+  const di=map.date, pi=map.prix;
+
+  // CA N par jour
+  const byDayN={};
+  rows.forEach(r=>{const o=parseFrD(r[di]);if(!o)return;const k=toISO(o);byDayN[k]=(byDayN[k]||0)+fN(r[pi]);});
+
+  // CA N-1 par jour (dates décalées +1 an pour aligner sur le même axe X)
+  const byDayN1={};
+  if(rowsN1&&mapN1){
+    const di1=mapN1.date,pi1=mapN1.prix;
+    rowsN1.forEach(r=>{
+      const o=parseFrD(r[di1]);if(!o)return;
+      const shifted=toISO({y:o.y+1,m:o.m,d:o.d});
+      byDayN1[shifted]=(byDayN1[shifted]||0)+fN(r[pi1]);
+    });
+  }
+
+  const days=Object.keys(byDayN).sort();
+  const hasN1=Object.keys(byDayN1).length>0;
+
+  // Sessions par jour depuis GA (si export daily disponible)
+  const sessN  = getGADaily(gaNFile);
+  const sessN1Raw = getGADaily(gaN1File);
+  // Décaler sessN1 +1 an pour alignement
+  const sessN1 = sessN1Raw ? Object.fromEntries(
+    Object.entries(sessN1Raw).map(([d,v])=>{
+      const p=d.split('-');
+      return [`${+p[0]+1}-${p[1]}-${p[2]}`,v];
+    })
+  ) : null;
+  const hasSessions = !!sessN;
+
+  // Datasets
+  const datasets=[
+    {type:'bar', label:'CA N',   yAxisID:'yCA',
+     data:days.map(d=>Math.round(byDayN[d]||0)),
+     backgroundColor:'rgba(245,166,35,.6)', borderColor:'#f5a623', borderWidth:1, borderRadius:3, order:2},
+  ];
+  if(hasN1) datasets.push(
+    {type:'bar', label:'CA N-1', yAxisID:'yCA',
+     data:days.map(d=>Math.round(byDayN1[d]||0)),
+     backgroundColor:'rgba(245,166,35,.2)', borderColor:'rgba(245,166,35,.4)', borderWidth:1, borderRadius:3, order:3}
+  );
+  if(hasSessions) datasets.push(
+    {type:'line', label:'Sessions N', yAxisID:'ySess',
+     data:days.map(d=>sessN[d]||0),
+     borderColor:'#4a9eff', backgroundColor:'rgba(74,158,255,.1)',
+     borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:0.3, fill:false, order:1}
+  );
+  if(hasSessions&&sessN1) datasets.push(
+    {type:'line', label:'Sessions N-1', yAxisID:'ySess',
+     data:days.map(d=>sessN1[d]||0),
+     borderColor:'rgba(74,158,255,.4)', backgroundColor:'transparent',
+     borderWidth:1.5, pointRadius:0, borderDash:[4,3], tension:0.3, fill:false, order:1}
+  );
+
+  // Légende
+  const legendNeeded = hasN1||hasSessions;
+
+  // Ajuster hauteur du conteneur si sessions présentes
+  const cDaily=document.getElementById('cdaily');
+  cDaily.closest('.cc').style.height = hasSessions?'260px':'220px';
+
+  if(CHARTS.d) CHARTS.d.destroy();
+  CHARTS.d=new Chart(cDaily.getContext('2d'),{
+    data:{
+      labels:days.map(d=>{const p=d.split('-');return p[2]+'/'+p[1];}),
+      datasets
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:legendNeeded, position:'top',
+          labels:{color:'#94a3b8',font:{size:10},boxWidth:12,padding:10}},
+        tooltip:{callbacks:{
+          label:ctx=>{
+            const v=ctx.raw;
+            if(ctx.dataset.yAxisID==='ySess') return ` ${ctx.dataset.label}: ${v.toLocaleString('fr-FR')} sessions`;
+            return ` ${ctx.dataset.label}: ${v.toLocaleString('fr-FR')} €`;
+          }
+        }}
+      },
+      scales:{
+        x:{ticks:{color:'#64748b',font:{size:9},maxTicksLimit:16},grid:{color:'rgba(46,51,80,.4)'}},
+        yCA:{type:'linear',position:'left',
+          ticks:{color:'#f5a623',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},
+          grid:{color:'rgba(46,51,80,.4)'}},
+        ySess:{type:'linear',position:'right',display:hasSessions,
+          ticks:{color:'#4a9eff',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v},
+          grid:{drawOnChartArea:false}}
+      }
+    }
+  });
+  const tot=k.caEnt+k.caSFS+k.caMkt||1;
+  if(CHARTS.p)CHARTS.p.destroy();
+  CHARTS.p=new Chart(document.getElementById('cpie').getContext('2d'),{
+    type:'doughnut',
+    data:{
+      labels:['Entrepôt','SFS','Marketplace'],
+      datasets:[{data:[Math.round(k.caEnt),Math.round(k.caSFS),Math.round(k.caMkt)],backgroundColor:['#f5a623','#4a9eff','#22c55e'],borderWidth:2,borderColor:'#1a1d27',hoverOffset:6}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
+      plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:11},padding:10,usePointStyle:true}},
+        tooltip:{callbacks:{label:ctx=>{const v=ctx.raw,p=(v/tot*100).toFixed(1);return ` ${ctx.label}: ${fCA(v)} (${p}%)`;}}}}
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// TABLE
+// ═══════════════════════════════════════════════════════
+let TD=[];
+function renderTable(rows,map){
+  const{prix:pi,date:di,des:dei,num:ni,pays:pai,mag:mi,type:ti,rayon:ri}=map;
+  TD=rows.map(r=>({num:ni!==undefined?r[ni]||'':'',date:di!==undefined?r[di]||'':'',des:dei!==undefined?r[dei]||'':'',pays:pai!==undefined?r[pai]||'':'',mag:mi!==undefined?r[mi]||'':'',type:ti!==undefined?r[ti]||'':'',prix:fN(r[pi]),rayon:ri!==undefined?r[ri]||'':''}));
+  renderTbl(TD);
+}
+function renderTbl(data){
+  const rows=data.slice(0,300);
+  document.getElementById('twrap').innerHTML=`<table><thead><tr><th>N° commande</th><th>Date</th><th>Désignation</th><th>Rayon</th><th>Pays</th><th>Magasin</th><th>Canal</th><th style="text-align:right">Prix payé</th></tr></thead><tbody>${rows.map(r=>{const c=isMkt(r.type)?`<span class="badge bo">${r.type||'Mkt'}</span>`:(r.mag||'').toLowerCase().includes('webstore eur')?`<span class="badge bb">Entrepôt</span>`:`<span class="badge bg">SFS</span>`;return`<tr><td title="${r.num}">${r.num||'—'}</td><td>${r.date}</td><td title="${r.des}">${r.des||'—'}</td><td>${r.rayon||'—'}</td><td>${r.pays}</td><td title="${r.mag}">${r.mag||'—'}</td><td>${c}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${r.prix.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €</td></tr>`;}).join('')}</tbody></table>`;
+  document.getElementById('tfooter').textContent=`${rows.length.toLocaleString('fr')} / ${data.length.toLocaleString('fr')} lignes`;
+}
+document.getElementById('tsearch').addEventListener('input',e=>{
+  const q=e.target.value.toLowerCase();
+  renderTbl(q?TD.filter(r=>[r.num,r.des,r.pays,r.mag,r.type,r.rayon].some(v=>(v||'').toLowerCase().includes(q))):TD);
+});
+
+// ═══════════════════════════════════════════════════════
+// DIAGNOSTIC
+// ═══════════════════════════════════════════════════════
+function renderDiag(hdrs,map,k){
+  const lines=[];
+  lines.push('=== VÉRIFICATION CA ===');
+  lines.push('Total brut toutes lignes  : '+k.total.toLocaleString('fr',{minimumFractionDigits:2})+' €');
+  lines.push('CA Global (hors GL+Prtps) : '+k.caGlob.toLocaleString('fr',{minimumFractionDigits:2})+' € ← doit être 950K');
+  lines.push('CA EShop  (hors 4 mkt)    : '+k.caEShop.toLocaleString('fr',{minimumFractionDigits:2})+' € ← hors La Redoute + 24S aussi');
+  lines.push('CA Marketplace OMS        : '+k.caMkt.toLocaleString('fr',{minimumFractionDigits:2})+' €');
+  lines.push('CA Full Price             : '+(k.caFP!=null?k.caFP.toLocaleString('fr',{minimumFractionDigits:2})+' €':'colonnes non détectées'));
+  lines.push('');
+  lines.push('');
+  lines.push('Colonnes mappées :');
+  Object.entries(map).forEach(([f,i])=>lines.push(`  ${f} → [${i}] ${(hdrs[i]||'').slice(0,30)}`));
+  document.getElementById('diag-content').innerHTML=lines.join('<br>');
+}
+</script>
+</body>
+</html>
