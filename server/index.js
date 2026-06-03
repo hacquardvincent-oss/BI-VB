@@ -12,6 +12,7 @@ const auth = require('./auth');
 const ingest = require('./ingest');
 const reports = require('./reports');
 const pdf = require('./pdf');
+const ga4 = require('./ga4');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use('/auth', auth.router);
 app.use('/api/ingest', ingest.router);
 app.use('/api/report', reports.router);
 app.use('/api/report', pdf.router);
+app.use('/api/ga4', ga4.router);
 
 app.use(express.static(path.join(__dirname, '..', 'web')));
 app.get('/', (req, res) => res.redirect('/app.html'));

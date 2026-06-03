@@ -22,3 +22,10 @@ services:
         value: Vincent
       - key: ADMIN_PASSWORD
         sync: false          # à saisir manuellement dans le dashboard Render
+      # Connecteur GA4 (optionnel, cf. ADR-007) :
+      - key: GA4_PROPERTY_ID
+        value: "358326945"
+      # + déposer la clé du service account en "Secret File" nommé ga4.json
+      #   (ou définir GA4_SA_KEY en base64). Jamais versionné.
+      - key: GA4_SA_KEY
+        sync: false

@@ -8,11 +8,14 @@ account). En parallèle : vue saison + graphiques dans l'UI V2.
 ---
 
 ## Session du 03/06/2026
-### Réalisé — mise en prod + CA par pays + cadrage GA4
+### Réalisé — mise en prod + CA par pays + connecteur GA4
 - ✅ **Application V2 déployée sur Render** (mode sans base) : login, dépôt fichiers, reporting, PDF — testée en prod par Vincent
 - ✅ **CA par pays** ajouté (calcul + report + UI + PDF + test) : CA / commandes / panier par pays, hors marketplace, comparaison N-1
-- 📋 **GA4 API priorisé** → ADR-007 rédigé + prérequis Google listés (en attente property ID + service account)
+- ✅ **Connecteur GA4 API implémenté** (`server/ga4.js`, ADR-007) : service account → sessions/canaux datés → TT fiable par période ; bouton « Rafraîchir GA4 » ; `calcGA` agrège désormais par canal (test ajouté). Property ID 358326945.
 - 📋 Recommandations business proposées (retours/annulations, CA pays, saison, objectifs, graphiques)
+
+### ⚠️ Sécurité
+- La clé du service account GA4 a été partagée en clair dans le chat → **à révoquer et recréer** (rotation), nouvelle clé à déposer uniquement dans Render (Secret File / GA4_SA_KEY).
 
 ### Réalisé — bascule mode SANS base de données (ADR-006)
 - Déploiement Render bloqué : free tier limité à 1 base gratuite (déjà utilisée)
@@ -78,7 +81,7 @@ account). En parallèle : vue saison + graphiques dans l'UI V2.
 5. ~~Reportings J/hebdo/mensuel + export PDF~~ ✅ fait (vue **saison** restant à brancher)
 6. ~~Déployer sur Render~~ ✅ fait (03/06, mode sans base)
 7. ~~CA par pays~~ ✅ fait (03/06)
-8. **Connecteur GA4 API** (ADR-007) — en attente accès Google (property ID + service account)
+8. ~~Connecteur GA4 API~~ ✅ implémenté (03/06) — **reste à activer** : déposer la clé (rotée) + GA4_PROPERTY_ID dans Render, puis « Rafraîchir GA4 »
 9. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)

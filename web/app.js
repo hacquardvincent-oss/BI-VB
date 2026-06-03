@@ -153,6 +153,26 @@ function renderReport(rep) {
   `;
 }
 
+// GA4 API
+async function ga4Status() {
+  try {
+    const r = await fetch('/api/ga4/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) document.getElementById('ga4box').classList.remove('hidden');
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('ga4refresh').addEventListener('click', async () => {
+  const note = document.getElementById('ga4note');
+  note.textContent = 'Récupération GA4 en cours…';
+  const r = await fetch('/api/ga4/refresh', { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur GA4'); return; }
+  note.textContent = `✓ GA4 importé : ${j.rowsN} lignes N${j.rowsN1 != null ? ` · ${j.rowsN1} lignes N-1` : ''} (${j.period.start} → ${j.period.end})`;
+  await loadStatus();
+  loadReport();
+});
+
 // Événements
 document.getElementById('logout').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
@@ -170,5 +190,6 @@ document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('clic
 (async () => {
   if (!(await me())) return;
   await loadStatus();
+  await ga4Status();
   await loadReport();
 })();

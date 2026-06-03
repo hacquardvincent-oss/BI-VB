@@ -167,7 +167,11 @@ une base existante. À ce moment : réintroduire `db.js` (schéma users + datase
 ## ADR-007 — Connecteur GA4 via l'API Analytics Data (priorisé)
 
 **Date** : 03/06/2026
-**Statut** : Accepté (à implémenter — en attente des prérequis Google)
+**Statut** : Implémenté (`server/ga4.js`) — s'active dès que `GA4_PROPERTY_ID` + clé sont définis dans Render
+
+> Property ID confirmé : **358326945**. Données récupérées : `date` × `sessionDefaultChannelGroup`
+> (sessions, activeUsers, newUsers, keyEvents, totalRevenue, engagedSessions, engagementRate) →
+> alimente le slot GA avec une colonne Date → **TT fiable par période**. Repli : dépôt de fichier GA.
 
 ### Contexte
 L'export GA fourni est agrégé **par canal, sans date** → sessions non filtrables par période, TT non

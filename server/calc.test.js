@@ -51,4 +51,20 @@ const uk = pays.find(p => p.pays === 'Royaume-Uni');
 assert.strictEqual(uk.ca, 80, 'CA UK');
 assert.strictEqual(uk.pieces, 2, 'pièces UK');
 
+// ── GA : agrégation par canal + sessions datées (format API GA4) ────────────
+const gaHdrs = ['Date', 'Groupe de canaux', 'Sessions', 'Utilisateurs actifs',
+  'Nouveaux utilisateurs', 'Événements clés', 'Revenu total', 'Sessions avec engagement', "Taux d'engagement"];
+const gaRows = [
+  ['20260501', 'Direct', '100', '80', '20', '5', '1000', '60', '0.6'],
+  ['20260502', 'Direct', '50', '40', '10', '3', '500', '30', '0.6'],
+  ['20260501', 'Email', '40', '30', '25', '2', '200', '20', '0.5'],
+];
+const gaDs = { hdrs: gaHdrs, rows: gaRows, map: calc.autoMap(gaHdrs, calc.GA_ALIASES) };
+const ga = calc.calcGA(gaDs);
+assert.strictEqual(ga.totalSessions, 190, 'GA total sessions');
+assert.strictEqual(ga.byCanal.length, 2, 'GA canaux agrégés (Direct + Email)');
+assert.strictEqual(ga.byCanal.find(c => c.canal === 'Direct').sessions, 150, 'GA Direct agrégé sur 2 jours');
+assert.strictEqual(calc.getSessionsForPeriod(gaDs, null, null, true), 190, 'GA sessions période complète');
+assert.strictEqual(calc.getSessionsForPeriod(gaDs, '2026-05-02', '2026-05-02', false), 50, 'GA sessions datées sur 1 jour');
+
 console.log('✅ calc.test.js : tous les calculs OK');

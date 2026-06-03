@@ -275,14 +275,19 @@ function calcGA(ga) {
   const ci = m.canal, si = m.sessions, ui = m.users, nui = m.new_users,
     esi = m.eng_sessions, evi = m.events, ri = m.revenue, eri = m.eng_rate;
   let totalSessions = 0, totalUsers = 0, totalNewUsers = 0, totalEngSessions = 0, totalEvents = 0, totalRevenue = 0;
-  const byCanal = [];
+  // Agrégation par canal (gère aussi bien l'export "1 ligne/canal" que les données GA4 API "jour×canal")
+  const acc = {};
   ga.rows.forEach(r => {
     const sess = fGA(r[si]), users = fGA(r[ui]), newU = fGA(r[nui]), engS = fGA(r[esi]),
-      events = fGA(r[evi]), rev = fGA(r[ri]), engR = fGA(r[eri]);
+      events = fGA(r[evi]), rev = fGA(r[ri]);
     totalSessions += sess; totalUsers += users; totalNewUsers += newU;
     totalEngSessions += engS; totalEvents += events; totalRevenue += rev;
-    byCanal.push({ canal: (r[ci] || '').trim(), sessions: sess, users, newUsers: newU, engSessions: engS, events, revenue: rev, engRate: engR });
+    const c = (r[ci] || '').trim() || '(inconnu)';
+    if (!acc[c]) acc[c] = { canal: c, sessions: 0, users: 0, newUsers: 0, engSessions: 0, events: 0, revenue: 0 };
+    const a = acc[c];
+    a.sessions += sess; a.users += users; a.newUsers += newU; a.engSessions += engS; a.events += events; a.revenue += rev;
   });
+  const byCanal = Object.values(acc).map(a => ({ ...a, engRate: a.sessions > 0 ? a.engSessions / a.sessions : 0 }));
   const engRateTotal = totalSessions > 0 ? totalEngSessions / totalSessions : 0;
   return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, engRateTotal, byCanal };
 }
