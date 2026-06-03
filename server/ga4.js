@@ -40,12 +40,12 @@ function isConfigured() {
 
 const shiftYear = (iso, d) => { if (!iso) return ''; const p = iso.split('-'); return `${+p[0] + d}-${p[1]}-${p[2]}`; };
 
-// En-têtes du dataset produit (alignés sur GA_ALIASES + colonne Date)
-const HDRS = ['Date', 'Groupe de canaux', 'Sessions', 'Utilisateurs actifs',
+// En-têtes du dataset produit (alignés sur GA_ALIASES + colonnes Date et Device)
+const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Sessions', 'Utilisateurs actifs',
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
   'Sessions avec engagement', 'Taux d\'engagement'];
 
-// ── Appel runReport (dimensions date × canal) ───────────────────────────────
+// ── Appel runReport (dimensions date × canal × device) ──────────────────────
 async function fetchGA4(propertyId, startDate, endDate) {
   const creds = loadCreds();
   if (!creds) throw new Error('Identifiants GA4 absents (Secret File ga4.json ou GA4_SA_KEY)');
@@ -54,13 +54,13 @@ async function fetchGA4(propertyId, startDate, endDate) {
 
   const body = {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }],
+    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'deviceCategory' }],
     metrics: [
       { name: 'sessions' }, { name: 'activeUsers' }, { name: 'newUsers' },
       { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
       { name: 'engagementRate' },
     ],
-    limit: 100000,
+    limit: 250000,
   };
   const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
     method: 'POST',
@@ -73,9 +73,9 @@ async function fetchGA4(propertyId, startDate, endDate) {
   }
   const data = await res.json();
   const rows = (data.rows || []).map(r => {
-    const d = r.dimensionValues.map(x => x.value);  // [date(YYYYMMDD), canal]
+    const d = r.dimensionValues.map(x => x.value);  // [date(YYYYMMDD), canal, device]
     const m = r.metricValues.map(x => x.value);      // [sessions, users, newUsers, keyEvents, revenue, engaged, engRate]
-    return [d[0], d[1], m[0], m[1], m[2], m[3], m[4], m[5], m[6]];
+    return [d[0], d[1], d[2], m[0], m[1], m[2], m[3], m[4], m[5], m[6]];
   });
   return { hdrs: HDRS.slice(), rows };
 }

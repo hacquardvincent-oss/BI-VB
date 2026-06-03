@@ -2,12 +2,19 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Implémenter le connecteur GA4 API (ADR-007) dès réception des accès Google (property ID + service
-account). En parallèle : vue saison + graphiques dans l'UI V2.
+Vue **saison** (collection) + **retours & annulations** (Statut / TTC négatifs). Et préparer le
+retour d'une base (persistance + comptes) pour ne plus re-déposer les fichiers.
 
 ---
 
 ## Session du 03/06/2026
+### Réalisé — reporting croisé vente × trafic (4 blocs)
+- ✅ **Funnel de conversion** Sessions → Commandes → CA + TT + **CA/session** (N vs N-1)
+- ✅ **Efficacité par canal** (GA4) : taux de conversion, CA/session, **part trafic vs part revenu**
+- ✅ **Suivi quotidien** : graphiques Chart.js (CA & Sessions, puis TT) → détection des chutes de conversion
+- ✅ **Mobile vs Desktop** : dimension `deviceCategory` ajoutée à l'appel GA4 → conversion/revenu par device
+- Implémenté dans `calc.js` (channelPerf, calcByDevice, dailySeries) + report + UI (Chart.js) + PDF + tests ✅
+
 ### Réalisé — mise en prod + CA par pays + connecteur GA4
 - ✅ **Application V2 déployée sur Render** (mode sans base) : login, dépôt fichiers, reporting, PDF — testée en prod par Vincent
 - ✅ **CA par pays** ajouté (calcul + report + UI + PDF + test) : CA / commandes / panier par pays, hors marketplace, comparaison N-1
@@ -82,8 +89,9 @@ account). En parallèle : vue saison + graphiques dans l'UI V2.
 6. ~~Déployer sur Render~~ ✅ fait (03/06, mode sans base)
 7. ~~CA par pays~~ ✅ fait (03/06)
 8. ~~Connecteur GA4 API~~ ✅ implémenté ET activé en prod (03/06) — TT fiable
-9. **Reporting croisé vente × trafic** (funnel, efficacité par canal, CA/session, device) — à prioriser
-10. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
+9. ~~Reporting croisé vente × trafic~~ ✅ fait (03/06 : funnel, efficacité canal, suivi quotidien, device)
+10. Vue **saison** (groupement par colonne Saison via référentiel)
+11. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop

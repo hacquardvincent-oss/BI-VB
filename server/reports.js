@@ -94,6 +94,18 @@ async function buildReport({ preset, from, to, isAll }) {
   });
   const pays = Object.values(paysMap).sort((a, b) => b.n.ca - a.n.ca);
 
+  // ── Croisements vente × trafic ──
+  const gaCalcN = gaN ? calc.calcGA(gaN) : null;
+  const gaCalcN1 = gaN1 ? calc.calcGA(gaN1) : null;
+  const cps = k => (k && k.sessions > 0) ? k.ca / k.sessions : null;
+  const funnel = {
+    n: { sessions: kpiEShopN.sessions, commandes: kpiEShopN.commandes, ca: kpiEShopN.ca, tt: kpiEShopN.tt, caPerSession: cps(kpiEShopN) },
+    n1: kpiEShopN1 ? { sessions: kpiEShopN1.sessions, commandes: kpiEShopN1.commandes, ca: kpiEShopN1.ca, tt: kpiEShopN1.tt, caPerSession: cps(kpiEShopN1) } : null,
+  };
+  const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
+  const device = { n: gaN ? calc.calcByDevice(gaN) : null, n1: gaN1 ? calc.calcByDevice(gaN1) : null };
+  const daily = calc.dailySeries(rowsN, omsN.map, gaN);
+
   // Familles fusionnées N / N-1
   let famille = null;
   if (famNobj) {
@@ -116,8 +128,12 @@ async function buildReport({ preset, from, to, isAll }) {
     pays,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
-    ga: gaN ? calc.calcGA(gaN) : null,
-    gaN1: gaN1 ? calc.calcGA(gaN1) : null,
+    funnel,
+    channels,
+    device,
+    daily,
+    ga: gaCalcN,
+    gaN1: gaCalcN1,
   };
 }
 

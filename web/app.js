@@ -82,6 +82,7 @@ async function loadReport() {
   document.getElementById('metaNote').textContent =
     `Période ${rep.meta.from} → ${rep.meta.to}` + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1');
   box.innerHTML = renderReport(rep);
+  renderDailyChart(rep.daily);
 }
 
 function renderReport(rep) {
@@ -136,13 +137,56 @@ function renderReport(rep) {
       <table><thead><tr><th>Canal</th><th>Sessions</th><th>Engagement</th><th>Revenu</th></tr></thead><tbody>${canaux}</tbody></table></div>`;
   }
 
+  const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
+
+  // Funnel + CA/session
+  const f = rep.funnel ? rep.funnel.n : null, f1 = (rep.funnel && rep.funnel.n1) || {};
+  let funnelCard = '';
+  if (f) {
+    const tiles = [
+      ['Sessions', fInt(f.sessions), f.sessions, f1.sessions],
+      ['Commandes', fInt(f.commandes), f.commandes, f1.commandes],
+      ['CA EShop', fEur(f.ca), f.ca, f1.ca],
+      ['Taux de transfo', fPct(f.tt), f.tt, f1.tt],
+      ['CA / session', f2(f.caPerSession), f.caPerSession, f1.caPerSession],
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
+    funnelCard = `<div class="card"><h3>Funnel de conversion — Sessions → Commandes → CA</h3><div class="kgrid">${tiles}</div></div>`;
+  }
+
+  // Suivi quotidien (graphiques)
+  const dailyCard = (rep.daily && rep.daily.length)
+    ? `<div class="card"><h3>Suivi quotidien — CA & Sessions</h3><div style="height:240px"><canvas id="dailyChart"></canvas></div>
+       <h3 style="margin-top:14px">Taux de transformation quotidien</h3><div style="height:160px"><canvas id="ttChart"></canvas></div></div>`
+    : '';
+
+  // Efficacité par canal
+  const ch = rep.channels ? rep.channels.n : null;
+  const channelsCard = (ch && ch.length)
+    ? `<div class="card"><h3>Efficacité par canal d'acquisition (GA4)</h3>
+       <table><thead><tr><th>Canal</th><th>Sessions</th><th>% trafic</th><th>Conv.</th><th>Revenu</th><th>% revenu</th><th>CA/sess.</th></tr></thead>
+       <tbody>${ch.map(c => `<tr><td>${esc(c.canal)}</td><td>${fInt(c.sessions)}</td><td>${fPct(c.shareTraffic)}</td><td>${fPct(c.convRate)}</td><td>${fEur(c.revenue)}</td><td>${fPct(c.shareRevenue)}</td><td>${f2(c.caPerSession)}</td></tr>`).join('')}</tbody></table>
+       <div class="note">Un canal dont la <b>part de revenu &gt; part de trafic</b> est efficace ; l'inverse signale un trafic peu qualifié.</div></div>`
+    : '';
+
+  // Mobile vs Desktop
+  const dev = rep.device ? rep.device.n : null;
+  const deviceCard = (dev && dev.length)
+    ? `<div class="card"><h3>Mobile vs Desktop</h3>
+       <table><thead><tr><th>Device</th><th>Sessions</th><th>%</th><th>Conv.</th><th>Revenu</th><th>Engagement</th></tr></thead>
+       <tbody>${dev.map(d => `<tr><td>${esc(d.device)}</td><td>${fInt(d.sessions)}</td><td>${fPct(d.share)}</td><td>${fPct(d.convRate)}</td><td>${fEur(d.revenue)}</td><td>${fPct(d.engRate)}</td></tr>`).join('')}</tbody></table></div>`
+    : '';
+
   return `
+    ${funnelCard}
     <div class="card"><h3>KPI EShop (FR + International)</h3>
       <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
       ${ttNote}
     </div>
+    ${dailyCard}
     <div class="card"><h3>Chiffre d'affaires</h3><div class="kgrid">${caBlocks}</div></div>
+    ${channelsCard}
+    ${deviceCard}
     <div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>
@@ -151,6 +195,46 @@ function renderReport(rep) {
     ${famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : ''}
     ${gaCard}
   `;
+}
+
+// Graphiques quotidiens (CA+Sessions, et TT)
+const _charts = {};
+function renderDailyChart(daily) {
+  if (!daily || !daily.length || typeof Chart === 'undefined') return;
+  const labels = daily.map(d => { const p = d.date.split('-'); return p[2] + '/' + p[1]; });
+  const c1 = document.getElementById('dailyChart');
+  if (c1) {
+    if (_charts.d) _charts.d.destroy();
+    _charts.d = new Chart(c1.getContext('2d'), {
+      data: {
+        labels, datasets: [
+          { type: 'bar', label: 'CA', yAxisID: 'y', data: daily.map(d => Math.round(d.ca)), backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
+          { type: 'line', label: 'Sessions', yAxisID: 'y1', data: daily.map(d => d.sessions), borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } },
+          y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+          y1: { position: 'right', ticks: { color: '#4a9eff', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+  const c2 = document.getElementById('ttChart');
+  if (c2) {
+    if (_charts.tt) _charts.tt.destroy();
+    _charts.tt = new Chart(c2.getContext('2d'), {
+      data: { labels, datasets: [{ type: 'line', label: 'TT', data: daily.map(d => d.tt != null ? +(d.tt * 100).toFixed(2) : null), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' TT ' + ctx.raw + '%' } } },
+        scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#22c55e', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(46,51,80,.4)' } } },
+      },
+    });
+  }
 }
 
 // GA4 API

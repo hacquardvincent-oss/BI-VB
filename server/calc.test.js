@@ -67,4 +67,27 @@ assert.strictEqual(ga.byCanal.find(c => c.canal === 'Direct').sessions, 150, 'GA
 assert.strictEqual(calc.getSessionsForPeriod(gaDs, null, null, true), 190, 'GA sessions période complète');
 assert.strictEqual(calc.getSessionsForPeriod(gaDs, '2026-05-02', '2026-05-02', false), 50, 'GA sessions datées sur 1 jour');
 
+// ── GA avec device : agrégation canal inchangée + répartition device + perf canal ──
+const gaHdrs2 = ['Date', 'Groupe de canaux', 'Device', 'Sessions', 'Utilisateurs actifs',
+  'Nouveaux utilisateurs', 'Événements clés', 'Revenu total', 'Sessions avec engagement', "Taux d'engagement"];
+const gaRows2 = [
+  ['20260501', 'Direct', 'mobile', '100', '80', '20', '5', '1000', '60', '0.6'],
+  ['20260501', 'Direct', 'desktop', '50', '40', '10', '8', '2000', '40', '0.8'],
+  ['20260501', 'Email', 'mobile', '40', '30', '25', '2', '200', '20', '0.5'],
+];
+const gaDs2 = { hdrs: gaHdrs2, rows: gaRows2, map: calc.autoMap(gaHdrs2, calc.GA_ALIASES) };
+
+const g2 = calc.calcGA(gaDs2);
+assert.strictEqual(g2.totalSessions, 190, 'GA total sessions (avec device)');
+assert.strictEqual(g2.byCanal.find(c => c.canal === 'Direct').sessions, 150, 'canal agrégé malgré la colonne device');
+
+const dev = calc.calcByDevice(gaDs2);
+assert.strictEqual(dev[0].device, 'mobile', 'device #1 par sessions');
+assert.strictEqual(dev.find(d => d.device === 'mobile').sessions, 140, 'sessions mobile');
+assert.strictEqual(dev.find(d => d.device === 'desktop').sessions, 50, 'sessions desktop');
+
+const perf = calc.channelPerf(g2);
+assert.strictEqual(perf[0].canal, 'Direct', 'canal #1 par revenu');
+assert.ok(Math.abs(perf[0].convRate - 13 / 150) < 1e-9, 'taux de conversion canal Direct');
+
 console.log('✅ calc.test.js : tous les calculs OK');

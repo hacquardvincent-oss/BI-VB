@@ -109,6 +109,7 @@ const GA_ALIASES = {
   events: ['evenements cles', 'key events', 'conversions'],
   revenue: ['revenu total', 'total revenue', 'revenue'],
   eng_rate: ['taux d engagement', 'engagement rate'],
+  device: ['device', 'appareil', 'categorie d appareil'],
 };
 const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
@@ -292,6 +293,61 @@ function calcGA(ga) {
   return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, engRateTotal, byCanal };
 }
 
+// ── Performance par canal d'acquisition (croisement efficacité) ─────────────
+// À partir d'un résultat calcGA : taux de conversion, CA/session, parts trafic/revenu.
+function channelPerf(g) {
+  if (!g || !g.byCanal) return null;
+  const totS = g.totalSessions || 1, totR = g.totalRevenue || 1;
+  return g.byCanal.map(c => ({
+    canal: c.canal, sessions: c.sessions, revenue: c.revenue, events: c.events,
+    convRate: c.sessions > 0 ? c.events / c.sessions : 0,
+    caPerSession: c.sessions > 0 ? c.revenue / c.sessions : 0,
+    shareTraffic: c.sessions / totS, shareRevenue: c.revenue / totR,
+  })).sort((a, b) => b.revenue - a.revenue);
+}
+
+// ── Répartition par device (mobile / desktop / tablet) ──────────────────────
+function calcByDevice(ga) {
+  if (!ga || !ga.rows || !ga.hdrs) return null;
+  const m = (ga.map && Object.keys(ga.map).length) ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
+  const di = m.device, si = m.sessions, evi = m.events, ri = m.revenue, esi = m.eng_sessions;
+  if (di === undefined) return null;
+  const acc = {};
+  ga.rows.forEach(r => {
+    const dev = (r[di] || '').trim() || '(inconnu)';
+    if (!acc[dev]) acc[dev] = { device: dev, sessions: 0, events: 0, revenue: 0, engSessions: 0 };
+    acc[dev].sessions += fGA(r[si]); acc[dev].events += fGA(r[evi]);
+    acc[dev].revenue += fGA(r[ri]); acc[dev].engSessions += fGA(r[esi]);
+  });
+  const total = Object.values(acc).reduce((s, a) => s + a.sessions, 0) || 1;
+  return Object.values(acc).map(a => ({
+    ...a, convRate: a.sessions > 0 ? a.events / a.sessions : 0,
+    engRate: a.sessions > 0 ? a.engSessions / a.sessions : 0, share: a.sessions / total,
+  })).sort((x, y) => y.sessions - x.sessions);
+}
+
+// ── Série quotidienne : CA + commandes (OMS) × sessions (GA) → TT par jour ──
+function dailySeries(rows, map, ga) {
+  const di = map.date, pi = map.prix, ni = map.num, ti = map.type;
+  const byDay = {};
+  rows.forEach(r => {
+    const o = parseFrD(r[di]); if (!o) return;
+    if (isMkt((r[ti] || '').trim())) return;
+    const iso = toISO(o);
+    if (!byDay[iso]) byDay[iso] = { ca: 0, orders: new Set() };
+    byDay[iso].ca += fN(r[pi]);
+    if (ni !== undefined && r[ni]) byDay[iso].orders.add(r[ni]);
+  });
+  const sess = ga ? (getGADaily(ga) || {}) : {};
+  const days = [...new Set([...Object.keys(byDay), ...Object.keys(sess)])].sort();
+  return days.map(d => {
+    const ca = byDay[d] ? byDay[d].ca : 0;
+    const commandes = byDay[d] ? byDay[d].orders.size : 0;
+    const sessions = sess[d] || 0;
+    return { date: d, ca, commandes, sessions, tt: sessions > 0 ? commandes / sessions : null };
+  });
+}
+
 // ── Référentiel : ref. externe → famille (regroupement prioritaire) ─────────
 function buildRefMap(ref) {
   if (!ref || !ref.rows || !ref.hdrs) return {};
@@ -372,5 +428,6 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
+  channelPerf, calcByDevice, dailySeries,
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
 };

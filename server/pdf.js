@@ -10,6 +10,7 @@ const { buildReport } = require('./reports');
 const router = express.Router();
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fEur2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 const fDelta = (n, n1) => {
@@ -60,6 +61,8 @@ function renderReport(doc, rep) {
     ['Sessions', fInt(k.sessions), fInt(k1.sessions), fDelta(k.sessions, k1.sessions)],
     ['Taux de transfo', fPct(k.tt), fPct(k1.tt), fDelta(k.tt, k1.tt)],
   ];
+  const fn = rep.funnel ? rep.funnel.n : null, fn1 = (rep.funnel && rep.funnel.n1) || {};
+  if (fn) kRows.push(['CA / session', fEur2(fn.caPerSession), fEur2(fn1.caPerSession), fDelta(fn.caPerSession, fn1.caPerSession)]);
   kRows.forEach(r => row4(doc, r[0], r[1], r[2], r[3]));
 
   // CA détaillé
@@ -88,6 +91,20 @@ function renderReport(doc, rep) {
     ['TOTAL Marketplace', mk.total, mk1.total],
   ];
   mkRows.forEach((r, i) => row4(doc, r[0], fEur(r[1]), fEur(r[2]), fDelta(r[1], r[2]), { bold: i === mkRows.length - 1 }));
+
+  // Efficacité par canal (GA4)
+  if (rep.channels && rep.channels.n && rep.channels.n.length) {
+    sectionTitle(doc, 'Efficacité par canal d\'acquisition (GA4)');
+    row4(doc, 'Canal', 'Sessions', 'Revenu', 'Conv.', { bold: true, color: '#666', size: 9 });
+    rep.channels.n.slice(0, 12).forEach(c => row4(doc, c.canal, fInt(c.sessions), fEur(c.revenue), fPct(c.convRate)));
+  }
+
+  // Mobile vs Desktop
+  if (rep.device && rep.device.n && rep.device.n.length) {
+    sectionTitle(doc, 'Mobile vs Desktop');
+    row4(doc, 'Device', 'Sessions', 'Revenu', 'Conv.', { bold: true, color: '#666', size: 9 });
+    rep.device.n.forEach(d => row4(doc, d.device, fInt(d.sessions), fEur(d.revenue), fPct(d.convRate)));
+  }
 
   // CA par pays
   if (rep.pays && rep.pays.length) {
