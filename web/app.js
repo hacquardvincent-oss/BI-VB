@@ -214,6 +214,34 @@ function renderReport(rep) {
       <div class="note">Taux de retour = CA retourné / CA EShop de la période.</div></div>`;
   }
 
+  // Top produits N vs N-1 + reconquête
+  const P = rep.produits;
+  let produitsCard = '', rentaCard = '';
+  if (P) {
+    const tN = P.topN || [], tN1 = P.topN1 || [];
+    const n = Math.max(tN.length, tN1.length);
+    let topRows = '';
+    for (let i = 0; i < n; i++) {
+      const a = tN[i], b = tN1[i];
+      topRows += `<tr><td>${i + 1}</td><td>${a ? esc(a.des) : ''}</td><td>${a ? fEur(a.ca) : ''}</td><td>${a ? fInt(a.qte) : ''}</td><td style="color:var(--t3)">${b ? esc(b.des) : ''}</td><td>${b ? fEur(b.ca) : ''}</td></tr>`;
+    }
+    const manq = (P.manquants || []).map(m => `<tr><td>${esc(m.produit)}</td><td>${fEur(m.caN)}</td><td>${fEur(m.caN1)}</td><td class="dn">−${fEur(m.perte)}</td></tr>`).join('');
+    produitsCard = `<div class="card"><h3>Top produits — N vs N-1</h3>
+      <table><thead><tr><th>#</th><th>Produit (N)</th><th>CA N</th><th>Qté N</th><th>Produit (N-1)</th><th>CA N-1</th></tr></thead><tbody>${topRows}</tbody></table>
+      ${manq ? `<h3 style="margin-top:14px">🎯 Produits à reconquérir (forts en N-1, en retrait en N)</h3>
+        <table><thead><tr><th>Produit</th><th>CA N</th><th>CA N-1</th><th>CA perdu</th></tr></thead><tbody>${manq}</tbody></table>
+        <div class="note">Trié par CA perdu vs N-1 : ce sont les leviers prioritaires pour égaler/battre N-1.</div>` : ''}</div>`;
+
+    const vend = (P.topVendus || []).map(p => `<tr><td>${esc(p.produit)}</td><td>${fEur(p.caVendu)}</td><td>${fInt(p.qteVendue)}</td></tr>`).join('');
+    const ret = (P.topRetournes || []).map(p => `<tr><td>${esc(p.produit)}</td><td>${fEur(p.caRetourne)}</td><td>${fInt(p.qteRetournee)}</td><td class="${p.tauxRetour >= 0.3 ? 'dn' : ''}">${fPct(p.tauxRetour)}</td><td>${fEur(p.caNet)}</td></tr>`).join('');
+    rentaCard = `<div class="card"><h3>Rentabilité produit — ventes × retours</h3>
+      <div class="grid cols2">
+        <div><h3>🏆 Plus vendus (CA)</h3><table><thead><tr><th>Produit</th><th>CA</th><th>Qté</th></tr></thead><tbody>${vend}</tbody></table></div>
+        <div><h3>↩️ Plus retournés (− rentables)</h3>${ret ? `<table><thead><tr><th>Produit</th><th>CA retourné</th><th>Qté</th><th>Taux ret.</th><th>CA net</th></tr></thead><tbody>${ret}</tbody></table>` : '<div class="note">Charge un fichier Retours pour activer cette analyse.</div>'}</div>
+      </div>
+      <div class="note">Taux de retour élevé (≥ 30 %, en rouge) = produit à surveiller (taille, qualité, visuel).</div></div>`;
+  }
+
   return `
     ${funnelCard}
     <div class="card"><h3>KPI EShop (FR + International)</h3>
@@ -233,6 +261,8 @@ function renderReport(rep) {
     ${saisonCard}
     ${cancellationsCard}
     ${returnsCard}
+    ${produitsCard}
+    ${rentaCard}
     ${famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : ''}
     ${gaCard}
   `;

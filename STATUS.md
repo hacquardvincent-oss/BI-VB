@@ -2,8 +2,8 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Préparer le retour d'une base (persistance + comptes) pour ne plus re-déposer les fichiers ;
-ajouter graphiques saison/retours et l'injection d'objectifs (% d'atteinte).
+Lot A (vues Quotidien/Hebdo/Mensuel + dimension Global/FR/Inter) OU Lot C (enrichissement GA) — au choix.
+Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
 
 ---
 
@@ -107,9 +107,10 @@ ajouter graphiques saison/retours et l'injection d'objectifs (% d'atteinte).
 - Vues par cadence **Quotidien / Hebdo / Mensuel** : même socle (fichiers + GA), **tableaux de sortie adaptés** à la lecture attendue
 - Dimension **Global / FR / International** appliquée à tout le dashboard (OMS filtré par pays ; GA FR/Inter via dimension `country`)
 
-### Lot B — Analyses produits
-- **Top 10 N vs Top 10 N-1** + **produits manquants** (vendus N-1, absents/en retrait N) → « ce qu'il faut refaire pour égaler/battre N-1 »
-- **Plus vendus (CA/qté) vs plus retournés** → rentabilité nette par produit (taux de retour produit)
+### Lot B — Analyses produits ✅ FAIT (03/06)
+- ✅ **Top 10 N vs Top 10 N-1** + **produits à reconquérir** (forts N-1, en retrait N, triés par CA perdu)
+- ✅ **Plus vendus (CA/qté) vs plus retournés** → rentabilité nette par produit (jointure OMS × retours sur Ref. externe, taux de retour, CA net)
+- calc.js : productGap, salesByRef, returnsByRef, productProfitability + tests ; UI 2 cartes ; PDF 2 sections
 
 ### Lot C — Enrichissement GA
 - **Ajouts panier** (addToCarts) + micro-funnel sessions → panier → commande

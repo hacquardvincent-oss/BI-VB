@@ -141,6 +141,19 @@ async function buildReport({ preset, from, to, isAll }) {
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
   }
 
+  // ── Analyses produits (Lot B) ──
+  const salesRef = calc.salesByRef(rowsN, omsN.map);
+  const retRowsForProd = retN ? calc.filterRows(retN.rows, retN.map, from, to, isAll) : [];
+  const retRef = retN ? calc.returnsByRef(retRowsForProd, retN.map) : {};
+  const prof = calc.productProfitability(salesRef, retRef);
+  const produits = {
+    topN: topList(topNobj),
+    topN1: topN1obj ? topList(topN1obj) : null,
+    manquants: calc.productGap(topNobj, topN1obj, 10),
+    topVendus: prof.slice().sort((a, b) => b.caVendu - a.caVendu).slice(0, 10),
+    topRetournes: retN ? prof.filter(p => p.caRetourne > 0).sort((a, b) => b.caRetourne - a.caRetourne).slice(0, 10) : [],
+  };
+
   // Familles fusionnées N / N-1
   let famille = null;
   if (famNobj) {
@@ -166,6 +179,7 @@ async function buildReport({ preset, from, to, isAll }) {
     returns,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
+    produits,
     funnel,
     channels,
     device,

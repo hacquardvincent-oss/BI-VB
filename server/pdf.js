@@ -143,6 +143,19 @@ function renderReport(doc, rep) {
     rt.reasons.slice(0, 8).forEach(x => row4(doc, x.reason, fEur(x.montant), fInt(x.count), ''));
   }
 
+  // Produits à reconquérir vs N-1
+  if (rep.produits && rep.produits.manquants && rep.produits.manquants.length) {
+    sectionTitle(doc, 'Produits à reconquérir (vs N-1)');
+    row4(doc, 'Produit', 'CA N', 'CA N-1', 'CA perdu', { bold: true, color: '#666', size: 9 });
+    rep.produits.manquants.slice(0, 12).forEach(m => row4(doc, m.produit, fEur(m.caN), fEur(m.caN1), '−' + fEur(m.perte)));
+  }
+  // Top produits retournés (rentabilité)
+  if (rep.produits && rep.produits.topRetournes && rep.produits.topRetournes.length) {
+    sectionTitle(doc, 'Produits les plus retournés (− rentables)');
+    row4(doc, 'Produit', 'CA retourné', 'Taux ret.', 'CA net', { bold: true, color: '#666', size: 9 });
+    rep.produits.topRetournes.slice(0, 12).forEach(p => row4(doc, p.produit, fEur(p.caRetourne), fPct(p.tauxRetour), fEur(p.caNet)));
+  }
+
   // Familles
   if (rep.famille && rep.famille.length) {
     sectionTitle(doc, 'CA par famille (top 15)');

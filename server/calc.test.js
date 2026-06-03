@@ -132,4 +132,20 @@ const bySeason = calc.calcBySeason(sRows, sMap, seasonMap);
 assert.strictEqual(bySeason['25E'], 100, 'CA saison 25E (hors mkt)');
 assert.strictEqual(bySeason['24H'], 50, 'CA saison 24H');
 
+// ── Lot B : écart produits vs N-1 + rentabilité (ventes × retours) ──────────
+const byN = { 'Robe A': { ca: 1000, qte: 10 }, 'Sac B': { ca: 500, qte: 5 } };
+const byN1 = { 'Robe A': { ca: 800, qte: 8 }, 'Sac B': { ca: 900, qte: 9 }, 'Pull C': { ca: 600, qte: 6 } };
+const gap = calc.productGap(byN, byN1, 10);
+// reculs : Sac B (900→500, perte 400) et Pull C (600→0, perte 600). Robe A progresse → exclue.
+assert.strictEqual(gap.length, 2, 'nb produits à reconquérir');
+assert.strictEqual(gap[0].produit, 'Pull C', 'plus gros CA perdu en premier');
+assert.strictEqual(gap[0].perte, 600, 'CA perdu Pull C');
+
+const salesRef = { 'R1': { ca: 1000, qte: 10, desig: 'Robe A' }, 'R2': { ca: 200, qte: 2, desig: 'Sac B' } };
+const retRef = { 'R1': { montant: 300, qte: 3, libelle: 'Robe A' } };
+const prof = calc.productProfitability(salesRef, retRef);
+const r1 = prof.find(p => p.ref === 'R1');
+assert.strictEqual(r1.caNet, 700, 'CA net = vendu - retourné');
+assert.ok(Math.abs(r1.tauxRetour - 0.3) < 1e-9, 'taux de retour R1 (3/10)');
+
 console.log('✅ calc.test.js : tous les calculs OK');

@@ -473,6 +473,61 @@ function calcReturns(rows, map) {
   };
 }
 
+// ── Produits : écart vs N-1 (à reconquérir) ─────────────────────────────────
+// byN / byN1 = maps {désignation: {ca, qte}} issues de buildTopProdMap
+function productGap(byN, byN1, top = 10) {
+  if (!byN1) return [];
+  const keys = new Set([...Object.keys(byN || {}), ...Object.keys(byN1 || {})]);
+  return [...keys].map(p => {
+    const caN = (byN && byN[p]) ? byN[p].ca : 0, caN1 = byN1[p] ? byN1[p].ca : 0;
+    const qteN = (byN && byN[p]) ? byN[p].qte : 0, qteN1 = byN1[p] ? byN1[p].qte : 0;
+    return { produit: p, caN, caN1, qteN, qteN1, perte: caN1 - caN };
+  }).filter(r => r.caN1 > 0 && r.perte > 0).sort((a, b) => b.perte - a.perte).slice(0, top);
+}
+
+// ── Ventes par référence externe (pour jointure avec les retours) ───────────
+function salesByRef(rows, map) {
+  const pi = map.prix, qi = map.qte, ti = map.type, di = map.des;
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (ri === undefined) return {};
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const ref = (r[ri] || '').trim(); if (!ref) return;
+    if (!by[ref]) by[ref] = { ca: 0, qte: 0, desig: (di !== undefined ? (r[di] || '').trim() : '') };
+    by[ref].ca += fN(r[pi]);
+    by[ref].qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  return by;
+}
+function returnsByRef(retRows, retMap) {
+  const mi = retMap.montant, qi = retMap.qte, refi = retMap.ref_ext, li = retMap.libelle;
+  if (refi === undefined) return {};
+  const by = {};
+  retRows.forEach(r => {
+    const ref = (r[refi] || '').trim(); if (!ref) return;
+    if (!by[ref]) by[ref] = { montant: 0, qte: 0, libelle: (li !== undefined ? (r[li] || '').trim() : '') };
+    by[ref].montant += fN(r[mi]);
+    by[ref].qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  return by;
+}
+// Rentabilité produit : ventes × retours (CA net + taux de retour)
+function productProfitability(sales, returns) {
+  const keys = new Set([...Object.keys(sales), ...Object.keys(returns)]);
+  return [...keys].map(ref => {
+    const s = sales[ref] || { ca: 0, qte: 0, desig: '' };
+    const rr = returns[ref] || { montant: 0, qte: 0, libelle: '' };
+    const tauxRetour = s.qte > 0 ? rr.qte / s.qte : (rr.qte > 0 ? 1 : 0);
+    return {
+      ref, produit: s.desig || rr.libelle || ref,
+      caVendu: s.ca, qteVendue: s.qte,
+      caRetourne: rr.montant, qteRetournee: rr.qte,
+      caNet: s.ca - rr.montant, tauxRetour,
+    };
+  });
+}
+
 // ── Top produits ────────────────────────────────────────────────────────────
 function buildTopProdMap(rows, map) {
   const pi = map.prix, di = map.des, qi = map.qte, ti = map.type;
@@ -527,4 +582,5 @@ module.exports = {
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcByDevice, dailySeries,
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
+  productGap, salesByRef, returnsByRef, productProfitability,
 };
