@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BiDash — Reporting</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">Bi<b>Dash</b></div>
+  <span style="color:var(--t3);font-size:11px">Reporting e-commerce</span>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a id="adminLink" class="btn hidden" href="/admin.html">Utilisateurs</a>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap">
+  <!-- DÉPÔT DE FICHIERS -->
+  <div class="card">
+    <h3>Dépôt des fichiers (persistés — pas besoin de re-déposer à chaque visite)</h3>
+    <div class="grid sources" id="sources"></div>
+    <div class="note" id="ingestNote"></div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="card">
+    <div class="toolbar">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Période</span>
+      <button class="pb" data-preset="today">Quotidien</button>
+      <button class="pb" data-preset="week">Hebdo</button>
+      <button class="pb" data-preset="month">Mensuel</button>
+      <button class="pb" data-preset="ytd">YTD</button>
+      <button class="pb on" data-preset="all">Tout</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn blue" id="pdf">⬇ Télécharger en PDF</button>
+    </div>
+    <div class="note" id="metaNote"></div>
+  </div>
+
+  <!-- REPORT -->
+  <div id="report"></div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

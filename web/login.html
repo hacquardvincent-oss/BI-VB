@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BiDash — Connexion</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="login">
+  <div id="logo" style="text-align:center;font-size:22px">Bi<b>Dash</b></div>
+  <div style="text-align:center;color:var(--t3);font-size:12px">Pilotage BI e-commerce</div>
+  <input id="u" type="text" placeholder="Identifiant" autocomplete="username">
+  <input id="p" type="password" placeholder="Mot de passe" autocomplete="current-password">
+  <button class="btn primary" id="go" style="padding:10px">Se connecter</button>
+  <div class="err" id="err"></div>
+</div>
+<script>
+async function login(){
+  document.getElementById('err').textContent='';
+  const username=document.getElementById('u').value.trim();
+  const password=document.getElementById('p').value;
+  const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+  if(r.ok){ location.href='/app.html'; }
+  else { const j=await r.json().catch(()=>({})); document.getElementById('err').textContent=j.error||'Erreur de connexion'; }
+}
+document.getElementById('go').addEventListener('click',login);
+document.getElementById('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+// déjà connecté ? → app
+fetch('/auth/me').then(r=>{if(r.ok)location.href='/app.html';});
+</script>
+</body>
+</html>

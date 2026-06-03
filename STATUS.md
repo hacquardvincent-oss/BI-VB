@@ -2,13 +2,23 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Scaffolder l'application V2 sur Render : backend Node.js + Express, PostgreSQL, authentification
-avec administration des comptes, ingestion de fichiers persistée, portage des calculs V1.
+Déployer la V2 sur Render (créer le service + la base) et tester l'ingestion + les reportings
+sur les vrais fichiers (OMS/Y2/GA). Brancher ensuite les vues hebdo/saison et le connecteur GA4.
 
 ---
 
 ## Session du 03/06/2026
-### Réalisé
+### Réalisé — scaffolding V2
+- Application Node/Express + PostgreSQL créée (`server/`, `web/`, `render.yaml`, `package.json`)
+- Auth par session cookie + **administration des comptes** (admin crée/active/désactive/supprime, reset MDP) — compte admin seedé depuis `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+- Ingestion de fichiers persistée (OMS/Y2/GA/référentiel, slots N/N-1) avec **anonymisation à l'ingestion** (colonnes PII écartées)
+- Logique de calcul V1 portée en module pur testé (`server/calc.js` + `calc.test.js` ✅)
+- Reportings (quotidien/hebdo/mensuel/YTD/tout) + comparaison N-1, et **export PDF** (pdfkit)
+- UI : login, dashboard (KPI EShop, CA, marketplace, familles, GA), page admin
+- Cahier des charges V2 complété (F6 export PDF)
+- Validé en local : `npm test` OK, smoke-test serveur OK (healthz, auth 401, routes)
+
+### Réalisé — antérieur (même session)
 - Récupération de tous les fichiers projet ajoutés au dépôt (specs, ADR, plan de tests, référentiel) + `bidash.html`
 - Consolidation de STATUS en un seul fichier markdown
 - **Audit complet de `bidash.html`** (2280 lignes) : voir bugs/code mort ci-dessous
@@ -47,11 +57,13 @@ avec administration des comptes, ingestion de fichiers persistée, portage des c
 - ⚠️ Caveats Render free : cold start, expiration Postgres gratuit → prévoir sauvegarde
 
 ## Backlog priorisé
-1. Scaffolding V2 : repo app (Node/Express), Postgres, déploiement Render
-2. Auth + administration des utilisateurs (admin crée/modère)
-3. Ingestion fichiers persistée + anonymisation à l'ingestion
-4. Portage des calculs V1 en modules serveur testés
-5. Reportings quotidien / hebdo / mensuel / saison (comparaison N-1)
-6. (Phase 2) Connecteur GA4 API
-7. (Phase 3) Connecteur API wshop
-8. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)
+1. ~~Scaffolding V2 (Node/Express + Postgres)~~ ✅ fait (03/06)
+2. ~~Auth + administration des utilisateurs~~ ✅ fait
+3. ~~Ingestion persistée + anonymisation~~ ✅ fait
+4. ~~Portage des calculs V1 testés~~ ✅ fait
+5. ~~Reportings J/hebdo/mensuel + export PDF~~ ✅ fait (vue **saison** restant à brancher)
+6. **Déployer sur Render** + tester avec les vrais fichiers
+7. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
+8. (Phase 2) Connecteur GA4 API
+9. (Phase 3) Connecteur API wshop
+10. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)

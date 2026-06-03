@@ -1,0 +1,28 @@
+# Blueprint Render — BiDash V2
+# Déploiement : pousser ce dépôt, "New +" → "Blueprint" sur Render, sélectionner le repo.
+# Penser à définir ADMIN_PASSWORD dans le dashboard Render (non versionné).
+
+services:
+  - type: web
+    name: bidash
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: Vincent
+      - key: ADMIN_PASSWORD
+        sync: false          # à saisir manuellement dans le dashboard Render
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bidash-db
+          property: connectionString
+
+databases:
+  - name: bidash-db
+    plan: free

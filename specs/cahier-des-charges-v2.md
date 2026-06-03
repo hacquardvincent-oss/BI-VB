@@ -63,6 +63,14 @@ e-commerce (quotidien, hebdomadaire, mensuel, analyse de saison), à partir de f
 - Les fonctions de calcul V1 sont portées en modules serveur testés (CA, marketplace, GA, FP/OP)
 - Les règles métier restent identiques (cf. spec de calcul validée)
 
+### F6 — Export PDF des reportings
+- Bouton « Télécharger en PDF » sur chaque vue de reporting (quotidien / hebdo / mensuel / saison)
+- PDF généré **côté serveur** (pas de dépendance navigateur), reprenant : en-tête (période, date d'édition),
+  KPIs EShop (CA, Commandes, Pièces, PM, Sessions, TT) N vs N-1, blocs CA (Global/FR/Inter/Entrepôt/SFS),
+  tableau Marketplace, CA par famille
+- Format A4, en français, identité « BiDash »
+- Librairie pure JS (pdfkit) — compatible Render free (aucun binaire natif type Chromium)
+
 ## 5. Contraintes techniques
 | Contrainte | Valeur |
 |------------|--------|
@@ -89,6 +97,7 @@ une personne.
 | V2-04 | Aucune donnée PII client n'est stockée en base | MUST |
 | V2-05 | Le CA Global et le KPI EShop correspondent aux résultats de la V1 sur le même fichier | MUST |
 | V2-06 | Vues quotidien/hebdo/mensuel/saison disponibles avec comparaison N-1 | SHOULD |
+| V2-07 | Export PDF d'un reporting (KPIs + CA + marketplace + familles) | SHOULD |
 
 ## 8. À décider / confirmer
 - [ ] Nom de domaine / URL (sous-domaine Render par défaut pour démarrer)
