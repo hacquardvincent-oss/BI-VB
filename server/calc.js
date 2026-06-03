@@ -111,6 +111,7 @@ const GA_ALIASES = {
   revenue: ['revenu total', 'total revenue', 'revenue'],
   eng_rate: ['taux d engagement', 'engagement rate'],
   device: ['device', 'appareil', 'categorie d appareil'],
+  country: ['pays', 'country'],
 };
 const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
@@ -163,6 +164,29 @@ const EXCL_GLOBAL = ['gl.com', 'printemps'];
 const MKT_ALL = ['gl.com', 'printemps', 'la redoute', '24s'];
 const isExcl = t => EXCL_GLOBAL.some(m => (t || '').toLowerCase().includes(m));
 const isMkt = t => MKT_ALL.some(m => (t || '').toLowerCase().includes(m));
+
+// ── Filtre par dimension Global / FR / International (sur 'Pays livraison') ──
+function filterDim(rows, map, dim) {
+  if (!dim || dim === 'global') return rows;
+  const pai = map.pays; if (pai === undefined) return rows;
+  const fr = dim === 'fr';
+  return rows.filter(r => {
+    const p = (r[pai] || '').trim().toLowerCase();
+    return fr ? p === 'france' : p !== 'france';
+  });
+}
+// Filtre un jeu GA par pays (colonne 'Pays'). Retourne null si la colonne est absente.
+function filterGADim(ga, dim) {
+  if (!ga || !dim || dim === 'global') return ga;
+  const m = (ga.map && Object.keys(ga.map).length) ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
+  const ci = m.country; if (ci === undefined) return null;
+  const fr = dim === 'fr';
+  const rows = ga.rows.filter(r => {
+    const c = (r[ci] || '').trim().toLowerCase();
+    return fr ? c === 'france' : c !== 'france';
+  });
+  return { hdrs: ga.hdrs, rows, map: m };
+}
 
 // ── Filtre par période ──────────────────────────────────────────────────────
 function filterRows(rows, map, fromISO, toISO_, isAll) {
@@ -576,7 +600,7 @@ module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv,
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES, RET_ALIASES,
-  autoMap, ensureRefExtIdx, isExcl, isMkt,
+  autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

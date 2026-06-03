@@ -20,6 +20,7 @@ const fDelta = (n, n1) => {
 };
 
 const PRESET_LABEL = { all: 'Tout', today: 'Quotidien', week: 'Hebdomadaire', month: 'Mensuel', ytd: 'Cumul annuel (YTD)' };
+const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
 function row4(doc, label, c1, c2, c3, opt = {}) {
   const y = doc.y;
@@ -43,7 +44,7 @@ function renderReport(doc, rep) {
   // En-tête
   doc.font('Helvetica-Bold').fontSize(20).fillColor('#111').text('BiDash');
   doc.font('Helvetica').fontSize(11).fillColor('#555')
-    .text(`Reporting ${PRESET_LABEL[m.preset] || m.preset} — période ${m.from || '?'} → ${m.to || '?'}`);
+    .text(`Reporting ${PRESET_LABEL[m.preset] || m.preset} · ${DIM_LABEL[m.dim] || 'Global'} — période ${m.from || '?'} → ${m.to || '?'}`);
   doc.fontSize(9).fillColor('#888')
     .text(`Édité le ${new Date().toLocaleString('fr-FR')} · Source OMS : ${m.omsFile || '—'}` +
       (m.hasN1 ? ` · Comparaison N-1 (${m.cf} → ${m.ct})` : ' · Pas de N-1'));
@@ -169,9 +170,9 @@ function renderReport(doc, rep) {
 
 router.get('/pdf', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to } = req.query;
+    const { preset, from, to, dim } = req.query;
     const isAll = req.query.isAll === '1';
-    const rep = await buildReport({ preset, from, to, isAll });
+    const rep = await buildReport({ preset, from, to, isAll, dim });
     if (rep.empty) return res.status(400).json({ error: rep.message });
 
     res.setHeader('Content-Type', 'application/pdf');

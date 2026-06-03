@@ -40,7 +40,8 @@ function topList(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll }) {
+async function buildReport({ preset, from, to, isAll, dim }) {
+  dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
   const omsN1 = await loadDataset('oms', 'N1');
@@ -53,12 +54,17 @@ async function buildReport({ preset, from, to, isAll }) {
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
   const cf = shiftYear(from, -1), ct = shiftYear(to, -1);
 
+  // Dimension Global / FR / International : filtre les jeux GA par pays (si dispo)
+  const gaNf = calc.filterGADim(gaN, dim);
+  const gaN1f = calc.filterGADim(gaN1, dim);
+  const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
+
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
   const refMap = ref ? calc.buildRefMap(ref) : {};
 
   // ── N ──
-  const rowsN = calc.filterRows(omsN.rows, omsN.map, from, to, isAll);
-  const sessionsN = calc.getSessionsForPeriod(gaN, from, to, isAll);
+  const rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
+  const sessionsN = calc.getSessionsForPeriod(gaNf, from, to, isAll);
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
   const mktN = calc.calcMarketplace(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {});
@@ -76,8 +82,9 @@ async function buildReport({ preset, from, to, isAll }) {
     mapN1 = omsN.map;
     rowsN1 = calc.filterRows(omsN.rows, omsN.map, cf, ct, false);
   }
+  if (rowsN1) rowsN1 = calc.filterDim(rowsN1, mapN1, dim);
   if (rowsN1 && rowsN1.length) {
-    const sessionsN1 = calc.getSessionsForPeriod(gaN1, cf, ct, isAll);
+    const sessionsN1 = calc.getSessionsForPeriod(gaN1f, cf, ct, isAll);
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);
     mktN1 = calc.calcMarketplace(rowsN1, mapN1, y2N1 ? y2N1.rows : (omsN1 ? [] : (y2N ? y2N.rows : [])), y2N1 ? y2N1.map : (y2N ? y2N.map : {}));
@@ -96,16 +103,16 @@ async function buildReport({ preset, from, to, isAll }) {
   const pays = Object.values(paysMap).sort((a, b) => b.n.ca - a.n.ca);
 
   // ── Croisements vente × trafic ──
-  const gaCalcN = gaN ? calc.calcGA(gaN) : null;
-  const gaCalcN1 = gaN1 ? calc.calcGA(gaN1) : null;
+  const gaCalcN = gaNf ? calc.calcGA(gaNf) : null;
+  const gaCalcN1 = gaN1f ? calc.calcGA(gaN1f) : null;
   const cps = k => (k && k.sessions > 0) ? k.ca / k.sessions : null;
   const funnel = {
     n: { sessions: kpiEShopN.sessions, commandes: kpiEShopN.commandes, ca: kpiEShopN.ca, tt: kpiEShopN.tt, caPerSession: cps(kpiEShopN) },
     n1: kpiEShopN1 ? { sessions: kpiEShopN1.sessions, commandes: kpiEShopN1.commandes, ca: kpiEShopN1.ca, tt: kpiEShopN1.tt, caPerSession: cps(kpiEShopN1) } : null,
   };
   const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
-  const device = { n: gaN ? calc.calcByDevice(gaN) : null, n1: gaN1 ? calc.calcByDevice(gaN1) : null };
-  const daily = calc.dailySeries(rowsN, omsN.map, gaN);
+  const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
+  const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
 
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
@@ -128,14 +135,14 @@ async function buildReport({ preset, from, to, isAll }) {
   // ── Retours ──
   let returns = null;
   if (retN) {
-    const retRowsN = calc.filterRows(retN.rows, retN.map, from, to, isAll);
+    const retRowsN = calc.filterDim(calc.filterRows(retN.rows, retN.map, from, to, isAll), retN.map, dim);
     const rN = calc.calcReturns(retRowsN, retN.map);
     let rN1 = null;
     if (retN1) {
-      const retRowsN1 = isAll ? retN1.rows : calc.filterRows(retN1.rows, retN1.map, cf, ct, false);
+      const retRowsN1 = calc.filterDim(isAll ? retN1.rows : calc.filterRows(retN1.rows, retN1.map, cf, ct, false), retN1.map, dim);
       rN1 = calc.calcReturns(retRowsN1, retN1.map);
     } else if (!isAll) {
-      const rr = calc.filterRows(retN.rows, retN.map, cf, ct, false);
+      const rr = calc.filterDim(calc.filterRows(retN.rows, retN.map, cf, ct, false), retN.map, dim);
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
@@ -143,7 +150,7 @@ async function buildReport({ preset, from, to, isAll }) {
 
   // ── Analyses produits (Lot B) ──
   const salesRef = calc.salesByRef(rowsN, omsN.map);
-  const retRowsForProd = retN ? calc.filterRows(retN.rows, retN.map, from, to, isAll) : [];
+  const retRowsForProd = retN ? calc.filterDim(calc.filterRows(retN.rows, retN.map, from, to, isAll), retN.map, dim) : [];
   const retRef = retN ? calc.returnsByRef(retRowsForProd, retN.map) : {};
   const prof = calc.productProfitability(salesRef, retRef);
   const produits = {
@@ -166,9 +173,9 @@ async function buildReport({ preset, from, to, isAll }) {
   return {
     empty: false,
     meta: {
-      preset: preset || 'all', from, to, isAll, cf, ct,
+      preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
-      hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasN1: !!kpiEShopN1,
+      hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
@@ -191,9 +198,9 @@ async function buildReport({ preset, from, to, isAll }) {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to } = req.query;
+    const { preset, from, to, dim } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll });
+    const report = await buildReport({ preset, from, to, isAll, dim });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });

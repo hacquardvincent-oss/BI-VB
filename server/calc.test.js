@@ -148,4 +148,18 @@ const r1 = prof.find(p => p.ref === 'R1');
 assert.strictEqual(r1.caNet, 700, 'CA net = vendu - retourné');
 assert.ok(Math.abs(r1.tauxRetour - 0.3) < 1e-9, 'taux de retour R1 (3/10)');
 
+// ── Lot A : dimension Global / FR / International ────────────────────────────
+const dHdrs = ['Prix de vente paye', 'Pays livraison', 'Type Paiement'];
+const dMap = calc.autoMap(dHdrs, calc.OMS_ALIASES);
+const dRows = [['100', 'France', 'Carte Bancaire'], ['80', 'Royaume-Uni', 'Carte Bancaire'], ['60', 'Belgique', 'Carte Bancaire']];
+assert.strictEqual(calc.filterDim(dRows, dMap, 'global').length, 3, 'dim global = toutes lignes');
+assert.strictEqual(calc.filterDim(dRows, dMap, 'fr').length, 1, 'dim FR = France uniquement');
+assert.strictEqual(calc.filterDim(dRows, dMap, 'inter').length, 2, 'dim Inter = hors France');
+
+const gaC = { hdrs: ['Date', 'Groupe de canaux', 'Pays', 'Sessions'], rows: [['20260501', 'Direct', 'France', '100'], ['20260501', 'Direct', 'Royaume-Uni', '40']], map: null };
+gaC.map = calc.autoMap(gaC.hdrs, calc.GA_ALIASES);
+assert.strictEqual(calc.filterGADim(gaC, 'fr').rows.length, 1, 'GA dim FR');
+assert.strictEqual(calc.filterGADim(gaC, 'inter').rows.length, 1, 'GA dim Inter');
+assert.strictEqual(calc.filterGADim({ hdrs: ['Date', 'Sessions'], rows: [], map: {} }, 'fr'), null, 'GA sans colonne Pays → null');
+
 console.log('✅ calc.test.js : tous les calculs OK');

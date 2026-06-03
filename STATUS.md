@@ -2,8 +2,8 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Lot A (vues Quotidien/Hebdo/Mensuel + dimension Global/FR/Inter) OU Lot C (enrichissement GA) — au choix.
-Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
+Lot C (enrichissement GA : top pages vues, top pages par source ; ajouts panier déjà récupérés) OU
+Lot D (graphiques + 1 analyse/reco par tableau). Plus tard : base (persistance + comptes), objectifs.
 
 ---
 
@@ -103,9 +103,11 @@ Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
 13. Graphiques saison/retours dans l'UI
 
 ## Backlog détaillé — amélioration UX & analytique (demandé le 03/06)
-### Lot A — Structure & navigation
-- Vues par cadence **Quotidien / Hebdo / Mensuel** : même socle (fichiers + GA), **tableaux de sortie adaptés** à la lecture attendue
-- Dimension **Global / FR / International** appliquée à tout le dashboard (OMS filtré par pays ; GA FR/Inter via dimension `country`)
+### Lot A — Structure & navigation ✅ FAIT (03/06)
+- ✅ Vues par cadence **Quotidien / Hebdo / Mensuel / YTD / Tout** : layouts de cartes adaptés (Quotidien = lecture rapide, Mensuel = complet)
+- ✅ Dimension **Global / FR / International** sur tout le dashboard (OMS + retours filtrés par pays ; GA FR/Inter via dimension `country` ajoutée à l'appel GA4 + `addToCarts`)
+- calc.js : filterDim, filterGADim + tests ; reports/PDF prennent `dim` ; UI : toggles cadence + dimension
+- ⚠️ Nécessite un nouveau « Rafraîchir GA4 » pour activer le split pays (sinon note d'avertissement)
 
 ### Lot B — Analyses produits ✅ FAIT (03/06)
 - ✅ **Top 10 N vs Top 10 N-1** + **produits à reconquérir** (forts N-1, en retrait N, triés par CA perdu)

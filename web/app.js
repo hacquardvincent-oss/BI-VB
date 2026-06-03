@@ -3,6 +3,8 @@
 // app.js — UI BiDash V2 : dépôt fichiers, sélection période, rendu reporting.
 // ============================================================================
 let CURRENT = 'all';
+let CURRENT_DIM = 'global';
+const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -77,11 +79,13 @@ async function upload(source, period, file) {
 async function loadReport() {
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement…</div>';
-  const r = await fetch(`/api/report?preset=${CURRENT}`);
+  const r = await fetch(`/api/report?preset=${CURRENT}&dim=${CURRENT_DIM}`);
   const rep = await r.json();
   if (rep.empty) { box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée')}</div>`; return; }
-  document.getElementById('metaNote').textContent =
-    `Période ${rep.meta.from} → ${rep.meta.to}` + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1');
+  document.getElementById('metaNote').innerHTML =
+    `<b>${DIM_LABEL[rep.meta.dim] || 'Global'}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
+    + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
+    + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   box.innerHTML = renderReport(rep);
   renderDailyChart(rep.daily);
 }
@@ -98,8 +102,9 @@ function renderReport(rep) {
     ['Sessions', fInt(k.sessions), fInt(k1.sessions), delta(k.sessions, k1.sessions)],
     ['Taux de transfo', fPct(k.tt), fPct(k1.tt), delta(k.tt, k1.tt)],
   );
-  const ttNote = k.sessions == null
-    ? '<div class="note">⚠ Sessions/TT non datables sur cette période (export GA par canal sans date) — utiliser « Tout » ou un export GA journalier.</div>' : '';
+  let ttNote = '';
+  if (rep.meta && rep.meta.gaDimUnavailable) ttNote = '<div class="note">⚠ GA pas encore segmenté par pays → re-« Rafraîchir GA4 » pour activer le TT France/International.</div>';
+  else if (k.sessions == null) ttNote = '<div class="note">⚠ Sessions/TT non datables sur cette période — utiliser « Tout » ou rafraîchir GA4.</div>';
 
   const c = rep.ca.n, c1 = rep.ca.n1 || {};
   const caBlocks = [
@@ -242,30 +247,33 @@ function renderReport(rep) {
       <div class="note">Taux de retour élevé (≥ 30 %, en rouge) = produit à surveiller (taille, qualité, visuel).</div></div>`;
   }
 
-  return `
-    ${funnelCard}
-    <div class="card"><h3>KPI EShop (FR + International)</h3>
+  const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
+  const kpiCard = `<div class="card"><h3>KPI EShop — ${dimLabel}</h3>
       <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
-      ${ttNote}
-    </div>
-    ${dailyCard}
-    <div class="card"><h3>Chiffre d'affaires</h3><div class="kgrid">${caBlocks}</div></div>
-    ${channelsCard}
-    ${deviceCard}
-    <div class="card"><h3>CA Marketplace</h3>
+      ${ttNote}</div>`;
+  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div></div>`;
+  const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>
-    </div>
-    ${paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : ''}
-    ${saisonCard}
-    ${cancellationsCard}
-    ${returnsCard}
-    ${produitsCard}
-    ${rentaCard}
-    ${famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : ''}
-    ${gaCard}
-  `;
+      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
+  const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
+  const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
+
+  // Cartes nommées + layout adapté à la cadence
+  const C = {
+    kpi: kpiCard, funnel: funnelCard, daily: dailyCard, ca: caCard,
+    channels: channelsCard, device: deviceCard, marketplace: mktCard,
+    pays: paysCard, saison: saisonCard, annulations: cancellationsCard,
+    retours: returnsCard, produits: produitsCard, renta: rentaCard,
+    famille: familleCard, ga: gaCard,
+  };
+  const FULL = ['kpi', 'funnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'saison', 'produits', 'renta', 'annulations', 'retours', 'famille', 'ga'];
+  const LAYOUTS = {
+    today: ['kpi', 'funnel', 'daily', 'ca', 'channels', 'produits'],            // Quotidien : lecture rapide
+    week: ['kpi', 'funnel', 'daily', 'channels', 'device', 'ca', 'produits', 'pays'], // Hebdo : tendances
+    month: FULL, ytd: FULL, all: FULL,                                          // Mensuel/YTD/Tout : complet
+  };
+  return (LAYOUTS[CURRENT] || FULL).map(k => C[k] || '').join('\n');
 }
 
 // Graphiques quotidiens (CA+Sessions, et TT)
@@ -334,11 +342,15 @@ document.getElementById('logout').addEventListener('click', async () => {
   location.href = '/login.html';
 });
 document.getElementById('pdf').addEventListener('click', () => {
-  window.open(`/api/report/pdf?preset=${CURRENT}`, '_blank');
+  window.open(`/api/report/pdf?preset=${CURRENT}&dim=${CURRENT_DIM}`, '_blank');
 });
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-preset]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); CURRENT = b.dataset.preset; loadReport();
+}));
+document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; loadReport();
 }));
 
 // Init
