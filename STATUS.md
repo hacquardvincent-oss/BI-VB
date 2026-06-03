@@ -101,6 +101,24 @@ ajouter graphiques saison/retours et l'injection d'objectifs (% d'atteinte).
 11. ~~Retours & annulations~~ ✅ fait (03/06)
 12. **Objectifs / atterrissage** : dépôt d'un fichier objectifs → % d'atteinte, projection
 13. Graphiques saison/retours dans l'UI
+
+## Backlog détaillé — amélioration UX & analytique (demandé le 03/06)
+### Lot A — Structure & navigation
+- Vues par cadence **Quotidien / Hebdo / Mensuel** : même socle (fichiers + GA), **tableaux de sortie adaptés** à la lecture attendue
+- Dimension **Global / FR / International** appliquée à tout le dashboard (OMS filtré par pays ; GA FR/Inter via dimension `country`)
+
+### Lot B — Analyses produits
+- **Top 10 N vs Top 10 N-1** + **produits manquants** (vendus N-1, absents/en retrait N) → « ce qu'il faut refaire pour égaler/battre N-1 »
+- **Plus vendus (CA/qté) vs plus retournés** → rentabilité nette par produit (taux de retour produit)
+
+### Lot C — Enrichissement GA
+- **Ajouts panier** (addToCarts) + micro-funnel sessions → panier → commande
+- **Top pages vues** N vs N-1
+- **Top pages vues par source** N vs N-1
+
+### Lot D — Visuel & reco
+- Plus de **graphiques** (donut canaux, barres familles/top produits, courbes)
+- **1 tableau = 1 analyse/recommandation** auto (insight généré par règle)
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop
