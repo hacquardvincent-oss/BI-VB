@@ -247,6 +247,26 @@ function renderReport(rep) {
       <div class="note">Taux de retour élevé (≥ 30 %, en rouge) = produit à surveiller (taille, qualité, visuel).</div></div>`;
   }
 
+  // Micro-funnel GA (ajouts panier)
+  let gaFunnelCard = '';
+  if (rep.gaFunnel) {
+    const g = rep.gaFunnel.n, g1 = rep.gaFunnel.n1 || {};
+    const tiles = [
+      ['Sessions', fInt(g.sessions), g.sessions, g1.sessions],
+      ['Ajouts panier', fInt(g.addToCarts), g.addToCarts, g1.addToCarts],
+      ['Taux ajout panier', fPct(g.addToCartRate), g.addToCartRate, g1.addToCartRate],
+      ['Commandes', fInt(g.commandes), g.commandes, g1.commandes],
+      ['Panier → commande', fPct(g.cartToOrder), g.cartToOrder, g1.cartToOrder],
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
+    gaFunnelCard = `<div class="card"><h3>Micro-funnel GA — Sessions → Panier → Commande</h3><div class="kgrid">${tiles}</div><div class="note">Ajouts panier issus de GA4 (addToCarts). « Panier → commande » = commandes / ajouts panier.</div></div>`;
+  }
+  // Top pages vues
+  const pagesRows = (rep.topPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN)}</td><td>${fInt(p.viewsN1)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('');
+  const pagesCard = pagesRows ? `<div class="card"><h3>Top pages vues — N vs N-1</h3><table><thead><tr><th>Page</th><th>Vues N</th><th>Vues N-1</th><th>Δ</th></tr></thead><tbody>${pagesRows}</tbody></table></div>` : '';
+  // Top pages par source
+  const psRows = (rep.topPagesBySource || []).map(p => `<tr><td>${esc(p.source)}</td><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN)}</td><td>${fInt(p.viewsN1)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('');
+  const pagesrcCard = psRows ? `<div class="card"><h3>Top pages par source — N vs N-1</h3><table><thead><tr><th>Source</th><th>Page</th><th>Vues N</th><th>Vues N-1</th><th>Δ</th></tr></thead><tbody>${psRows}</tbody></table></div>` : '';
+
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
   const kpiCard = `<div class="card"><h3>KPI EShop — ${dimLabel}</h3>
       <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
@@ -261,16 +281,16 @@ function renderReport(rep) {
 
   // Cartes nommées + layout adapté à la cadence
   const C = {
-    kpi: kpiCard, funnel: funnelCard, daily: dailyCard, ca: caCard,
+    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
     channels: channelsCard, device: deviceCard, marketplace: mktCard,
     pays: paysCard, saison: saisonCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, renta: rentaCard,
-    famille: familleCard, ga: gaCard,
+    pages: pagesCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
   };
-  const FULL = ['kpi', 'funnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'saison', 'produits', 'renta', 'annulations', 'retours', 'famille', 'ga'];
+  const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'saison', 'produits', 'renta', 'annulations', 'retours', 'pages', 'pagesrc', 'famille', 'ga'];
   const LAYOUTS = {
-    today: ['kpi', 'funnel', 'daily', 'ca', 'channels', 'produits'],            // Quotidien : lecture rapide
-    week: ['kpi', 'funnel', 'daily', 'channels', 'device', 'ca', 'produits', 'pays'], // Hebdo : tendances
+    today: ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'produits'],            // Quotidien : lecture rapide
+    week: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'pages', 'pays'], // Hebdo : tendances
     month: FULL, ytd: FULL, all: FULL,                                          // Mensuel/YTD/Tout : complet
   };
   return (LAYOUTS[CURRENT] || FULL).map(k => C[k] || '').join('\n');

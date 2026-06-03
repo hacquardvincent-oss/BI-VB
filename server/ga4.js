@@ -45,23 +45,12 @@ const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisa
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
   'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier'];
 
-// ── Appel runReport (dimensions date × canal × device × pays) ───────────────
-async function fetchGA4(propertyId, startDate, endDate) {
+// ── Helper bas niveau : runReport ───────────────────────────────────────────
+async function post(propertyId, body) {
   const creds = loadCreds();
   if (!creds) throw new Error('Identifiants GA4 absents (Secret File ga4.json ou GA4_SA_KEY)');
   const client = new JWT({ email: creds.client_email, key: creds.private_key, scopes: SCOPES });
   const { token } = await client.getAccessToken();
-
-  const body = {
-    dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'deviceCategory' }, { name: 'country' }],
-    metrics: [
-      { name: 'sessions' }, { name: 'activeUsers' }, { name: 'newUsers' },
-      { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
-      { name: 'engagementRate' }, { name: 'addToCarts' },
-    ],
-    limit: 250000,
-  };
   const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -71,13 +60,56 @@ async function fetchGA4(propertyId, startDate, endDate) {
     const txt = await res.text();
     throw new Error(`GA4 API ${res.status} : ${txt.slice(0, 300)}`);
   }
-  const data = await res.json();
+  return res.json();
+}
+
+// ── Rapport principal : date × canal × device × pays ────────────────────────
+async function fetchGA4(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'deviceCategory' }, { name: 'country' }],
+    metrics: [
+      { name: 'sessions' }, { name: 'activeUsers' }, { name: 'newUsers' },
+      { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
+      { name: 'engagementRate' }, { name: 'addToCarts' },
+    ],
+    limit: 250000,
+  });
   const rows = (data.rows || []).map(r => {
-    const d = r.dimensionValues.map(x => x.value);  // [date, canal, device, pays]
-    const m = r.metricValues.map(x => x.value);      // [sessions, users, newUsers, keyEvents, revenue, engaged, engRate, addToCarts]
+    const d = r.dimensionValues.map(x => x.value);
+    const m = r.metricValues.map(x => x.value);
     return [d[0], d[1], d[2], d[3], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]];
   });
   return { hdrs: HDRS.slice(), rows };
+}
+
+// ── Top pages vues ──────────────────────────────────────────────────────────
+async function fetchPages(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'pagePath' }],
+    metrics: [{ name: 'screenPageViews' }],
+    orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+    limit: 200,
+  });
+  const byPage = {};
+  (data.rows || []).forEach(r => { byPage[r.dimensionValues[0].value] = parseFloat(r.metricValues[0].value) || 0; });
+  return byPage;
+}
+
+// ── Top pages vues par source (canal) ───────────────────────────────────────
+async function fetchPagesBySource(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'pagePath' }, { name: 'sessionDefaultChannelGroup' }],
+    metrics: [{ name: 'screenPageViews' }],
+    orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+    limit: 300,
+  });
+  return (data.rows || []).map(r => ({
+    page: r.dimensionValues[0].value, source: r.dimensionValues[1].value,
+    views: parseFloat(r.metricValues[0].value) || 0,
+  }));
 }
 
 function toDataset(parsed, startDate, endDate) {
@@ -105,10 +137,15 @@ async function refresh() {
   }
   const dataN = await fetchGA4(propertyId, nStart, nEnd);
   store.setDataset('ga', 'N', toDataset(dataN, nStart, nEnd));
+  // Pages (vues) + pages par source
+  store.setDataset('gapages', 'N', { byPage: await fetchPages(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   let n1Count = null;
   if (n1) {
     const dataN1 = await fetchGA4(propertyId, n1.start, n1.end);
     store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end));
+    store.setDataset('gapages', 'N1', { byPage: await fetchPages(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
+    store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     n1Count = dataN1.rows.length;
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count };

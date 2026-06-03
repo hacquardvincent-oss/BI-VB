@@ -2,8 +2,8 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Lot C (enrichissement GA : top pages vues, top pages par source ; ajouts panier déjà récupérés) OU
-Lot D (graphiques + 1 analyse/reco par tableau). Plus tard : base (persistance + comptes), objectifs.
+Lot D (plus de graphiques + 1 analyse/recommandation auto par tableau).
+Plus tard : retour d'une base (persistance + comptes), objectifs/atterrissage.
 
 ---
 
@@ -114,10 +114,12 @@ Lot D (graphiques + 1 analyse/reco par tableau). Plus tard : base (persistance +
 - ✅ **Plus vendus (CA/qté) vs plus retournés** → rentabilité nette par produit (jointure OMS × retours sur Ref. externe, taux de retour, CA net)
 - calc.js : productGap, salesByRef, returnsByRef, productProfitability + tests ; UI 2 cartes ; PDF 2 sections
 
-### Lot C — Enrichissement GA
-- **Ajouts panier** (addToCarts) + micro-funnel sessions → panier → commande
-- **Top pages vues** N vs N-1
-- **Top pages vues par source** N vs N-1
+### Lot C — Enrichissement GA ✅ FAIT (03/06)
+- ✅ **Ajouts panier** (addToCarts) + **micro-funnel** Sessions → Panier → Commande (taux ajout panier, panier→commande)
+- ✅ **Top pages vues** N vs N-1 (appel GA4 `pagePath` × `screenPageViews`)
+- ✅ **Top pages par source** N vs N-1 (`pagePath` × canal)
+- ga4.js : helper `post` + fetchPages/fetchPagesBySource, stockés en slots `gapages`/`gapagesrc` ; calcGA agrège addToCarts
+- ⚠️ Pages alimentées par l'API uniquement → nécessite « Rafraîchir GA4 »
 
 ### Lot D — Visuel & reco
 - Plus de **graphiques** (donut canaux, barres familles/top produits, courbes)

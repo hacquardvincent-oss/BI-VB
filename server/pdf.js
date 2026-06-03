@@ -107,6 +107,21 @@ function renderReport(doc, rep) {
     rep.device.n.forEach(d => row4(doc, d.device, fInt(d.sessions), fEur(d.revenue), fPct(d.convRate)));
   }
 
+  // Micro-funnel GA (ajouts panier)
+  if (rep.gaFunnel) {
+    const g = rep.gaFunnel.n;
+    sectionTitle(doc, 'Micro-funnel GA — Sessions → Panier → Commande');
+    row4(doc, 'Sessions', fInt(g.sessions), '', '');
+    row4(doc, 'Ajouts panier', fInt(g.addToCarts), 'Taux', fPct(g.addToCartRate));
+    row4(doc, 'Commandes', fInt(g.commandes), 'Panier→cmd', fPct(g.cartToOrder));
+  }
+  // Top pages vues
+  if (rep.topPages && rep.topPages.length) {
+    sectionTitle(doc, 'Top pages vues (N vs N-1)');
+    row4(doc, 'Page', 'Vues N', 'Vues N-1', 'Δ', { bold: true, color: '#666', size: 9 });
+    rep.topPages.slice(0, 12).forEach(p => row4(doc, p.page, fInt(p.viewsN), fInt(p.viewsN1), fDelta(p.viewsN, p.viewsN1)));
+  }
+
   // CA par pays
   if (rep.pays && rep.pays.length) {
     sectionTitle(doc, 'CA par pays (top 15)');

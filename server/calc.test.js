@@ -162,4 +162,12 @@ assert.strictEqual(calc.filterGADim(gaC, 'fr').rows.length, 1, 'GA dim FR');
 assert.strictEqual(calc.filterGADim(gaC, 'inter').rows.length, 1, 'GA dim Inter');
 assert.strictEqual(calc.filterGADim({ hdrs: ['Date', 'Sessions'], rows: [], map: {} }, 'fr'), null, 'GA sans colonne Pays → null');
 
+// ── Lot C : ajouts panier agrégés dans calcGA ───────────────────────────────
+const acHdrs = ['Date', 'Groupe de canaux', 'Sessions', 'Ajouts panier', 'Evenements cles'];
+const acDs = { hdrs: acHdrs, rows: [['20260501', 'Direct', '1000', '120', '50'], ['20260502', 'Email', '400', '30', '10']], map: null };
+acDs.map = calc.autoMap(acHdrs, calc.GA_ALIASES);
+const acG = calc.calcGA(acDs);
+assert.strictEqual(acG.totalAddToCarts, 150, 'total ajouts panier');
+assert.strictEqual(acG.totalSessions, 1400, 'total sessions (avec colonne ajouts panier)');
+
 console.log('✅ calc.test.js : tous les calculs OK');

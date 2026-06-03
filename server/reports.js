@@ -111,6 +111,33 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     n1: kpiEShopN1 ? { sessions: kpiEShopN1.sessions, commandes: kpiEShopN1.commandes, ca: kpiEShopN1.ca, tt: kpiEShopN1.tt, caPerSession: cps(kpiEShopN1) } : null,
   };
   const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
+
+  // Micro-funnel GA : Sessions → Ajouts panier → Commandes
+  const mkFunnel = (g, kpi) => g ? {
+    sessions: g.totalSessions, addToCarts: g.totalAddToCarts, commandes: kpi.commandes,
+    addToCartRate: g.totalSessions > 0 ? g.totalAddToCarts / g.totalSessions : null,
+    cartToOrder: g.totalAddToCarts > 0 ? kpi.commandes / g.totalAddToCarts : null,
+  } : null;
+  const gaFunnel = gaCalcN ? { n: mkFunnel(gaCalcN, kpiEShopN), n1: (gaCalcN1 && kpiEShopN1) ? mkFunnel(gaCalcN1, kpiEShopN1) : null } : null;
+
+  // Top pages vues (N vs N-1)
+  const pagesN = store.getDataset('gapages', 'N'), pagesN1 = store.getDataset('gapages', 'N1');
+  let topPages = null;
+  if (pagesN && pagesN.byPage) {
+    const bN = pagesN.byPage, bN1 = (pagesN1 && pagesN1.byPage) || {};
+    const keys = new Set([...Object.keys(bN), ...Object.keys(bN1)]);
+    topPages = [...keys].map(p => ({ page: p, viewsN: bN[p] || 0, viewsN1: bN1[p] || 0 }))
+      .sort((a, b) => b.viewsN - a.viewsN).slice(0, 15);
+  }
+  // Top pages par source (N vs N-1)
+  const psN = store.getDataset('gapagesrc', 'N'), psN1 = store.getDataset('gapagesrc', 'N1');
+  let topPagesBySource = null;
+  if (psN && psN.rows) {
+    const key = x => x.source + '¦' + x.page;
+    const m1 = {}; ((psN1 && psN1.rows) || []).forEach(x => { m1[key(x)] = x.views; });
+    topPagesBySource = psN.rows.slice().sort((a, b) => b.views - a.views).slice(0, 20)
+      .map(x => ({ source: x.source, page: x.page, viewsN: x.views, viewsN1: m1[key(x)] || 0 }));
+  }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
   const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
 
@@ -191,6 +218,9 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     channels,
     device,
     daily,
+    gaFunnel,
+    topPages,
+    topPagesBySource,
     ga: gaCalcN,
     gaN1: gaCalcN1,
   };

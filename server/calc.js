@@ -112,6 +112,7 @@ const GA_ALIASES = {
   eng_rate: ['taux d engagement', 'engagement rate'],
   device: ['device', 'appareil', 'categorie d appareil'],
   country: ['pays', 'country'],
+  addcart: ['ajouts panier', 'ajout panier', 'add to carts', 'addtocarts'],
 };
 const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
@@ -315,8 +316,8 @@ function calcGA(ga) {
   if (!ga || !ga.rows || !ga.hdrs) return null;
   const m = ga.map && Object.keys(ga.map).length ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
   const ci = m.canal, si = m.sessions, ui = m.users, nui = m.new_users,
-    esi = m.eng_sessions, evi = m.events, ri = m.revenue, eri = m.eng_rate;
-  let totalSessions = 0, totalUsers = 0, totalNewUsers = 0, totalEngSessions = 0, totalEvents = 0, totalRevenue = 0;
+    esi = m.eng_sessions, evi = m.events, ri = m.revenue, aci = m.addcart;
+  let totalSessions = 0, totalUsers = 0, totalNewUsers = 0, totalEngSessions = 0, totalEvents = 0, totalRevenue = 0, totalAddToCarts = 0;
   // Agrégation par canal (gère aussi bien l'export "1 ligne/canal" que les données GA4 API "jour×canal")
   const acc = {};
   ga.rows.forEach(r => {
@@ -324,6 +325,7 @@ function calcGA(ga) {
       events = fGA(r[evi]), rev = fGA(r[ri]);
     totalSessions += sess; totalUsers += users; totalNewUsers += newU;
     totalEngSessions += engS; totalEvents += events; totalRevenue += rev;
+    if (aci !== undefined) totalAddToCarts += fGA(r[aci]);
     const c = (r[ci] || '').trim() || '(inconnu)';
     if (!acc[c]) acc[c] = { canal: c, sessions: 0, users: 0, newUsers: 0, engSessions: 0, events: 0, revenue: 0 };
     const a = acc[c];
@@ -331,7 +333,7 @@ function calcGA(ga) {
   });
   const byCanal = Object.values(acc).map(a => ({ ...a, engRate: a.sessions > 0 ? a.engSessions / a.sessions : 0 }));
   const engRateTotal = totalSessions > 0 ? totalEngSessions / totalSessions : 0;
-  return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, engRateTotal, byCanal };
+  return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, totalAddToCarts, engRateTotal, byCanal };
 }
 
 // ── Performance par canal d'acquisition (croisement efficacité) ─────────────
