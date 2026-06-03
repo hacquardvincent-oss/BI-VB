@@ -2,8 +2,18 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Lots A→D terminés. Prochaines pistes : retour d'une base (persistance + comptes), objectifs/
-atterrissage (% d'atteinte), puis évolutions fines de chaque lot selon retours d'usage.
+Lots A→D terminés + parcours GA4 enrichi (03/06). Prochaines pistes : **moteur de reco stratégique
+court/moyen/long terme** (API Claude), retour d'une base (persistance + comptes), objectifs/atterrissage.
+
+---
+
+## Session du 03/06/2026 (suite) — Parcours GA4 enrichi ✅
+- ✅ **Funnel e-commerce détaillé** : Sessions → Ajouts panier → Checkout → Achat, avec **taux de passage et déperdition par étape** + conversion globale (métriques GA4 `checkouts`, `ecommercePurchases` ajoutées)
+- ✅ **TT par pays** : commandes OMS × sessions GA4 par pays, avec **normalisation des noms FR/EN** (United Kingdom↔Royaume-Uni, etc.)
+- ✅ **Pages d'atterrissage × conversion** (GA4 `landingPage`) : sessions, achats, taux de conversion, revenu
+- ✅ **Funnel produit** : vues → panier → achat par article (GA4 `itemsViewed/AddedToCart/Purchased`) → diagnostic prix/visuel vs stock/taille
+- Implémenté : calc.js (calcGA +checkouts/purchases, ttByCountry + normCountry), ga4.js (fetchLanding/fetchItemFunnel, slots galanding/gaitems), reports/UI/PDF + insights auto ; tests ✅
+- ⚠️ Landing + funnel produit alimentés par l'API → nécessite « Rafraîchir GA4 »
 
 ---
 

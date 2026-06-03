@@ -254,19 +254,33 @@ function renderReport(rep) {
       <div class="note">Taux de retour élevé (≥ 30 %, en rouge) = produit à surveiller (taille, qualité, visuel).</div></div>`;
   }
 
-  // Micro-funnel GA (ajouts panier)
+  // Funnel e-commerce GA détaillé (Sessions → Panier → Checkout → Achat)
   let gaFunnelCard = '';
   if (rep.gaFunnel) {
-    const g = rep.gaFunnel.n, g1 = rep.gaFunnel.n1 || {};
-    const tiles = [
-      ['Sessions', fInt(g.sessions), g.sessions, g1.sessions],
-      ['Ajouts panier', fInt(g.addToCarts), g.addToCarts, g1.addToCarts],
-      ['Taux ajout panier', fPct(g.addToCartRate), g.addToCartRate, g1.addToCartRate],
-      ['Commandes', fInt(g.commandes), g.commandes, g1.commandes],
-      ['Panier → commande', fPct(g.cartToOrder), g.cartToOrder, g1.cartToOrder],
-    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
-    gaFunnelCard = `<div class="card"><h3>Micro-funnel GA — Sessions → Panier → Commande</h3><div class="kgrid">${tiles}</div><div class="note">Ajouts panier issus de GA4 (addToCarts). « Panier → commande » = commandes / ajouts panier.</div></div>`;
+    const g = rep.gaFunnel.n;
+    const stepRows = (g.steps || []).map((st, i) => {
+      const conv = i === 0 ? '<span style="color:var(--t3)">—</span>' : (st.rate != null ? `${fPct(st.rate)} <span class="dn">(−${fPct(1 - st.rate)})</span>` : '—');
+      return `<tr><td>${st.label}</td><td>${fInt(st.value)}</td><td>${conv}</td></tr>`;
+    }).join('');
+    const empty = !g.checkouts && !g.purchases;
+    gaFunnelCard = `<div class="card"><h3>Funnel e-commerce — Sessions → Panier → Checkout → Achat</h3>
+      <table><thead><tr><th>Étape</th><th>Volume</th><th>Passage (déperdition)</th></tr></thead><tbody>${stepRows}</tbody></table>
+      <div class="kgrid" style="margin-top:10px">
+        <div class="kc"><div class="l">Conversion globale</div><div class="v">${fPct(g.overallConv)}</div></div>
+        <div class="kc"><div class="l">Achats GA</div><div class="v">${fInt(g.purchases)}</div></div>
+        <div class="kc"><div class="l">Commandes OMS</div><div class="v">${fInt(g.commandes)}</div></div>
+      </div>
+      <div class="note">${empty ? '⚠ Checkout/achats GA absents → relance « Rafraîchir GA4 » pour le funnel détaillé. ' : ''}Étapes GA4 ; « passage » = conversion depuis l’étape précédente (déperdition entre parenthèses). Écart Achats GA vs Commandes OMS = périmètre de tracking.</div></div>`;
   }
+  // TT par pays
+  const ttRows = (rep.ttPays || []).map(p => `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${fEur(p.ca)}</td></tr>`).join('');
+  const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT</th><th>CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources.</div></div>` : '';
+  // Pages d'atterrissage × conversion
+  const landRows = (rep.landingPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.purchases)}</td><td>${p.convRate != null ? fPct(p.convRate) : '—'}</td><td>${fEur(p.revenue)}</td></tr>`).join('');
+  const landingCard = landRows ? `<div class="card"><h3>Pages d'atterrissage × conversion</h3><table><thead><tr><th>Landing page</th><th>Sessions</th><th>Achats</th><th>Conv.</th><th>Revenu</th></tr></thead><tbody>${landRows}</tbody></table><div class="note">Top pages d'entrée : forte audience + faible conversion = trafic peu qualifié ou page à retravailler.</div></div>` : '';
+  // Funnel produit (vues → panier → achat)
+  const itRows = (rep.itemFunnel || []).map(p => `<tr><td title="${esc(p.item)}">${esc(p.item)}</td><td>${fInt(p.views)}</td><td>${fInt(p.carts)}</td><td class="${p.viewToCart != null && p.viewToCart < 0.05 ? 'dn' : ''}">${p.viewToCart != null ? fPct(p.viewToCart) : '—'}</td><td>${fInt(p.purchases)}</td><td>${p.cartToBuy != null ? fPct(p.cartToBuy) : '—'}</td></tr>`).join('');
+  const itemFunnelCard = itRows ? `<div class="card"><h3>Funnel produit — vues → panier → achat</h3><table><thead><tr><th>Produit</th><th>Vues</th><th>Paniers</th><th>Vue→Panier</th><th>Achats</th><th>Panier→Achat</th></tr></thead><tbody>${itRows}</tbody></table><div class="note">Faible « vue→panier » (en rouge) = prix/visuel/photo à revoir ; faible « panier→achat » = stock/taille/livraison.</div></div>` : '';
   // Top pages vues
   const pagesRows = (rep.topPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN)}</td><td>${fInt(p.viewsN1)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('');
   const pagesCard = pagesRows ? `<div class="card"><h3>Top pages vues — N vs N-1</h3><table><thead><tr><th>Page</th><th>Vues N</th><th>Vues N-1</th><th>Δ</th></tr></thead><tbody>${pagesRows}</tbody></table></div>` : '';
@@ -290,14 +304,14 @@ function renderReport(rep) {
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
     channels: channelsCard, device: deviceCard, marketplace: mktCard,
-    pays: paysCard, saison: saisonCard, annulations: cancellationsCard,
-    retours: returnsCard, produits: produitsCard, renta: rentaCard,
-    pages: pagesCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
+    pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, annulations: cancellationsCard,
+    retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
   };
-  const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'saison', 'produits', 'renta', 'annulations', 'retours', 'pages', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const LAYOUTS = {
     today: ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'produits'],            // Quotidien : lecture rapide
-    week: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'pages', 'pays'], // Hebdo : tendances
+    week: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'itemfunnel', 'pages', 'landing', 'pays', 'ttpays'], // Hebdo : tendances
     month: FULL, ytd: FULL, all: FULL,                                          // Mensuel/YTD/Tout : complet
   };
   return (LAYOUTS[CURRENT] || FULL).map(k => {
@@ -329,7 +343,36 @@ function ana(key, rep) {
     }
     if (key === 'gafunnel') {
       const g = rep.gaFunnel && rep.gaFunnel.n; if (!g) return '';
-      return `Ajout panier ${fPct(g.addToCartRate)} des sessions, dont ${fPct(g.cartToOrder)} convertis en commande → ${(g.cartToOrder != null && g.cartToOrder < 0.3) ? 'déperdition panier→paiement à réduire (frais, création de compte, paiement).' : 'parcours panier sain.'}`;
+      if (!g.checkouts && !g.purchases) return 'Rafraîchis GA4 pour le funnel détaillé (étapes checkout/achat).';
+      const labels = { 'Ajouts panier': 'session → panier (produit/prix/visuel)', 'Checkouts': 'panier → checkout (frais de port, compte)', 'Achats': 'checkout → paiement (moyens de paiement, confiance)' };
+      const leaks = (g.steps || []).slice(1).filter(s => s.rate != null).sort((a, b) => a.rate - b.rate);
+      const w = leaks[0];
+      let s = `Conversion globale ${fPct(g.overallConv)}.`;
+      if (w) s += ` Plus grosse fuite à l’étape « ${w.label} » (${fPct(w.rate)} de passage, ${fPct(1 - w.rate)} perdus) → travailler ${labels[w.label] || w.label}.`;
+      return s;
+    }
+    if (key === 'ttpays') {
+      const t = rep.ttPays; if (!t || !t.length) return '';
+      const withTT = t.filter(x => x.tt != null && x.sessions > 30);
+      const fr = t.find(x => /france/i.test(x.pays));
+      const weak = withTT.filter(x => !/france/i.test(x.pays)).sort((a, b) => a.tt - b.tt)[0];
+      let s = fr && fr.tt != null ? `TT France ${fPct(fr.tt)}.` : '';
+      if (weak && fr && fr.tt != null && weak.tt < fr.tt * 0.7) s += ` ${weak.pays} sous-convertit (${fPct(weak.tt)}) malgré ${fInt(weak.sessions)} sessions → livraison/devise/langue à vérifier.`;
+      return s || 'Comparer le TT par pays pour cibler les marchés à optimiser.';
+    }
+    if (key === 'landing') {
+      const l = rep.landingPages; if (!l || !l.length) return '';
+      const big = l.filter(x => x.sessions >= 50 && x.convRate != null).sort((a, b) => a.convRate - b.convRate)[0];
+      return big ? `Page « ${big.page} » : ${fInt(big.sessions)} sessions pour ${fPct(big.convRate)} de conversion → page d’entrée à requalifier (contenu, vitesse, alignement annonce).` : 'Analyse les pages d’entrée pour repérer le trafic mal qualifié.';
+    }
+    if (key === 'itemfunnel') {
+      const it = rep.itemFunnel; if (!it || !it.length) return '';
+      const lowView = it.filter(x => x.views >= 100 && x.viewToCart != null).sort((a, b) => a.viewToCart - b.viewToCart)[0];
+      const lowBuy = it.filter(x => x.carts >= 20 && x.cartToBuy != null).sort((a, b) => a.cartToBuy - b.cartToBuy)[0];
+      let s = '';
+      if (lowView) s += `« ${lowView.item} » : beaucoup vu, peu mis au panier (${fPct(lowView.viewToCart)}) → prix/photo/description.`;
+      if (lowBuy) s += ` « ${lowBuy.item} » : mis au panier mais peu acheté (${fPct(lowBuy.cartToBuy)}) → stock/taille/livraison.`;
+      return s || 'Funnel produit : repère les articles qui décrochent entre vue, panier et achat.';
     }
     if (key === 'channels') {
       const ch = rep.channels && rep.channels.n; if (!ch || !ch.length) return '';

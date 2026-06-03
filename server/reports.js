@@ -112,13 +112,52 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   };
   const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
 
-  // Micro-funnel GA : Sessions → Ajouts panier → Commandes
-  const mkFunnel = (g, kpi) => g ? {
-    sessions: g.totalSessions, addToCarts: g.totalAddToCarts, commandes: kpi.commandes,
-    addToCartRate: g.totalSessions > 0 ? g.totalAddToCarts / g.totalSessions : null,
-    cartToOrder: g.totalAddToCarts > 0 ? kpi.commandes / g.totalAddToCarts : null,
-  } : null;
+  // Funnel e-commerce GA détaillé : Sessions → Panier → Checkout → Achat (taux + déperdition)
+  const mkFunnel = (g, kpi) => {
+    if (!g) return null;
+    const s = g.totalSessions, ac = g.totalAddToCarts, ck = g.totalCheckouts, pu = g.totalPurchases;
+    const rate = (a, b) => b > 0 ? a / b : null;
+    return {
+      sessions: s, addToCarts: ac, checkouts: ck, purchases: pu, commandes: kpi.commandes,
+      addToCartRate: rate(ac, s), checkoutRate: rate(ck, ac), purchaseRate: rate(pu, ck),
+      overallConv: rate(pu, s),
+      steps: [
+        { label: 'Sessions', value: s, rate: 1 },
+        { label: 'Ajouts panier', value: ac, rate: rate(ac, s) },
+        { label: 'Checkouts', value: ck, rate: rate(ck, ac) },
+        { label: 'Achats', value: pu, rate: rate(pu, ck) },
+      ],
+    };
+  };
   const gaFunnel = gaCalcN ? { n: mkFunnel(gaCalcN, kpiEShopN), n1: (gaCalcN1 && kpiEShopN1) ? mkFunnel(gaCalcN1, kpiEShopN1) : null } : null;
+
+  // TT par pays (commandes OMS × sessions GA)
+  const ttPays = calc.ttByCountry(paysNarr, gaNf, 10);
+
+  // Landing pages × conversion (N vs N-1)
+  const landN = store.getDataset('galanding', 'N'), landN1 = store.getDataset('galanding', 'N1');
+  let landingPages = null;
+  if (landN && landN.rows) {
+    const m1 = {}; ((landN1 && landN1.rows) || []).forEach(x => { m1[x.page] = x; });
+    landingPages = landN.rows.slice().sort((a, b) => b.sessions - a.sessions).slice(0, 15).map(x => {
+      const prev = m1[x.page];
+      return {
+        page: x.page, sessions: x.sessions, purchases: x.purchases, revenue: x.revenue,
+        convRate: x.sessions > 0 ? x.purchases / x.sessions : null,
+        convRateN1: (prev && prev.sessions > 0) ? prev.purchases / prev.sessions : null,
+      };
+    });
+  }
+  // Funnel produit : vues → panier → achat (N)
+  const itemsN = store.getDataset('gaitems', 'N');
+  let itemFunnel = null;
+  if (itemsN && itemsN.rows) {
+    itemFunnel = itemsN.rows.slice().sort((a, b) => b.views - a.views).slice(0, 15).map(x => ({
+      item: x.item, views: x.views, carts: x.carts, purchases: x.purchases,
+      viewToCart: x.views > 0 ? x.carts / x.views : null,
+      cartToBuy: x.carts > 0 ? x.purchases / x.carts : null,
+    }));
+  }
 
   // Top pages vues (N vs N-1)
   const pagesN = store.getDataset('gapages', 'N'), pagesN1 = store.getDataset('gapages', 'N1');
@@ -219,6 +258,9 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     device,
     daily,
     gaFunnel,
+    ttPays,
+    landingPages,
+    itemFunnel,
     topPages,
     topPagesBySource,
     ga: gaCalcN,

@@ -43,7 +43,7 @@ const shiftYear = (iso, d) => { if (!iso) return ''; const p = iso.split('-'); r
 // En-têtes du dataset produit (alignés sur GA_ALIASES + colonnes Date, Device, Pays)
 const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisateurs actifs',
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
-  'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier'];
+  'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier', 'Checkouts', 'Achats e-commerce'];
 
 // ── Helper bas niveau : runReport ───────────────────────────────────────────
 async function post(propertyId, body) {
@@ -71,16 +71,50 @@ async function fetchGA4(propertyId, startDate, endDate) {
     metrics: [
       { name: 'sessions' }, { name: 'activeUsers' }, { name: 'newUsers' },
       { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
-      { name: 'engagementRate' }, { name: 'addToCarts' },
+      { name: 'engagementRate' }, { name: 'addToCarts' }, { name: 'checkouts' }, { name: 'ecommercePurchases' },
     ],
     limit: 250000,
   });
   const rows = (data.rows || []).map(r => {
     const d = r.dimensionValues.map(x => x.value);
     const m = r.metricValues.map(x => x.value);
-    return [d[0], d[1], d[2], d[3], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]];
+    return [d[0], d[1], d[2], d[3], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]];
   });
   return { hdrs: HDRS.slice(), rows };
+}
+
+// ── Landing pages × conversion ──────────────────────────────────────────────
+async function fetchLanding(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'landingPage' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    limit: 100,
+  });
+  return (data.rows || []).map(r => ({
+    page: r.dimensionValues[0].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0,
+    purchases: parseFloat(r.metricValues[1].value) || 0,
+    revenue: parseFloat(r.metricValues[2].value) || 0,
+  }));
+}
+
+// ── Funnel produit : vues → ajouts panier → achats (par article) ────────────
+async function fetchItemFunnel(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'itemName' }],
+    metrics: [{ name: 'itemsViewed' }, { name: 'itemsAddedToCart' }, { name: 'itemsPurchased' }],
+    orderBys: [{ metric: { metricName: 'itemsViewed' }, desc: true }],
+    limit: 100,
+  });
+  return (data.rows || []).map(r => ({
+    item: r.dimensionValues[0].value,
+    views: parseFloat(r.metricValues[0].value) || 0,
+    carts: parseFloat(r.metricValues[1].value) || 0,
+    purchases: parseFloat(r.metricValues[2].value) || 0,
+  }));
 }
 
 // ── Top pages vues ──────────────────────────────────────────────────────────
@@ -140,12 +174,16 @@ async function refresh() {
   // Pages (vues) + pages par source
   store.setDataset('gapages', 'N', { byPage: await fetchPages(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   let n1Count = null;
   if (n1) {
     const dataN1 = await fetchGA4(propertyId, n1.start, n1.end);
     store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end));
     store.setDataset('gapages', 'N1', { byPage: await fetchPages(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
+    store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
+    store.setDataset('gaitems', 'N1', { rows: await fetchItemFunnel(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     n1Count = dataN1.rows.length;
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count };

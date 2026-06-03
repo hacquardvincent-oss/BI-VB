@@ -107,13 +107,30 @@ function renderReport(doc, rep) {
     rep.device.n.forEach(d => row4(doc, d.device, fInt(d.sessions), fEur(d.revenue), fPct(d.convRate)));
   }
 
-  // Micro-funnel GA (ajouts panier)
+  // Funnel e-commerce GA détaillé
   if (rep.gaFunnel) {
     const g = rep.gaFunnel.n;
-    sectionTitle(doc, 'Micro-funnel GA — Sessions → Panier → Commande');
-    row4(doc, 'Sessions', fInt(g.sessions), '', '');
-    row4(doc, 'Ajouts panier', fInt(g.addToCarts), 'Taux', fPct(g.addToCartRate));
-    row4(doc, 'Commandes', fInt(g.commandes), 'Panier→cmd', fPct(g.cartToOrder));
+    sectionTitle(doc, 'Funnel e-commerce — Sessions → Panier → Checkout → Achat');
+    (g.steps || []).forEach((s, i) => row4(doc, s.label, fInt(s.value), i === 0 ? '' : 'passage', i === 0 ? '' : (s.rate != null ? fPct(s.rate) : '—')));
+    row4(doc, 'Conversion globale', fPct(g.overallConv), 'Achats GA', fInt(g.purchases));
+  }
+  // TT par pays
+  if (rep.ttPays && rep.ttPays.length) {
+    sectionTitle(doc, 'Taux de transformation par pays');
+    row4(doc, 'Pays', 'Sessions', 'Commandes', 'TT', { bold: true, color: '#666', size: 9 });
+    rep.ttPays.slice(0, 10).forEach(p => row4(doc, p.pays, fInt(p.sessions), fInt(p.commandes), p.tt != null ? fPct(p.tt) : '—'));
+  }
+  // Pages d'atterrissage
+  if (rep.landingPages && rep.landingPages.length) {
+    sectionTitle(doc, 'Pages d’atterrissage × conversion');
+    row4(doc, 'Landing', 'Sessions', 'Achats', 'Conv.', { bold: true, color: '#666', size: 9 });
+    rep.landingPages.slice(0, 10).forEach(p => row4(doc, p.page, fInt(p.sessions), fInt(p.purchases), p.convRate != null ? fPct(p.convRate) : '—'));
+  }
+  // Funnel produit
+  if (rep.itemFunnel && rep.itemFunnel.length) {
+    sectionTitle(doc, 'Funnel produit — vues → panier → achat');
+    row4(doc, 'Produit', 'Vues', 'Vue→Panier', 'Panier→Achat', { bold: true, color: '#666', size: 9 });
+    rep.itemFunnel.slice(0, 10).forEach(p => row4(doc, p.item, fInt(p.views), p.viewToCart != null ? fPct(p.viewToCart) : '—', p.cartToBuy != null ? fPct(p.cartToBuy) : '—'));
   }
   // Top pages vues
   if (rep.topPages && rep.topPages.length) {

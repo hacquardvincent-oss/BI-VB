@@ -113,6 +113,8 @@ const GA_ALIASES = {
   device: ['device', 'appareil', 'categorie d appareil'],
   country: ['pays', 'country'],
   addcart: ['ajouts panier', 'ajout panier', 'add to carts', 'addtocarts'],
+  checkouts: ['checkouts', 'validations panier', 'begin checkout'],
+  purchases: ['achats e-commerce', 'achats ecommerce', 'ecommerce purchases', 'purchases', 'achats'],
 };
 const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
@@ -316,8 +318,10 @@ function calcGA(ga) {
   if (!ga || !ga.rows || !ga.hdrs) return null;
   const m = ga.map && Object.keys(ga.map).length ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
   const ci = m.canal, si = m.sessions, ui = m.users, nui = m.new_users,
-    esi = m.eng_sessions, evi = m.events, ri = m.revenue, aci = m.addcart;
-  let totalSessions = 0, totalUsers = 0, totalNewUsers = 0, totalEngSessions = 0, totalEvents = 0, totalRevenue = 0, totalAddToCarts = 0;
+    esi = m.eng_sessions, evi = m.events, ri = m.revenue, aci = m.addcart,
+    cki = m.checkouts, pui = m.purchases;
+  let totalSessions = 0, totalUsers = 0, totalNewUsers = 0, totalEngSessions = 0, totalEvents = 0, totalRevenue = 0,
+    totalAddToCarts = 0, totalCheckouts = 0, totalPurchases = 0;
   // Agrégation par canal (gère aussi bien l'export "1 ligne/canal" que les données GA4 API "jour×canal")
   const acc = {};
   ga.rows.forEach(r => {
@@ -326,6 +330,8 @@ function calcGA(ga) {
     totalSessions += sess; totalUsers += users; totalNewUsers += newU;
     totalEngSessions += engS; totalEvents += events; totalRevenue += rev;
     if (aci !== undefined) totalAddToCarts += fGA(r[aci]);
+    if (cki !== undefined) totalCheckouts += fGA(r[cki]);
+    if (pui !== undefined) totalPurchases += fGA(r[pui]);
     const c = (r[ci] || '').trim() || '(inconnu)';
     if (!acc[c]) acc[c] = { canal: c, sessions: 0, users: 0, newUsers: 0, engSessions: 0, events: 0, revenue: 0 };
     const a = acc[c];
@@ -333,7 +339,42 @@ function calcGA(ga) {
   });
   const byCanal = Object.values(acc).map(a => ({ ...a, engRate: a.sessions > 0 ? a.engSessions / a.sessions : 0 }));
   const engRateTotal = totalSessions > 0 ? totalEngSessions / totalSessions : 0;
-  return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, totalAddToCarts, engRateTotal, byCanal };
+  return { totalSessions, totalUsers, totalNewUsers, totalEngSessions, totalEvents, totalRevenue, totalAddToCarts, totalCheckouts, totalPurchases, engRateTotal, byCanal };
+}
+
+// ── TT par pays : croise commandes OMS (par pays) × sessions GA (par pays) ───
+const COUNTRY_CANON = {
+  'france': 'france',
+  'united kingdom': 'royaume-uni', 'uk': 'royaume-uni', 'great britain': 'royaume-uni', 'royaume-uni': 'royaume-uni',
+  'belgium': 'belgique', 'belgique': 'belgique',
+  'germany': 'allemagne', 'deutschland': 'allemagne', 'allemagne': 'allemagne',
+  'spain': 'espagne', 'espana': 'espagne', 'españa': 'espagne', 'espagne': 'espagne',
+  'italy': 'italie', 'italia': 'italie', 'italie': 'italie',
+  'switzerland': 'suisse', 'suisse': 'suisse',
+  'netherlands': 'pays-bas', 'pays-bas': 'pays-bas',
+  'luxembourg': 'luxembourg', 'portugal': 'portugal',
+  'united states': 'etats-unis', 'usa': 'etats-unis', 'etats-unis': 'etats-unis', 'états-unis': 'etats-unis',
+  'ireland': 'irlande', 'irlande': 'irlande', 'austria': 'autriche', 'autriche': 'autriche',
+  'sweden': 'suede', 'denmark': 'danemark', 'norway': 'norvege', 'finland': 'finlande',
+  'poland': 'pologne', 'greece': 'grece',
+};
+function normCountry(s) { const k = (s || '').trim().toLowerCase(); return COUNTRY_CANON[k] || k; }
+
+function gaSessionsByCountry(ga) {
+  if (!ga || !ga.rows) return null;
+  const m = (ga.map && Object.keys(ga.map).length) ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
+  const ci = m.country, si = m.sessions; if (ci === undefined || si === undefined) return null;
+  const by = {};
+  ga.rows.forEach(r => { const k = normCountry(r[ci]); by[k] = (by[k] || 0) + fGA(r[si]); });
+  return by;
+}
+// paysArr = sortie de calcByCountry ; ga = jeu GA principal (avec colonne Pays)
+function ttByCountry(paysArr, ga, top = 10) {
+  const sess = gaSessionsByCountry(ga); if (!sess) return null;
+  return (paysArr || []).map(p => {
+    const s = sess[normCountry(p.pays)] || 0;
+    return { pays: p.pays, commandes: p.commandes, ca: p.ca, sessions: s, tt: s > 0 ? p.commandes / s : null };
+  }).sort((a, b) => b.commandes - a.commandes).slice(0, top);
 }
 
 // ── Performance par canal d'acquisition (croisement efficacité) ─────────────
@@ -609,4 +650,5 @@ module.exports = {
   channelPerf, calcByDevice, dailySeries,
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
+  normCountry, gaSessionsByCountry, ttByCountry,
 };

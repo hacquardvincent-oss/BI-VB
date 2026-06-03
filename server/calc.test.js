@@ -170,4 +170,22 @@ const acG = calc.calcGA(acDs);
 assert.strictEqual(acG.totalAddToCarts, 150, 'total ajouts panier');
 assert.strictEqual(acG.totalSessions, 1400, 'total sessions (avec colonne ajouts panier)');
 
+// ── Parcours enrichi : TT par pays (jointure normalisée FR/EN) ──────────────
+const paysArr = [{ pays: 'France', ca: 1000, commandes: 20 }, { pays: 'Royaume-Uni', ca: 400, commandes: 4 }];
+const gaCtry = { hdrs: ['Pays', 'Sessions'], rows: [['France', '1000'], ['United Kingdom', '800']], map: null };
+gaCtry.map = calc.autoMap(gaCtry.hdrs, calc.GA_ALIASES);
+const tt = calc.ttByCountry(paysArr, gaCtry, 10);
+assert.strictEqual(tt[0].pays, 'France', 'France en tête (plus de commandes)');
+assert.ok(Math.abs(tt[0].tt - 0.02) < 1e-9, 'TT France = 20/1000');
+const ukTT = tt.find(x => x.pays === 'Royaume-Uni');
+assert.ok(Math.abs(ukTT.tt - 0.005) < 1e-9, 'TT UK = 4/800 (jointure United Kingdom↔Royaume-Uni)');
+
+// checkouts/purchases agrégés dans calcGA
+const fHdrs = ['Sessions', 'Ajouts panier', 'Checkouts', 'Achats e-commerce'];
+const fDs = { hdrs: fHdrs, rows: [['1000', '120', '60', '25'], ['400', '30', '15', '8']], map: null };
+fDs.map = calc.autoMap(fHdrs, calc.GA_ALIASES);
+const fG = calc.calcGA(fDs);
+assert.strictEqual(fG.totalCheckouts, 75, 'total checkouts');
+assert.strictEqual(fG.totalPurchases, 33, 'total achats');
+
 console.log('✅ calc.test.js : tous les calculs OK');
