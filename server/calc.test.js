@@ -90,4 +90,46 @@ const perf = calc.channelPerf(g2);
 assert.strictEqual(perf[0].canal, 'Direct', 'canal #1 par revenu');
 assert.ok(Math.abs(perf[0].convRate - 13 / 150) < 1e-9, 'taux de conversion canal Direct');
 
+// ── Annulations (Quantité non livré) ────────────────────────────────────────
+const cHdrs = ['Prix de vente paye', 'quantites commandees', 'Quantite non livre', 'Numeros', 'Type Paiement'];
+const cMap = calc.autoMap(cHdrs, calc.OMS_ALIASES);
+const cRows = [
+  ['100', '2', '1', 'C1', 'Carte Bancaire'],
+  ['50', '1', '0', 'C2', 'Carte Bancaire'],
+  ['80', '1', '1', 'C1', 'Carte Bancaire'],
+];
+const can = calc.calcCancellations(cRows, cMap);
+assert.strictEqual(can.qteAnnulee, 2, 'qté annulée');
+assert.strictEqual(can.qteCmd, 4, 'qté commandée');
+assert.strictEqual(can.commandesImpactees, 1, 'commandes impactées (C1)');
+assert.strictEqual(can.caAnnuleEstime, 130, 'CA annulé estimé (50 + 80)');
+assert.ok(Math.abs(can.tauxPieces - 0.5) < 1e-9, 'taux annulation pièces');
+
+// ── Retours ──────────────────────────────────────────────────────────────────
+const rHdrs = ['Date Creation', 'Montant Rembourse', 'Nb Colisages Rembourses', 'Numero de Retour', 'Raison', 'Ref Ext', 'Pays livraison', 'Destination du retour'];
+const rMap = calc.autoMap(rHdrs, calc.RET_ALIASES);
+const rRows = [
+  ['01/05/2026', '100', '1', 'R1', 'Taille', 'REFA', 'France', 'Remise en stock'],
+  ['02/05/2026', '50', '2', 'R2', 'Défaut', 'REFB', 'Belgique', 'Défectueux'],
+  ['03/05/2026', '30', '1', 'R1', 'Taille', 'REFA', 'France', 'Remise en stock'],
+];
+const ret = calc.calcReturns(rRows, rMap);
+assert.strictEqual(ret.caRetourne, 180, 'CA retourné');
+assert.strictEqual(ret.qte, 4, 'pièces retournées');
+assert.strictEqual(ret.nbRetours, 2, 'nb retours distincts (R1, R2)');
+assert.strictEqual(ret.reasons[0].reason, 'Taille', 'raison #1 par montant');
+assert.strictEqual(ret.reasons[0].montant, 130, 'montant raison Taille');
+
+// ── Saison (référentiel) ─────────────────────────────────────────────────────
+const refHdrs = ['Ref. Externe', 'Saison', 'Regroupement'];
+const refDs = { hdrs: refHdrs, rows: [['REFA', '25E', 'Robes'], ['REFB', '24H', 'Sacs']], map: calc.autoMap(refHdrs, calc.REF_ALIASES) };
+const seasonMap = calc.buildSeasonMap(refDs);
+assert.strictEqual(seasonMap['REFA'], '25E', 'mapping saison REFA');
+const sHdrs = ['Prix de vente paye', 'Ref. externe', 'Type Paiement'];
+const sMap = calc.ensureRefExtIdx(sHdrs, calc.autoMap(sHdrs, calc.OMS_ALIASES));
+const sRows = [['100', 'REFA', 'Carte Bancaire'], ['50', 'REFB', 'Carte Bancaire'], ['30', 'REFA', 'Printemps']];
+const bySeason = calc.calcBySeason(sRows, sMap, seasonMap);
+assert.strictEqual(bySeason['25E'], 100, 'CA saison 25E (hors mkt)');
+assert.strictEqual(bySeason['24H'], 50, 'CA saison 24H');
+
 console.log('✅ calc.test.js : tous les calculs OK');

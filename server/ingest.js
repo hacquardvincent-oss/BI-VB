@@ -13,14 +13,15 @@ const calc = require('./calc');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const SOURCES = ['oms', 'y2', 'ga', 'ref'];
+const SOURCES = ['oms', 'y2', 'ga', 'ref', 'ret'];
 const PERIODS = ['N', 'N1'];
+const ANONYMIZE = new Set(['oms', 'ret']); // sources contenant du PII client
 
 // Colonnes PII à NE PAS conserver (privacy by design — cf. ADR-005)
 const PII_DENY = [
   'nom client', 'prenom client', 'prenom', 'email', 'mail', 'adresse',
   'telephone', 'code postal', 'ville livraison', 'numero de suivi',
-  'id transaction', 'n tva',
+  'id transaction', 'n tva', 'responsable',
 ];
 const isPII = h => { const n = calc.norm(h); return PII_DENY.some(p => n.includes(p)); };
 
@@ -42,7 +43,7 @@ function parseBuffer(buf, filename, source) {
   return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
 }
 
-const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES }[s]);
+const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES }[s]);
 
 router.post('/:source/:period', requireAuth, upload.single('file'), (req, res) => {
   const { source, period } = req.params;
@@ -55,13 +56,13 @@ router.post('/:source/:period', requireAuth, upload.single('file'), (req, res) =
     if (!hdrs.length) return res.status(400).json({ error: 'Fichier vide ou illisible' });
 
     let dropped = [];
-    if (source === 'oms') ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
+    if (ANONYMIZE.has(source)) ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
 
     const map = calc.autoMap(hdrs, aliasesFor(source));
     if (source === 'oms') calc.ensureRefExtIdx(hdrs, map);
 
     let dateMin = null, dateMax = null;
-    if (source === 'oms') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
+    if (source === 'oms' || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
 
     store.setDataset(source, period, {
       hdrs, rows, map, filename: req.file.originalname,

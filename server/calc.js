@@ -88,6 +88,7 @@ const OMS_ALIASES = {
   num: ['numeros', 'num ros', 'numero commande'],
   des: ['designation produit', 'd signation produit', 'signation produit'],
   qte: ['quantites commandees', 'quantite command', 'quantit'],
+  qte_non_livre: ['quantite non livre', 'quantite non livree', 'qte non livre', 'quantite non expediee', 'non expedie'],
   rayon: ['rayon'],
   ref_ext: ['ref. externe', 'ref externe', 'reference externe'],
   pv: ['prix vente'],
@@ -115,6 +116,22 @@ const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
   famille: ['familles principales', 'famille principale', 'famille'],
   regroupement: ['regroupement'],
+  saison: ['saison', 'season'],
+};
+// Export de retours wshop (export_retours_client_produit)
+const RET_ALIASES = {
+  date: ['date creation', 'date de creation'],
+  date_valid: ['date validation'],
+  montant: ['montant rembourse'],
+  montant_ht: ['montant ht'],
+  qte: ['nb colisages rembourses', 'nb colisages'],
+  numret: ['numero de retour', 'numero retour'],
+  raison: ['raison'],
+  ref_ext: ['ref ext', 'ref. externe', 'ref externe'],
+  pays: ['pays livraison'],
+  dest: ['destination du retour'],
+  statut: ['statut ret'],
+  libelle: ['libelle'],
 };
 
 // ── Détection automatique des colonnes (meilleure correspondance) ───────────
@@ -377,6 +394,85 @@ function calcCAFamille(rows, omsMap, refMap) {
   return byFam;
 }
 
+// ── Saison : ref. externe → saison (depuis le référentiel) ──────────────────
+function buildSeasonMap(ref) {
+  if (!ref || !ref.rows || !ref.hdrs) return {};
+  const map = (ref.map && Object.keys(ref.map).length) ? ref.map : autoMap(ref.hdrs, REF_ALIASES);
+  const ri = map.ref_ext, si = map.saison;
+  if (ri === undefined || si === undefined) return {};
+  const out = {};
+  ref.rows.forEach(r => { const k = (r[ri] || '').trim(), v = (r[si] || '').trim(); if (k && v) out[k] = v; });
+  return out;
+}
+function calcBySeason(rows, omsMap, seasonMap) {
+  if (!seasonMap || Object.keys(seasonMap).length === 0) return null;
+  const pi = omsMap.prix, ti = omsMap.type;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined) return null;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const ref = (r[refIdx] || '').trim();
+    const s = seasonMap[ref] || '(non référencé)';
+    by[s] = (by[s] || 0) + fN(r[pi]);
+  });
+  return by;
+}
+
+// ── Annulations (OMS) : pièces non expédiées (Quantité non livré ≥ 1) ───────
+function calcCancellations(rows, map) {
+  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type;
+  if (qni === undefined) return null;
+  let qteAnnulee = 0, qteCmd = 0, caAnnule = 0, caPaye = 0;
+  const ordersImpacted = new Set();
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
+    const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    const prix = fN(r[pi]);
+    qteCmd += cmd; caPaye += prix;
+    if (nonLivre > 0) {
+      qteAnnulee += nonLivre;
+      if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
+      const unit = cmd > 0 ? prix / cmd : prix;          // CA annulé estimé (prorata du prix payé)
+      caAnnule += unit * nonLivre;
+    }
+  });
+  return {
+    qteAnnulee, qteCmd, caAnnuleEstime: caAnnule, caPaye,
+    commandesImpactees: ordersImpacted.size,
+    tauxPieces: qteCmd > 0 ? qteAnnulee / qteCmd : null,
+    tauxCAEstime: (caAnnule + caPaye) > 0 ? caAnnule / (caAnnule + caPaye) : null,
+  };
+}
+
+// ── Retours (export retours wshop) ──────────────────────────────────────────
+function calcReturns(rows, map) {
+  const mi = map.montant, qi = map.qte, ri = map.raison, pi = map.pays, di = map.dest, nri = map.numret;
+  let caRetourne = 0, qte = 0;
+  const retSet = new Set();
+  const byReason = {}, byCountry = {}, byDest = {};
+  rows.forEach(r => {
+    const montant = fN(r[mi]);
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    caRetourne += montant; qte += q;
+    if (nri !== undefined && r[nri]) retSet.add(r[nri]);
+    const reason = (ri !== undefined ? (r[ri] || '').trim() : '') || '(non précisé)';
+    if (!byReason[reason]) byReason[reason] = { montant: 0, count: 0 };
+    byReason[reason].montant += montant; byReason[reason].count += 1;
+    const pays = (pi !== undefined ? (r[pi] || '').trim() : '') || '(inconnu)';
+    byCountry[pays] = (byCountry[pays] || 0) + montant;
+    const dest = (di !== undefined ? (r[di] || '').trim() : '') || '(n/a)';
+    byDest[dest] = (byDest[dest] || 0) + montant;
+  });
+  return {
+    caRetourne, qte, nbRetours: retSet.size,
+    reasons: Object.entries(byReason).map(([reason, v]) => ({ reason, montant: v.montant, count: v.count })).sort((a, b) => b.montant - a.montant),
+    countries: Object.entries(byCountry).map(([pays, montant]) => ({ pays, montant })).sort((a, b) => b.montant - a.montant),
+    destinations: Object.entries(byDest).map(([dest, montant]) => ({ dest, montant })).sort((a, b) => b.montant - a.montant),
+  };
+}
+
 // ── Top produits ────────────────────────────────────────────────────────────
 function buildTopProdMap(rows, map) {
   const pi = map.prix, di = map.des, qi = map.qte, ti = map.type;
@@ -424,8 +520,9 @@ function dateBounds(rows, map) {
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES, RET_ALIASES,
   autoMap, ensureRefExtIdx, isExcl, isMkt,
+  buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcByDevice, dailySeries,

@@ -113,6 +113,36 @@ function renderReport(doc, rep) {
     rep.pays.slice(0, 15).forEach(p => row4(doc, p.pays, fEur(p.n.ca), p.n1 ? fEur(p.n1.ca) : '—', p.n1 ? fDelta(p.n.ca, p.n1.ca) : '—'));
   }
 
+  // Saison
+  if (rep.saison && rep.saison.length) {
+    sectionTitle(doc, 'CA par saison (collection)');
+    row4(doc, 'Saison', 'CA N', 'CA N-1', 'Δ', { bold: true, color: '#666', size: 9 });
+    rep.saison.slice(0, 15).forEach(s => row4(doc, s.saison, fEur(s.n), s.n1 == null ? '—' : fEur(s.n1), s.n1 == null ? '—' : fDelta(s.n, s.n1)));
+  }
+
+  // Annulations
+  if (rep.cancellations && rep.cancellations.n) {
+    const cx = rep.cancellations.n;
+    sectionTitle(doc, 'Annulations (pièces non expédiées)');
+    row4(doc, 'Pièces non expédiées', fInt(cx.qteAnnulee), '', '');
+    row4(doc, 'Commandes impactées', fInt(cx.commandesImpactees), '', '');
+    row4(doc, 'Taux d\'annulation (pièces)', fPct(cx.tauxPieces), '', '');
+    row4(doc, 'CA annulé (estimé)', fEur(cx.caAnnuleEstime), '', '');
+  }
+
+  // Retours
+  if (rep.returns) {
+    const rt = rep.returns.n;
+    sectionTitle(doc, 'Retours');
+    row4(doc, 'CA retourné', fEur(rt.caRetourne), '', '');
+    row4(doc, 'Taux de retour', fPct(rep.returns.tauxRetour), '', '');
+    row4(doc, 'Pièces retournées', fInt(rt.qte), '', '');
+    row4(doc, 'Nb retours', fInt(rt.nbRetours), '', '');
+    doc.moveDown(0.3);
+    row4(doc, 'Top raisons', 'Montant', 'Nb', '', { bold: true, color: '#666', size: 9 });
+    rt.reasons.slice(0, 8).forEach(x => row4(doc, x.reason, fEur(x.montant), fInt(x.count), ''));
+  }
+
   // Familles
   if (rep.famille && rep.famille.length) {
     sectionTitle(doc, 'CA par famille (top 15)');

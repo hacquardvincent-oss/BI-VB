@@ -19,6 +19,7 @@ const SOURCES = [
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
   { key: 'ga', name: '📈 Google Analytics', periods: ['N', 'N1'] },
   { key: 'ref', name: '📋 Référentiel', periods: ['N'] },
+  { key: 'ret', name: '↩️ Retours (wshop)', periods: ['N', 'N1'] },
 ];
 
 async function me() {
@@ -176,6 +177,43 @@ function renderReport(rep) {
        <tbody>${dev.map(d => `<tr><td>${esc(d.device)}</td><td>${fInt(d.sessions)}</td><td>${fPct(d.share)}</td><td>${fPct(d.convRate)}</td><td>${fEur(d.revenue)}</td><td>${fPct(d.engRate)}</td></tr>`).join('')}</tbody></table></div>`
     : '';
 
+  // Saison
+  const saisonRows = (rep.saison || []).map(s => `<tr><td>${esc(s.saison)}</td><td>${fEur(s.n)}</td><td>${s.n1 == null ? '—' : fEur(s.n1)}</td><td>${delta(s.n, s.n1)}</td></tr>`).join('');
+  const saisonCard = saisonRows ? `<div class="card"><h3>CA par saison (collection)</h3><table><thead><tr><th>Saison</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${saisonRows}</tbody></table><div class="note">Saison issue du référentiel (Ref. externe → Saison). Charge un référentiel avec une colonne Saison.</div></div>` : '';
+
+  // Annulations
+  const cx = rep.cancellations ? rep.cancellations.n : null, cx1 = (rep.cancellations && rep.cancellations.n1) || {};
+  let cancellationsCard = '';
+  if (cx) {
+    const tiles = [
+      ['Pièces non expédiées', fInt(cx.qteAnnulee), cx.qteAnnulee, cx1.qteAnnulee],
+      ['Commandes impactées', fInt(cx.commandesImpactees), cx.commandesImpactees, cx1.commandesImpactees],
+      ['Taux annulation (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
+      ['CA annulé (estimé)', fEur(cx.caAnnuleEstime), cx.caAnnuleEstime, cx1.caAnnuleEstime],
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
+    cancellationsCard = `<div class="card"><h3>Annulations (pièces non expédiées)</h3><div class="kgrid">${tiles}</div><div class="note">Colonne « Quantité non livré » de l'OMS (≥ 1). CA annulé = estimation au prorata du prix payé.</div></div>`;
+  }
+
+  // Retours
+  let returnsCard = '';
+  if (rep.returns) {
+    const rt = rep.returns.n, rt1 = rep.returns.n1 || {};
+    const tiles = [
+      ['CA retourné', fEur(rt.caRetourne), rt.caRetourne, rt1.caRetourne],
+      ['Taux de retour', fPct(rep.returns.tauxRetour), null, null],
+      ['Pièces retournées', fInt(rt.qte), rt.qte, rt1.qte],
+      ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
+    const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
+    const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    returnsCard = `<div class="card"><h3>Retours</h3><div class="kgrid">${tiles}</div>
+      <div class="grid cols2" style="margin-top:10px">
+        <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
+        <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
+      </div>
+      <div class="note">Taux de retour = CA retourné / CA EShop de la période.</div></div>`;
+  }
+
   return `
     ${funnelCard}
     <div class="card"><h3>KPI EShop (FR + International)</h3>
@@ -192,6 +230,9 @@ function renderReport(rep) {
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>
     </div>
     ${paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : ''}
+    ${saisonCard}
+    ${cancellationsCard}
+    ${returnsCard}
     ${famRows ? `<div class="card"><h3>CA par famille</h3><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : ''}
     ${gaCard}
   `;

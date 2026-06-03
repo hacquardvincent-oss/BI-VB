@@ -47,6 +47,7 @@ async function buildReport({ preset, from, to, isAll }) {
   const gaN = await loadDataset('ga', 'N'), gaN1 = await loadDataset('ga', 'N1');
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
 
   // Période
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
@@ -106,6 +107,40 @@ async function buildReport({ preset, from, to, isAll }) {
   const device = { n: gaN ? calc.calcByDevice(gaN) : null, n1: gaN1 ? calc.calcByDevice(gaN1) : null };
   const daily = calc.dailySeries(rowsN, omsN.map, gaN);
 
+  // ── Saison (via référentiel) ──
+  const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
+  const saisonNobj = calc.calcBySeason(rowsN, omsN.map, seasonMap);
+  const saisonN1obj = (rowsN1 && rowsN1.length) ? calc.calcBySeason(rowsN1, mapN1, seasonMap) : null;
+  let saison = null;
+  if (saisonNobj) {
+    const keys = new Set([...Object.keys(saisonNobj), ...(saisonN1obj ? Object.keys(saisonN1obj) : [])]);
+    saison = [...keys].filter(k => k !== '(non référencé)')
+      .map(s => ({ saison: s, n: saisonNobj[s] || 0, n1: saisonN1obj ? (saisonN1obj[s] || 0) : null }))
+      .sort((a, b) => b.n - a.n);
+  }
+
+  // ── Annulations (OMS) ──
+  const cancellations = {
+    n: calc.calcCancellations(rowsN, omsN.map),
+    n1: (rowsN1 && rowsN1.length) ? calc.calcCancellations(rowsN1, mapN1) : null,
+  };
+
+  // ── Retours ──
+  let returns = null;
+  if (retN) {
+    const retRowsN = calc.filterRows(retN.rows, retN.map, from, to, isAll);
+    const rN = calc.calcReturns(retRowsN, retN.map);
+    let rN1 = null;
+    if (retN1) {
+      const retRowsN1 = isAll ? retN1.rows : calc.filterRows(retN1.rows, retN1.map, cf, ct, false);
+      rN1 = calc.calcReturns(retRowsN1, retN1.map);
+    } else if (!isAll) {
+      const rr = calc.filterRows(retN.rows, retN.map, cf, ct, false);
+      if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
+    }
+    returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
+  }
+
   // Familles fusionnées N / N-1
   let famille = null;
   if (famNobj) {
@@ -126,6 +161,9 @@ async function buildReport({ preset, from, to, isAll }) {
     ca: { n: caN, n1: caN1 },
     marketplace: { n: mktN, n1: mktN1 },
     pays,
+    saison,
+    cancellations,
+    returns,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
     funnel,

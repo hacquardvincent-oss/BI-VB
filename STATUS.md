@@ -2,12 +2,19 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Vue **saison** (collection) + **retours & annulations** (Statut / TTC négatifs). Et préparer le
-retour d'une base (persistance + comptes) pour ne plus re-déposer les fichiers.
+Préparer le retour d'une base (persistance + comptes) pour ne plus re-déposer les fichiers ;
+ajouter graphiques saison/retours et l'injection d'objectifs (% d'atteinte).
 
 ---
 
 ## Session du 03/06/2026
+### Réalisé — Saison + Annulations + Retours
+- ✅ **Vue Saison** : CA par saison via le référentiel (Ref. externe → colonne `Saison`), N vs N-1
+- ✅ **Annulations** : depuis l'OMS (colonne `Quantité non livré` ≥ 1) — pièces non expédiées, commandes impactées, taux, CA annulé estimé (prorata)
+- ✅ **Retours** : nouveau type de fichier (`export_retours_client_produit`) — CA retourné, taux de retour, pièces, nb retours, top raisons, par destination ; PII écartées à l'ingestion (Nom/Prénom client, Responsable)
+- Implémenté : `calc.js` (buildSeasonMap, calcBySeason, calcCancellations, calcReturns) + RET_ALIASES + report + UI + PDF + tests ✅ ; nouvelle source `ret` (slots N/N-1)
+- Validé end-to-end sur le vrai fichier retours (493 lignes)
+
 ### Réalisé — reporting croisé vente × trafic (4 blocs)
 - ✅ **Funnel de conversion** Sessions → Commandes → CA + TT + **CA/session** (N vs N-1)
 - ✅ **Efficacité par canal** (GA4) : taux de conversion, CA/session, **part trafic vs part revenu**
@@ -90,8 +97,10 @@ retour d'une base (persistance + comptes) pour ne plus re-déposer les fichiers.
 7. ~~CA par pays~~ ✅ fait (03/06)
 8. ~~Connecteur GA4 API~~ ✅ implémenté ET activé en prod (03/06) — TT fiable
 9. ~~Reporting croisé vente × trafic~~ ✅ fait (03/06 : funnel, efficacité canal, suivi quotidien, device)
-10. Vue **saison** (groupement par colonne Saison via référentiel)
-11. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
+10. ~~Vue saison~~ ✅ fait (03/06, via référentiel)
+11. ~~Retours & annulations~~ ✅ fait (03/06)
+12. **Objectifs / atterrissage** : dépôt d'un fichier objectifs → % d'atteinte, projection
+13. Graphiques saison/retours dans l'UI
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop
