@@ -11,7 +11,7 @@ account). En parallèle : vue saison + graphiques dans l'UI V2.
 ### Réalisé — mise en prod + CA par pays + connecteur GA4
 - ✅ **Application V2 déployée sur Render** (mode sans base) : login, dépôt fichiers, reporting, PDF — testée en prod par Vincent
 - ✅ **CA par pays** ajouté (calcul + report + UI + PDF + test) : CA / commandes / panier par pays, hors marketplace, comparaison N-1
-- ✅ **Connecteur GA4 API implémenté** (`server/ga4.js`, ADR-007) : service account → sessions/canaux datés → TT fiable par période ; bouton « Rafraîchir GA4 » ; `calcGA` agrège désormais par canal (test ajouté). Property ID 358326945.
+- ✅ **Connecteur GA4 API implémenté** (`server/ga4.js`, ADR-007) : service account → sessions/canaux datés → TT fiable par période ; bouton « Rafraîchir GA4 » ; `calcGA` agrège désormais par canal (test ajouté). Property ID 358326945. **Activé en prod** (Data API activée côté Google, 415 lignes N / 381 N-1 sur mai 2026 ; TT live 0,88 % vs 0,93 %).
 - 📋 Recommandations business proposées (retours/annulations, CA pays, saison, objectifs, graphiques)
 
 ### ⚠️ Sécurité
@@ -81,8 +81,9 @@ account). En parallèle : vue saison + graphiques dans l'UI V2.
 5. ~~Reportings J/hebdo/mensuel + export PDF~~ ✅ fait (vue **saison** restant à brancher)
 6. ~~Déployer sur Render~~ ✅ fait (03/06, mode sans base)
 7. ~~CA par pays~~ ✅ fait (03/06)
-8. ~~Connecteur GA4 API~~ ✅ implémenté (03/06) — **reste à activer** : déposer la clé (rotée) + GA4_PROPERTY_ID dans Render, puis « Rafraîchir GA4 »
-9. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
+8. ~~Connecteur GA4 API~~ ✅ implémenté ET activé en prod (03/06) — TT fiable
+9. **Reporting croisé vente × trafic** (funnel, efficacité par canal, CA/session, device) — à prioriser
+10. Vue **saison** (groupement par colonne Saison via référentiel) + graphiques dans l'UI V2
 10. **Retours & annulations** + taux de retour (Statut / TTC négatifs Y2)
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop
