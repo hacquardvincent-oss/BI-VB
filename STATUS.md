@@ -20,7 +20,11 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
   **sélecteur de dates N (début/fin) + N-1 (début/fin)** avec calendriers à la place de la cadence,
   bouton « Tout » ; `buildReport`/PDF acceptent une plage N-1 explicite (cfrom/cto) ; période
   découplée de la vue ; dimension Global/France/International déjà en place.
-- ⏭️ Restent C, D, E.
+- ✅ **Lot C livré** (9f9ef99) : **Pilotage 360** = carte unique 2 colonnes (KPI compact + détail CA
+  Global/EShop/FR/Inter) ; **Suivi temporel** = N-1 superposé + granularité **Heure/Jour/Semaine**
+  (auto ; heure via colonne OMS « Heure ») + 2ᵉ courbe **Trafic (sessions N/N-1) & taux d'ajout panier**.
+  Serveur : `gaDailyMetrics`, `dailySeries` enrichi (carts/addRate), `hourlySeries`, `rep.dailyN1`/`rep.hourly`.
+- ⏭️ Restent D (offre/cross-canal/qualité), E (PDF luxe).
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
