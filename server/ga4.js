@@ -83,17 +83,17 @@ async function fetchGA4(propertyId, startDate, endDate) {
   return { hdrs: HDRS.slice(), rows };
 }
 
-// ── Landing pages × conversion ──────────────────────────────────────────────
+// ── Landing pages × conversion (× pays → filtrable par dimension) ───────────
 async function fetchLanding(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'landingPage' }],
+    dimensions: [{ name: 'landingPage' }, { name: 'country' }],
     metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }],
     orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-    limit: 100,
+    limit: 800,
   });
   return (data.rows || []).map(r => ({
-    page: r.dimensionValues[0].value,
+    page: r.dimensionValues[0].value, country: r.dimensionValues[1].value,
     sessions: parseFloat(r.metricValues[0].value) || 0,
     purchases: parseFloat(r.metricValues[1].value) || 0,
     revenue: parseFloat(r.metricValues[2].value) || 0,
@@ -117,31 +117,32 @@ async function fetchItemFunnel(propertyId, startDate, endDate) {
   }));
 }
 
-// ── Top pages vues ──────────────────────────────────────────────────────────
+// ── Top pages vues (× pays → filtrable par dimension) ───────────────────────
 async function fetchPages(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'pagePath' }],
+    dimensions: [{ name: 'pagePath' }, { name: 'country' }],
     metrics: [{ name: 'screenPageViews' }],
     orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-    limit: 200,
+    limit: 1500,
   });
-  const byPage = {};
-  (data.rows || []).forEach(r => { byPage[r.dimensionValues[0].value] = parseFloat(r.metricValues[0].value) || 0; });
-  return byPage;
+  return (data.rows || []).map(r => ({
+    page: r.dimensionValues[0].value, country: r.dimensionValues[1].value,
+    views: parseFloat(r.metricValues[0].value) || 0,
+  }));
 }
 
-// ── Top pages vues par source (canal) ───────────────────────────────────────
+// ── Top pages vues par source (canal) × pays ────────────────────────────────
 async function fetchPagesBySource(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'pagePath' }, { name: 'sessionDefaultChannelGroup' }],
+    dimensions: [{ name: 'pagePath' }, { name: 'sessionDefaultChannelGroup' }, { name: 'country' }],
     metrics: [{ name: 'screenPageViews' }],
     orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-    limit: 300,
+    limit: 1500,
   });
   return (data.rows || []).map(r => ({
-    page: r.dimensionValues[0].value, source: r.dimensionValues[1].value,
+    page: r.dimensionValues[0].value, source: r.dimensionValues[1].value, country: r.dimensionValues[2].value,
     views: parseFloat(r.metricValues[0].value) || 0,
   }));
 }
@@ -150,13 +151,13 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
 async function fetchCampaigns(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'sessionCampaignName' }],
+    dimensions: [{ name: 'sessionCampaignName' }, { name: 'country' }],
     metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }, { name: 'addToCarts' }],
     orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-    limit: 150,
+    limit: 1000,
   });
   return (data.rows || []).map(r => ({
-    campaign: r.dimensionValues[0].value,
+    campaign: r.dimensionValues[0].value, country: r.dimensionValues[1].value,
     sessions: parseFloat(r.metricValues[0].value) || 0,
     purchases: parseFloat(r.metricValues[1].value) || 0,
     revenue: parseFloat(r.metricValues[2].value) || 0,
@@ -164,17 +165,17 @@ async function fetchCampaigns(propertyId, startDate, endDate) {
   }));
 }
 
-// ── Campagne × page d'atterrissage (cohérence campagne/redirection/landing) ──
+// ── Campagne × page d'atterrissage × pays (cohérence campagne/redirection/landing) ──
 async function fetchCampaignLanding(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'sessionCampaignName' }, { name: 'landingPage' }],
+    dimensions: [{ name: 'sessionCampaignName' }, { name: 'landingPage' }, { name: 'country' }],
     metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }],
     orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-    limit: 400,
+    limit: 1500,
   });
   return (data.rows || []).map(r => ({
-    campaign: r.dimensionValues[0].value, page: r.dimensionValues[1].value,
+    campaign: r.dimensionValues[0].value, page: r.dimensionValues[1].value, country: r.dimensionValues[2].value,
     sessions: parseFloat(r.metricValues[0].value) || 0,
     purchases: parseFloat(r.metricValues[1].value) || 0,
   }));

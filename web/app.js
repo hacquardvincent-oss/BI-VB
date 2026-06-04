@@ -41,10 +41,10 @@ const MODULES = {
     layout: ['kpi', 'marketplace', 'crosschannel', 'ca', 'famille', 'produits'],
   },
   international: {
-    icon: '🌍', label: 'International', preset: 'all',
-    intro: 'Performance export : pays et taux de transfo (filtre dimension). Trafic/campagnes inter à venir.',
+    icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
+    intro: 'Performance export vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays (hors France).',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'pays', 'ttpays'],
+    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
   },
   annexe: {
     icon: '🗂️', label: 'Annexe', preset: 'all',
@@ -207,6 +207,9 @@ function initModules() {
       CURRENT = m.preset;
       document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x.dataset.preset === CURRENT));
     }
+    // Dimension : module qui l'impose (International → hors France), sinon retour au global
+    CURRENT_DIM = m.dim || 'global';
+    document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
     renderModuleHint();
     loadReport();
   }));
