@@ -1,6 +1,7 @@
 'use strict';
 // ============================================================================
-// pdf.js — Export PDF d'un reporting (pdfkit, pur JS, compatible Render free).
+// pdf.js — Export PDF d'un reporting, mise en page « maison de luxe »
+// (pdfkit, pur JS). Typographie éditoriale, palette sobre, filets fins.
 // ============================================================================
 const express = require('express');
 const PDFDocument = require('pdfkit');
@@ -9,195 +10,224 @@ const { buildReport } = require('./reports');
 
 const router = express.Router();
 
-const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
-const fEur2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
-const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
-const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
-const fDelta = (n, n1) => {
-  if (n == null || n1 == null || n1 === 0) return '—';
-  const p = (n - n1) / n1 * 100;
-  return (p >= 0 ? '+' : '') + p.toFixed(0) + '%';
+// ── Mise en page ────────────────────────────────────────────────────────────
+const M = 52, R = 543, W = R - M;                 // marges / largeur utile (A4)
+const COL = {
+  ink: '#1c1b19', grey: '#8c857a', faint: '#b8b2a7',
+  accent: '#9c7a3c',                              // bronze discret
+  rule: '#d9d4c8', ruleLight: '#ece8df', tile: '#f6f3ec',
+  up: '#3f7d4e', down: '#b4453a',
 };
-
-const PRESET_LABEL = { all: 'Tout', today: 'Quotidien', week: 'Hebdomadaire', month: 'Mensuel', ytd: 'Cumul annuel (YTD)' };
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
-function row4(doc, label, c1, c2, c3, opt = {}) {
+// ── Formats ─────────────────────────────────────────────────────────────────
+const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
+const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
+const cut = (s, n) => { s = (s == null ? '' : String(s)); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+function dCell(n, n1) {
+  if (n == null || n1 == null || n1 === 0) return { text: '—', color: COL.faint };
+  const p = (n - n1) / n1 * 100;
+  return { text: (p >= 0 ? '+' : '') + p.toFixed(0) + '%', color: p >= 0 ? COL.up : COL.down };
+}
+
+// ── Primitives de dessin ─────────────────────────────────────────────────────
+function hr(doc, x1, x2, y, color, w = 0.6) {
+  doc.save().moveTo(x1, y).lineTo(x2, y).lineWidth(w).strokeColor(color).stroke().restore();
+}
+function ensureSpace(doc, h) { if (doc.y + h > doc.page.height - 64) doc.addPage(); }
+
+function section(doc, label) {
+  ensureSpace(doc, 48);
+  doc.moveDown(0.9);
   const y = doc.y;
-  const X = [40, 320, 410, 500];
-  doc.font(opt.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opt.size || 10).fillColor(opt.color || '#222');
-  doc.text(label, X[0], y, { width: X[1] - X[0] - 6, lineBreak: false });
-  doc.text(c1 ?? '', X[1], y, { width: 86, align: 'right', lineBreak: false });
-  doc.text(c2 ?? '', X[2], y, { width: 86, align: 'right', lineBreak: false });
-  doc.text(c3 ?? '', X[3], y, { width: 55, align: 'right', lineBreak: false });
-  doc.moveDown(0.6);
-}
-function sectionTitle(doc, t) {
-  doc.moveDown(0.5);
-  doc.font('Helvetica-Bold').fontSize(12).fillColor('#0f62a6').text(t);
-  doc.moveTo(40, doc.y + 1).lineTo(555, doc.y + 1).strokeColor('#cccccc').stroke();
-  doc.moveDown(0.4);
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(COL.accent)
+    .text(label.toUpperCase(), M, y, { characterSpacing: 1.7 });
+  doc.moveDown(0.2);
+  hr(doc, M, R, doc.y, COL.rule, 0.7);
+  doc.moveDown(0.55);
 }
 
-function renderReport(doc, rep) {
+// Tuiles KPI (valeur + Δ N-1)
+function kpiTiles(doc, items) {
+  ensureSpace(doc, 60);
+  const n = items.length, gap = 9, w = (W - gap * (n - 1)) / n, h = 50, y = doc.y;
+  items.forEach((it, i) => {
+    const x = M + i * (w + gap);
+    doc.save();
+    doc.rect(x, y, w, h).fill(COL.tile);
+    doc.fillColor(COL.grey).font('Helvetica-Bold').fontSize(6.3).text(it.label.toUpperCase(), x + 9, y + 9, { width: w - 18, characterSpacing: 0.6, lineBreak: false });
+    doc.fillColor(COL.ink).font('Helvetica-Bold').fontSize(14.5).text(it.value, x + 9, y + 20, { width: w - 18, lineBreak: false });
+    if (it.delta) doc.fillColor(it.delta.color).font('Helvetica').fontSize(7.6).text(it.delta.text + (it.deltaSuffix || ''), x + 9, y + 38, { width: w - 18, lineBreak: false });
+    doc.restore();
+  });
+  doc.y = y + h + 8;
+}
+
+// Tableau générique : cols = [{label,w,align}], rows = [[cell,...]] (cell = string | {text,color,bold})
+function table(doc, cols, rows) {
+  const x0 = M, tot = cols.reduce((s, c) => s + c.w, 0);
+  ensureSpace(doc, 24);
+  let y = doc.y, x = x0;
+  doc.font('Helvetica-Bold').fontSize(7).fillColor(COL.grey);
+  cols.forEach(c => { doc.text(c.label.toUpperCase(), x, y, { width: c.w - 6, align: c.align || 'left', characterSpacing: 0.4, lineBreak: false }); x += c.w; });
+  y += 12; hr(doc, x0, x0 + tot, y - 2, COL.rule, 0.7); y += 4; doc.y = y;
+  rows.forEach(r => {
+    ensureSpace(doc, 15); y = doc.y; x = x0;
+    r.forEach((cell, i) => {
+      const c = cols[i], o = (cell !== null && typeof cell === 'object') ? cell : { text: cell };
+      doc.font(o.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.4).fillColor(o.color || COL.ink)
+        .text(o.text == null ? '' : String(o.text), x, y, { width: c.w - 6, align: c.align || 'left', lineBreak: false });
+      x += c.w;
+    });
+    y += 13.5; hr(doc, x0, x0 + tot, y - 4, COL.ruleLight, 0.5); doc.y = y;
+  });
+  doc.y += 6;
+}
+
+// ── En-tête éditorial ────────────────────────────────────────────────────────
+function header(doc, rep) {
   const m = rep.meta;
-  // En-tête
-  doc.font('Helvetica-Bold').fontSize(20).fillColor('#111').text('BiDash');
-  doc.font('Helvetica').fontSize(11).fillColor('#555')
-    .text(`Reporting ${PRESET_LABEL[m.preset] || m.preset} · ${DIM_LABEL[m.dim] || 'Global'} — période ${m.from || '?'} → ${m.to || '?'}`);
-  doc.fontSize(9).fillColor('#888')
-    .text(`Édité le ${new Date().toLocaleString('fr-FR')} · Source OMS : ${m.omsFile || '—'}` +
-      (m.hasN1 ? ` · Comparaison N-1 (${m.cf} → ${m.ct})` : ' · Pas de N-1'));
-  doc.moveDown(0.5);
+  doc.fillColor(COL.ink).font('Times-Bold').fontSize(30).text('BiDash', M, 50);
+  doc.fillColor(COL.grey).font('Helvetica').fontSize(7.5).text('R E P O R T I N G   E - C O M M E R C E', M, 86, { characterSpacing: 1 });
+  hr(doc, M, R, 104, COL.accent, 1.3);
+  doc.fillColor(COL.ink).font('Helvetica-Bold').fontSize(11)
+    .text(`${DIM_LABEL[m.dim] || 'Global'}`, M, 114, { continued: true })
+    .font('Helvetica').fillColor(COL.grey).text(`    ${m.from || '?'}  →  ${m.to || '?'}`);
+  doc.fillColor(COL.faint).font('Helvetica').fontSize(8)
+    .text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`
+      + (m.hasN1 ? `   ·   comparé à N-1 (${m.cf} → ${m.ct})` : '   ·   pas de N-1')
+      + (m.scope === 'collection' ? '   ·   périmètre collection' : ''), M, 130);
+  doc.y = 150;
+}
 
-  // KPI EShop
-  sectionTitle(doc, 'KPI EShop (FR + International)');
-  row4(doc, 'Indicateur', 'N', 'N-1', 'Δ', { bold: true, color: '#666', size: 9 });
+// ── Pied de page (numérotation) ──────────────────────────────────────────────
+function footers(doc) {
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i);
+    const yb = doc.page.height - 42;
+    hr(doc, M, R, yb, COL.ruleLight, 0.5);
+    doc.font('Helvetica').fontSize(7).fillColor(COL.faint)
+      .text('BiDash · données anonymisées à l’ingestion (aucune donnée client personnelle)', M, yb + 7, { lineBreak: false });
+    doc.text(`${i + 1} / ${range.count}`, R - 60, yb + 7, { width: 60, align: 'right', lineBreak: false });
+  }
+}
+
+// ── Contenu ──────────────────────────────────────────────────────────────────
+function renderReport(doc, rep) {
+  header(doc, rep);
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
-  const kRows = [
-    ['CA', fEur(k.ca), fEur(k1.ca), fDelta(k.ca, k1.ca)],
-    ['Commandes', fInt(k.commandes), fInt(k1.commandes), fDelta(k.commandes, k1.commandes)],
-    ['Nbre pièces', fInt(k.pieces), fInt(k1.pieces), fDelta(k.pieces, k1.pieces)],
-    ['Panier moyen', fEur(k.pm), fEur(k1.pm), fDelta(k.pm, k1.pm)],
-    ['Sessions', fInt(k.sessions), fInt(k1.sessions), fDelta(k.sessions, k1.sessions)],
-    ['Taux de transfo', fPct(k.tt), fPct(k1.tt), fDelta(k.tt, k1.tt)],
-  ];
-  const fn = rep.funnel ? rep.funnel.n : null, fn1 = (rep.funnel && rep.funnel.n1) || {};
-  if (fn) kRows.push(['CA / session', fEur2(fn.caPerSession), fEur2(fn1.caPerSession), fDelta(fn.caPerSession, fn1.caPerSession)]);
-  kRows.forEach(r => row4(doc, r[0], r[1], r[2], r[3]));
 
-  // CA détaillé
-  sectionTitle(doc, 'Chiffre d’affaires');
+  // Hero KPI
+  kpiTiles(doc, [
+    { label: 'Chiffre d’affaires', value: fEur(k.ca), delta: dCell(k.ca, k1.ca), deltaSuffix: ' vs N-1' },
+    { label: 'Commandes', value: fInt(k.commandes), delta: dCell(k.commandes, k1.commandes), deltaSuffix: ' vs N-1' },
+    { label: 'Panier moyen', value: fEur(k.pm), delta: dCell(k.pm, k1.pm), deltaSuffix: ' vs N-1' },
+    { label: 'Taux de transfo', value: fPct(k.tt), delta: dCell(k.tt, k1.tt), deltaSuffix: ' vs N-1' },
+    { label: 'Sessions', value: fInt(k.sessions), delta: dCell(k.sessions, k1.sessions), deltaSuffix: ' vs N-1' },
+  ]);
+
+  // Chiffre d'affaires
   const c = rep.ca.n, c1 = rep.ca.n1 || {};
+  section(doc, 'Chiffre d’affaires');
+  const caCols = [{ label: 'Périmètre', w: 235 }, { label: 'N', w: 90, align: 'right' }, { label: 'N-1', w: 90, align: 'right' }, { label: 'Δ', w: W - 415, align: 'right' }];
+  const caRow = (l, n, n1, bold) => [{ text: l, bold }, { text: fEur(n), align: 'right', bold }, { text: fEur(n1), align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, dCell(n, n1))];
   const caRows = [
-    ['CA Global (hors GL.com + Printemps)', c.caGlob, c1.caGlob],
-    ['CA EShop (hors 4 marketplaces)', c.caEShop, c1.caEShop],
-    ['  CA France', c.caFR, c1.caFR],
-    ['  CA International', c.caInt, c1.caInt],
-    ['  CA Entrepôt', c.caEnt, c1.caEnt],
-    ['  CA Ship-from-Store', c.caSFS, c1.caSFS],
-    ['CA Full Price', c.caFP, c1.caFP],
-    ['CA Off Price', c.caOP, c1.caOP],
+    caRow('CA Global', c.caGlob, c1.caGlob, true),
+    caRow('CA EShop', c.caEShop, c1.caEShop),
+    caRow('   France', c.caFR, c1.caFR), caRow('   International', c.caInt, c1.caInt),
   ];
-  caRows.forEach(r => row4(doc, r[0], fEur(r[1]), fEur(r[2]), fDelta(r[1], r[2])));
+  if (c.caFP != null) caRows.push(caRow('CA Full Price', c.caFP, c1.caFP));
+  if (c.caOP != null) caRows.push(caRow('CA Off Price', c.caOP, c1.caOP));
+  table(doc, caCols, caRows);
 
   // Marketplace
-  sectionTitle(doc, 'CA Marketplace');
-  const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
-  const mkRows = [
-    ['Galeries Lafayette (GL.com + 674SFS)', mk.glTotal, mk1.glTotal],
-    ['Printemps', mk.printemps, mk1.printemps],
-    ['Place des Tendances', mk.pdt, mk1.pdt],
-    ['Lulli EShop', mk.lulli, mk1.lulli],
-    ['TOTAL Marketplace', mk.total, mk1.total],
-  ];
-  mkRows.forEach((r, i) => row4(doc, r[0], fEur(r[1]), fEur(r[2]), fDelta(r[1], r[2]), { bold: i === mkRows.length - 1 }));
+  if (rep.marketplace && rep.marketplace.n) {
+    const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
+    if (mk.total) {
+      section(doc, 'Omnicanal — Marketplace');
+      table(doc, caCols, [
+        caRow('Galeries Lafayette', mk.glTotal, mk1.glTotal), caRow('Printemps', mk.printemps, mk1.printemps),
+        caRow('Place des Tendances', mk.pdt, mk1.pdt), caRow('Lulli EShop', mk.lulli, mk1.lulli),
+        caRow('Total marketplace', mk.total, mk1.total, true),
+      ]);
+    }
+  }
 
-  // Efficacité par canal (GA4)
+  // Acquisition (canaux)
   if (rep.channels && rep.channels.n && rep.channels.n.length) {
-    sectionTitle(doc, 'Efficacité par canal d\'acquisition (GA4)');
-    row4(doc, 'Canal', 'Sessions', 'Revenu', 'Conv.', { bold: true, color: '#666', size: 9 });
-    rep.channels.n.slice(0, 12).forEach(c => row4(doc, c.canal, fInt(c.sessions), fEur(c.revenue), fPct(c.convRate)));
+    section(doc, 'Acquisition — Efficacité par canal');
+    const n1 = {}; (rep.channels.n1 || []).forEach(x => { n1[x.canal] = x; });
+    const cols = [{ label: 'Canal', w: 150 }, { label: 'Sessions', w: 80, align: 'right' }, { label: '% trafic', w: 70, align: 'right' }, { label: 'Conv.', w: 70, align: 'right' }, { label: 'Revenu', w: 90, align: 'right' }, { label: 'Δ rev.', w: W - 460, align: 'right' }];
+    const rows = rep.channels.n.slice(0, 8).map(x => { const p = n1[x.canal] || {}; return [cut(x.canal, 26), { text: fInt(x.sessions), align: 'right' }, { text: fPct(x.shareTraffic), align: 'right', color: COL.grey }, { text: fPct(x.convRate), align: 'right' }, { text: fEur(x.revenue), align: 'right' }, Object.assign({ align: 'right' }, dCell(x.revenue, p.revenue))]; });
+    table(doc, cols, rows);
   }
 
-  // Mobile vs Desktop
-  if (rep.device && rep.device.n && rep.device.n.length) {
-    sectionTitle(doc, 'Mobile vs Desktop');
-    row4(doc, 'Device', 'Sessions', 'Revenu', 'Conv.', { bold: true, color: '#666', size: 9 });
-    rep.device.n.forEach(d => row4(doc, d.device, fInt(d.sessions), fEur(d.revenue), fPct(d.convRate)));
-  }
-
-  // Funnel e-commerce GA détaillé
-  if (rep.gaFunnel) {
+  // Conversion (funnel GA)
+  if (rep.gaFunnel && rep.gaFunnel.n) {
     const g = rep.gaFunnel.n;
-    sectionTitle(doc, 'Funnel e-commerce — Sessions → Panier → Checkout → Achat');
-    (g.steps || []).forEach((s, i) => row4(doc, s.label, fInt(s.value), i === 0 ? '' : 'passage', i === 0 ? '' : (s.rate != null ? fPct(s.rate) : '—')));
-    row4(doc, 'Conversion globale', fPct(g.overallConv), 'Achats GA', fInt(g.purchases));
-  }
-  // TT par pays
-  if (rep.ttPays && rep.ttPays.length) {
-    sectionTitle(doc, 'Taux de transformation par pays');
-    row4(doc, 'Pays', 'Sessions', 'Commandes', 'TT', { bold: true, color: '#666', size: 9 });
-    rep.ttPays.slice(0, 10).forEach(p => row4(doc, p.pays, fInt(p.sessions), fInt(p.commandes), p.tt != null ? fPct(p.tt) : '—'));
-  }
-  // Pages d'atterrissage
-  if (rep.landingPages && rep.landingPages.length) {
-    sectionTitle(doc, 'Pages d’atterrissage × conversion');
-    row4(doc, 'Landing', 'Sessions', 'Achats', 'Conv.', { bold: true, color: '#666', size: 9 });
-    rep.landingPages.slice(0, 10).forEach(p => row4(doc, p.page, fInt(p.sessions), fInt(p.purchases), p.convRate != null ? fPct(p.convRate) : '—'));
-  }
-  // Funnel produit
-  if (rep.itemFunnel && rep.itemFunnel.length) {
-    sectionTitle(doc, 'Funnel produit — vues → panier → achat');
-    row4(doc, 'Produit', 'Vues', 'Vue→Panier', 'Panier→Achat', { bold: true, color: '#666', size: 9 });
-    rep.itemFunnel.slice(0, 10).forEach(p => row4(doc, p.item, fInt(p.views), p.viewToCart != null ? fPct(p.viewToCart) : '—', p.cartToBuy != null ? fPct(p.cartToBuy) : '—'));
-  }
-  // Top pages vues
-  if (rep.topPages && rep.topPages.length) {
-    sectionTitle(doc, 'Top pages vues (N vs N-1)');
-    row4(doc, 'Page', 'Vues N', 'Vues N-1', 'Δ', { bold: true, color: '#666', size: 9 });
-    rep.topPages.slice(0, 12).forEach(p => row4(doc, p.page, fInt(p.viewsN), fInt(p.viewsN1), fDelta(p.viewsN, p.viewsN1)));
+    section(doc, 'Conversion — Funnel e-commerce');
+    const cols = [{ label: 'Étape', w: 250 }, { label: 'Volume', w: 110, align: 'right' }, { label: 'Passage', w: W - 360, align: 'right' }];
+    table(doc, cols, (g.steps || []).map((s, i) => [s.label, { text: fInt(s.value), align: 'right' }, { text: i === 0 ? '—' : (s.rate != null ? fPct(s.rate) : '—'), align: 'right', color: COL.grey }]));
   }
 
-  // CA par pays
-  if (rep.pays && rep.pays.length) {
-    sectionTitle(doc, 'CA par pays (top 15)');
-    row4(doc, 'Pays', 'CA N', 'CA N-1', 'Δ', { bold: true, color: '#666', size: 9 });
-    rep.pays.slice(0, 15).forEach(p => row4(doc, p.pays, fEur(p.n.ca), p.n1 ? fEur(p.n1.ca) : '—', p.n1 ? fDelta(p.n.ca, p.n1.ca) : '—'));
+  // Offre & produits
+  if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
+    section(doc, 'Offre — Top produits');
+    const cols = [{ label: '#', w: 22 }, { label: 'Produit', w: 300 }, { label: 'CA', w: 100, align: 'right' }, { label: 'Qté', w: W - 422, align: 'right' }];
+    table(doc, cols, rep.produits.topN.slice(0, 12).map((p, i) => [{ text: String(i + 1), color: COL.faint }, cut(p.des, 52), { text: fEur(p.ca), align: 'right' }, { text: fInt(p.qte), align: 'right', color: COL.grey }]));
   }
-
-  // Saison
-  if (rep.saison && rep.saison.length) {
-    sectionTitle(doc, 'CA par saison (collection)');
-    row4(doc, 'Saison', 'CA N', 'CA N-1', 'Δ', { bold: true, color: '#666', size: 9 });
-    rep.saison.slice(0, 15).forEach(s => row4(doc, s.saison, fEur(s.n), s.n1 == null ? '—' : fEur(s.n1), s.n1 == null ? '—' : fDelta(s.n, s.n1)));
-  }
-
-  // Annulations
-  if (rep.cancellations && rep.cancellations.n) {
-    const cx = rep.cancellations.n;
-    sectionTitle(doc, 'Annulations (pièces non expédiées)');
-    row4(doc, 'Pièces non expédiées', fInt(cx.qteAnnulee), '', '');
-    row4(doc, 'Commandes impactées', fInt(cx.commandesImpactees), '', '');
-    row4(doc, 'Taux d\'annulation (pièces)', fPct(cx.tauxPieces), '', '');
-    row4(doc, 'CA annulé (estimé)', fEur(cx.caAnnuleEstime), '', '');
-  }
-
-  // Retours
-  if (rep.returns) {
-    const rt = rep.returns.n;
-    sectionTitle(doc, 'Retours');
-    row4(doc, 'CA retourné', fEur(rt.caRetourne), '', '');
-    row4(doc, 'Taux de retour', fPct(rep.returns.tauxRetour), '', '');
-    row4(doc, 'Pièces retournées', fInt(rt.qte), '', '');
-    row4(doc, 'Nb retours', fInt(rt.nbRetours), '', '');
-    doc.moveDown(0.3);
-    row4(doc, 'Top raisons', 'Montant', 'Nb', '', { bold: true, color: '#666', size: 9 });
-    rt.reasons.slice(0, 8).forEach(x => row4(doc, x.reason, fEur(x.montant), fInt(x.count), ''));
-  }
-
-  // Produits à reconquérir vs N-1
-  if (rep.produits && rep.produits.manquants && rep.produits.manquants.length) {
-    sectionTitle(doc, 'Produits à reconquérir (vs N-1)');
-    row4(doc, 'Produit', 'CA N', 'CA N-1', 'CA perdu', { bold: true, color: '#666', size: 9 });
-    rep.produits.manquants.slice(0, 12).forEach(m => row4(doc, m.produit, fEur(m.caN), fEur(m.caN1), '−' + fEur(m.perte)));
-  }
-  // Top produits retournés (rentabilité)
-  if (rep.produits && rep.produits.topRetournes && rep.produits.topRetournes.length) {
-    sectionTitle(doc, 'Produits les plus retournés (− rentables)');
-    row4(doc, 'Produit', 'CA retourné', 'Taux ret.', 'CA net', { bold: true, color: '#666', size: 9 });
-    rep.produits.topRetournes.slice(0, 12).forEach(p => row4(doc, p.produit, fEur(p.caRetourne), fPct(p.tauxRetour), fEur(p.caNet)));
-  }
-
-  // Familles
   if (rep.famille && rep.famille.length) {
-    sectionTitle(doc, 'CA par famille (top 15)');
-    rep.famille.slice(0, 15).forEach(f => row4(doc, f.fam, fEur(f.n), fEur(f.n1), fDelta(f.n, f.n1)));
+    section(doc, 'Offre — CA par famille');
+    table(doc, caCols, rep.famille.slice(0, 12).map(f => [f.fam, { text: fEur(f.n), align: 'right' }, { text: f.n1 == null ? '—' : fEur(f.n1), align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, dCell(f.n, f.n1))]));
   }
 
-  doc.moveDown(1);
-  doc.font('Helvetica').fontSize(8).fillColor('#999')
-    .text('Données anonymisées à l’ingestion (aucune donnée client personnelle). BiDash V2.', 40, doc.y, { align: 'center', width: 515 });
+  // Saison (compare collection)
+  if (rep.seasonCompare) {
+    const sc = rep.seasonCompare, sct = sc.counts;
+    section(doc, 'Saison — E26 vs E25');
+    kpiTiles(doc, [
+      { label: 'Modèles E26', value: fInt(sct.modN), delta: dCell(sct.modN, sct.modN1), deltaSuffix: ' vs E25' },
+      { label: 'Saisonniers', value: fInt(sct.saisonniers) },
+      { label: 'Permanents', value: fInt(sct.permanents) },
+      { label: 'Manquants', value: fInt(sct.manquants) },
+      { label: 'Non vendus', value: fInt(sct.nonVendus) },
+    ]);
+    if (sc.bests && sc.bests.length) {
+      const cols = [{ label: 'Best-sellers E26', w: 320 }, { label: 'Famille', w: 120 }, { label: 'CA EShop', w: W - 440, align: 'right' }];
+      table(doc, cols, sc.bests.slice(0, 8).map(b => [cut(b.name, 56), cut(b.famille, 22), { text: fEur(b.ca), align: 'right' }]));
+    }
+  }
+
+  // International (pays)
+  if (rep.pays && rep.pays.length) {
+    section(doc, 'International — CA par pays');
+    const cols = [{ label: 'Pays', w: 200 }, { label: 'CA N', w: 100, align: 'right' }, { label: 'CA N-1', w: 100, align: 'right' }, { label: 'Δ', w: W - 400, align: 'right' }];
+    table(doc, cols, rep.pays.slice(0, 12).map(p => [cut(p.pays, 34), { text: fEur(p.n.ca), align: 'right' }, { text: p.n1 ? fEur(p.n1.ca) : '—', align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, p.n1 ? dCell(p.n.ca, p.n1.ca) : { text: '—', color: COL.faint })]));
+  }
+
+  // Qualité & pertes
+  const cx = rep.cancellations && rep.cancellations.n, rt = rep.returns && rep.returns.n;
+  if (cx || rt) {
+    section(doc, 'Qualité & pertes');
+    if (cx) {
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.ink).text('Annulations EShop — avant expédition (OMS)', M, doc.y); doc.moveDown(0.3);
+      table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
+        ['Pièces non expédiées', { text: fInt(cx.qteAnnulee), align: 'right' }],
+        ['Taux d’annulation (pièces)', { text: fPct(cx.tauxPieces), align: 'right' }],
+        ['CA annulé (estimé)', { text: fEur(cx.caAnnuleEstime), align: 'right' }],
+      ]);
+    }
+    if (rt) {
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.ink).text('Retours clients — après livraison', M, doc.y); doc.moveDown(0.3);
+      table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
+        ['CA retourné', { text: fEur(rt.caRetourne), align: 'right' }],
+        ['Taux de retour', { text: fPct(rep.returns.tauxRetour), align: 'right' }],
+        ['Pièces retournées', { text: fInt(rt.qte), align: 'right' }],
+      ]);
+    }
+  }
 }
 
 router.get('/pdf', requireAuth, async (req, res) => {
@@ -208,10 +238,11 @@ router.get('/pdf', requireAuth, async (req, res) => {
     if (rep.empty) return res.status(400).json({ error: rep.message });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="bidash-${rep.meta.preset}.pdf"`);
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    res.setHeader('Content-Disposition', `attachment; filename="bidash-${(rep.meta.from || 'report')}.pdf"`);
+    const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true });
     doc.pipe(res);
     renderReport(doc, rep);
+    footers(doc);
     doc.end();
   } catch (e) {
     res.status(500).json({ error: e.message });
