@@ -34,6 +34,18 @@ const MODULES = {
     files: { required: ['oms', 'ref'], optional: ['ret', 'ga'] },
     layout: ['kpi', 'ca', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
   },
+  omnicanal: {
+    icon: '🏬', label: 'Omnicanal', preset: 'all',
+    intro: 'EShop vs Marketplace : poids des canaux et familles qui portent chacun.',
+    files: { required: ['oms'], optional: ['y2', 'ref'] },
+    layout: ['kpi', 'marketplace', 'ca', 'famille', 'produits'],
+  },
+  international: {
+    icon: '🌍', label: 'International', preset: 'all',
+    intro: 'Performance export : pays et taux de transfo (filtre dimension). Trafic/campagnes inter à venir.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'pays', 'ttpays'],
+  },
   annexe: {
     icon: '🗂️', label: 'Annexe', preset: 'all',
     intro: 'Exploration : tableaux détaillés (marketplace, pays, device…).',
@@ -50,9 +62,34 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'],
+    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saison', 'marketplace', 'pays', 'ttpays', 'retours', 'annulations'],
   },
 };
+
+// ── Taxonomie analytique : chaque bloc appartient à un thème (bandeaux de section) ──
+const THEME_META = {
+  A: '🎯 Pilotage 360', T: '☀️ Suivi temporel', B: '📡 Acquisition & Trafic',
+  C: '🔄 Conversion (Funnel)', D: '🧭 Comportement & Contenu', E: '👗 Offre & Merchandising',
+  F: '🏬 Omnicanal & Marketplace', G: '🌍 International', H: '⚠️ Qualité & Pertes',
+};
+const THEME_ORDER = ['A', 'T', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const THEME_OF = {
+  kpi: 'A', ca: 'A',
+  daily: 'T',
+  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B',
+  funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
+  pages: 'D', landing: 'D',
+  famille: 'E', produits: 'E', renta: 'E', saison: 'E',
+  marketplace: 'F',
+  pays: 'G', ttpays: 'G',
+  retours: 'H', annulations: 'H',
+};
+// Regroupe les blocs d'un module par thème, dans l'ordre du récit analytique
+function sectionize(layout) {
+  const byTheme = {};
+  layout.forEach(k => { const t = THEME_OF[k]; if (!t) return; (byTheme[t] = byTheme[t] || []).push(k); });
+  return THEME_ORDER.filter(t => byTheme[t]).map(t => ({ theme: t, label: THEME_META[t], blocks: byTheme[t] }));
+}
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -467,12 +504,19 @@ function renderReport(rep) {
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
   };
   const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
-  const order = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
-  return order.map(k => {
+  const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
+  const card = k => {
     let html = C[k] || ''; if (!html) return '';
     const a = ana(k, rep);
     if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
     return html;
+  };
+  const sections = sectionize(layout);
+  const showBanners = sections.length >= 2;
+  return sections.map(s => {
+    const cards = s.blocks.map(card).filter(Boolean).join('\n');
+    if (!cards) return '';
+    return (showBanners ? `<div class="section-head">${s.label}</div>` : '') + cards;
   }).join('\n');
 }
 

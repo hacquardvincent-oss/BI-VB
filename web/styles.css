@@ -41,3 +41,6 @@ td{padding:7px 9px;border-bottom:1px solid rgba(46,51,80,.4);font-variant-numeri
 .err{color:var(--r);font-size:12px;min-height:16px}
 .hidden{display:none}
 .insight{margin-top:10px;font-size:12px;color:var(--t);background:rgba(74,158,255,.08);border-left:3px solid var(--b);padding:8px 10px;border-radius:6px;line-height:1.5}
+#report{display:flex;flex-direction:column;gap:14px}
+.section-head{font-size:12px;font-weight:800;color:var(--a);text-transform:uppercase;letter-spacing:1px;padding:8px 2px 6px;border-bottom:1px solid var(--br);margin-top:4px}
+#report .section-head:first-child{margin-top:0}
