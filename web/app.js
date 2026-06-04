@@ -1023,6 +1023,38 @@ document.getElementById('ga4refresh').addEventListener('click', async () => {
   loadReport();
 });
 
+// Moteur de recommandations stratégiques (API Claude)
+async function recoStatus() {
+  try {
+    const r = await fetch('/api/reco/status');
+    if (!r.ok) return;
+    if ((await r.json()).configured) document.getElementById('recoCard').classList.remove('hidden');
+  } catch (e) { /* ignore */ }
+}
+function renderReco(d) {
+  const box = document.getElementById('recoResult');
+  if (d.error) { box.innerHTML = `<div class="note">⚠ ${esc(d.error)}</div>`; return; }
+  if (d.raw || !d.reco) { box.innerHTML = `<div class="card"><pre style="white-space:pre-wrap;font-size:12px">${esc(d.raw || 'Réponse vide')}</pre></div>`; return; }
+  const r = d.reco;
+  const block = (title, arr, color) => `<h3 style="margin-top:14px">${title}</h3>` + ((arr || []).map(x => `<div class="insight" style="border-left-color:${color}"><b>${esc(x.titre || '')}</b> — ${esc(x.action || '')}<div class="note" style="margin-top:4px">📊 ${esc(x.donnee || '')}${x.impact ? ' &nbsp;·&nbsp; 🎯 ' + esc(x.impact) : ''}</div></div>`).join('') || '<div class="note">—</div>');
+  box.innerHTML = `<div class="insight">💡 <b>Synthèse.</b> ${esc(r.synthese || '')}</div>`
+    + block('☀️ Court terme (≤ 1 mois)', r.court, '#f5a623')
+    + block('📈 Moyen terme (1–3 mois)', r.moyen, '#4a9eff')
+    + block('🧭 Long terme (3–12 mois)', r.long, '#22c55e');
+}
+document.getElementById('recoBtn').addEventListener('click', async () => {
+  const note = document.getElementById('recoNote'), btn = document.getElementById('recoBtn');
+  note.textContent = 'Génération en cours (10–30 s)…'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/reco?' + reportQuery());
+    const j = await r.json();
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
+    note.textContent = '✓ Recommandations générées pour la période.';
+    renderReco(j);
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+  finally { btn.disabled = false; }
+});
+
 // WSHOP API (source OMS)
 async function wshopStatus() {
   try {
@@ -1137,6 +1169,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await loadStatus();
   await ga4Status();
   await wshopStatus();
+  await recoStatus();
   updateApiHint();
   await loadReport();
 })();
