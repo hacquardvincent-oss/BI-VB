@@ -17,10 +17,50 @@
 </div>
 
 <div class="wrap">
-  <!-- BARRE DE MODULES -->
+  <!-- 1 · PÉRIODE D'ANALYSE -->
   <div class="card">
+    <h3>1 · Période d'analyse — N vs N-1</h3>
+    <div class="toolbar">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">N</span>
+      <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
+      <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
+      <button class="btn blue" id="applyDates">Appliquer</button>
+      <button class="pb" data-range="yesterday">Hier</button>
+      <button class="pb" data-range="7d">7 j</button>
+      <button class="pb" data-range="30d">30 j</button>
+      <button class="pb" data-range="month">Mois</button>
+      <button class="pb on" id="datesAll">Tout</button>
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px">Dimension</span>
+      <button class="pb on" data-dim="global">Global</button>
+      <button class="pb" data-dim="fr">France</button>
+      <button class="pb" data-dim="inter">International</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn blue" id="pdf">⬇ PDF</button>
+    </div>
+    <div class="note" id="metaNote"></div>
+  </div>
+
+  <!-- 2 · FORMAT DE REPORTING (vue) -->
+  <div class="card">
+    <h3>2 · Format de reporting</h3>
     <div class="toolbar" id="moduleBar"></div>
     <div class="note" id="modHint"></div>
+  </div>
+
+  <!-- 3 · CHARGEMENT DES DONNÉES (API, sur la période sélectionnée) -->
+  <div class="card">
+    <h3>3 · Chargement des données (API) — sur la période sélectionnée</h3>
+    <div class="note" id="persistNote"></div>
+    <div id="ga4box" class="toolbar hidden" style="margin-top:8px">
+      <button class="btn blue" id="ga4refresh">🔄 Rafraîchir GA4 (API)</button>
+      <span class="note" id="ga4note">Importe sessions/canaux datés depuis GA4 sur la période N et N-1</span>
+    </div>
+    <div id="wshopbox" class="toolbar hidden" style="margin-top:8px">
+      <button class="btn blue" id="wshoprefresh">🔄 Importer OMS depuis WSHOP (API)</button>
+      <span class="note" id="wshopnote">Récupère les commandes OMS via l'API WSHOP sur la période sélectionnée</span>
+    </div>
+    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
   </div>
 
   <!-- COMPTES ÉQUIPE (admin + base active) -->
@@ -39,43 +79,14 @@
     <div class="note" id="acNote"></div>
   </div>
 
-  <!-- DÉPÔT DE FICHIERS -->
+  <!-- 4 · IMPORT MANUEL DE FICHIERS (repliable) -->
   <div class="card">
-    <h3>Dépôt des fichiers</h3>
-    <div class="note" id="persistNote"></div>
-    <div class="grid sources" id="sources"></div>
-    <div class="note" id="ingestNote"></div>
-    <div id="ga4box" class="toolbar hidden" style="margin-top:10px">
-      <button class="btn blue" id="ga4refresh">🔄 Rafraîchir GA4 (API)</button>
-      <span class="note" id="ga4note">Importe sessions/canaux datés depuis GA4 → TT fiable par période</span>
+    <h3 id="filesToggle" style="cursor:pointer;user-select:none">4 · Import manuel de fichiers <span id="filesCaret">▸</span></h3>
+    <div id="filesBody" class="hidden">
+      <div class="note">OMS (CSV, si pas d'API WSHOP), Y2 marketplace, référentiel, implantation saison, retours.</div>
+      <div class="grid sources" id="sources"></div>
+      <div class="note" id="ingestNote"></div>
     </div>
-    <div id="wshopbox" class="toolbar hidden" style="margin-top:8px">
-      <button class="btn blue" id="wshoprefresh">🔄 Importer OMS depuis WSHOP (API)</button>
-      <span class="note" id="wshopnote">Récupère les commandes OMS via l'API WSHOP (plus besoin de déposer le CSV)</span>
-    </div>
-  </div>
-
-  <!-- TOOLBAR -->
-  <div class="card">
-    <div class="toolbar">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Période N</span>
-      <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
-      <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
-      <button class="btn blue" id="applyDates">Appliquer</button>
-      <button class="pb" data-range="yesterday">Hier</button>
-      <button class="pb" data-range="7d">7 j</button>
-      <button class="pb" data-range="30d">30 j</button>
-      <button class="pb" data-range="month">Mois</button>
-      <button class="pb on" id="datesAll">Tout</button>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px">Dimension</span>
-      <button class="pb on" data-dim="global">Global</button>
-      <button class="pb" data-dim="fr">France</button>
-      <button class="pb" data-dim="inter">International</button>
-      <div class="spacer" style="flex:1"></div>
-      <button class="btn blue" id="pdf">⬇ Télécharger en PDF</button>
-    </div>
-    <div class="note" id="metaNote"></div>
   </div>
 
   <!-- REPORT -->

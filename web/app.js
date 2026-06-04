@@ -199,6 +199,22 @@ async function loadStatus() {
   LAST_STATUS = await r.json();
   renderSources(LAST_STATUS);
   renderModuleHint();
+  if (!LAST_STATUS.length) setFilesOpen(true); // aucune donnée → on déplie l'import manuel
+}
+
+// Section « Import manuel de fichiers » repliable
+function setFilesOpen(open) {
+  const body = document.getElementById('filesBody'), caret = document.getElementById('filesCaret');
+  if (!body) return;
+  body.classList.toggle('hidden', !open);
+  if (caret) caret.textContent = open ? '▾' : '▸';
+}
+// Affiche un message si aucun connecteur API n'est configuré
+function updateApiHint() {
+  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), no = document.getElementById('noApiNote');
+  if (!no) return;
+  const anyApi = (ga && !ga.classList.contains('hidden')) || (ws && !ws.classList.contains('hidden'));
+  no.classList.toggle('hidden', anyApi);
 }
 
 // Barre de modules
@@ -991,6 +1007,9 @@ document.getElementById('pdf').addEventListener('click', () => {
   window.open(`/api/report/pdf?${reportQuery()}`, '_blank');
 });
 document.getElementById('acAdd').addEventListener('click', addUser);
+document.getElementById('filesToggle').addEventListener('click', () => {
+  setFilesOpen(document.getElementById('filesBody').classList.contains('hidden'));
+});
 // Sélecteur de dates : Appliquer (plage N + N-1) / Tout (plage complète auto)
 document.getElementById('applyDates').addEventListener('click', () => {
   const v = id => document.getElementById(id).value;
@@ -1038,5 +1057,6 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   await loadStatus();
   await ga4Status();
   await wshopStatus();
+  updateApiHint();
   await loadReport();
 })();
