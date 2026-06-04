@@ -2,9 +2,7 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Réorg modules + persistance Neon + P1 (sections) + **P2 (compare saison)** livrés. **Épisode analytique en cours** :
-- **P3 — Cross-canal produit** : règle Y2 réf unifiée = `Code article`[0..13] + `-` + 1er token `LIBDIM2`
-  (ex. `2EVA96-V04729-001`) → format RC. Tableau perf produit/famille par canal vs N-1 + entre canaux + recos.
+Réorg modules + Neon + P1 (sections) + **P2 (compare saison)** + **P3 (cross-canal)** livrés. **Reste** :
 - **P4 — GA approfondi vs N-1** : landing×conversion, pages disparues, top pages N vs N-1, canaux→pages,
   cohérence campagne/redirection/landing/merch (⚠ enrichir `ga4.js` : dimensions campagne + landing×conv).
 - **P5 — International vs N-1** : sessions/commandes/TT/CA + campagnes + top pages inter.
@@ -16,6 +14,19 @@ Conversion, Comportement, Offre, Omnicanal, International, Qualité.
 ⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
 copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
 absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 04/06/2026 (suite) — P3 : Analyse cross-canal produit ✅
+- ✅ **Règle Y2 réf unifiée** : `Code article`[0..13] + `-` + couleur (1er token `LIBDIM2`) → format RC
+  (validé volume : `0PVE01-V4040900P` + `159 CAJUN` → `0PVE01-V40409-159`, matche l'OMS).
+- ✅ `Y2_ALIASES` étendu (code/libdim2/qte) ; `calc.calcCrossChannel` + classifieurs canal :
+  OMS magasin/type paiement → EShop/Boutiques/GL/Printemps ; Y2 établissement → PDT/Lulli/GL.
+- ✅ Carte **`crosschannel`** (thème Omnicanal) : totaux/Δ N-1 par canal, **matrice produit × canal**,
+  **famille × canal**, **recommandations** d'arbitrage (fort EShop/absent MP & inversement).
+  Famille via référentiel + implantation. Modules Omnicanal + Full.
+- ✅ Vérifié OMS+Y2 réels : 6 canaux (EShop 680k, Boutiques 202k, GL 176k, PDT 103k, Lulli 95k, Printemps 41k).
+- ℹ️ Δ vs N-1 actif si OMS N-1 + Y2 N-1 chargés.
 
 ---
 
