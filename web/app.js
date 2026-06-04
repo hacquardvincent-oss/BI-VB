@@ -75,7 +75,47 @@ async function me() {
   if (!r.ok) { location.href = '/login.html'; return null; }
   const u = await r.json();
   document.getElementById('who').textContent = `${u.username}`;
+  if (u.role === 'admin' && u.dbAccounts) {
+    document.getElementById('accountsCard').classList.remove('hidden');
+    loadUsers();
+  }
   return u;
+}
+
+// ── Gestion des comptes (admin) ──
+async function loadUsers() {
+  const list = document.getElementById('acList'); if (!list) return;
+  const r = await fetch('/auth/users'); if (!r.ok) return;
+  const users = await r.json();
+  list.innerHTML = users.length ? `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th></th></tr></thead><tbody>${users.map(u => `
+    <tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
+      <td>${u.active ? '<span class="pill">actif</span>' : '<span class="pill miss">inactif</span>'}</td>
+      <td><button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button>
+          <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>`).join('')}</tbody></table>`
+    : '<div class="note">Aucun compte en base (le compte admin d’environnement reste actif).</div>';
+  list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', async () => {
+    const u = b.dataset.u;
+    if (b.dataset.act === 'del') {
+      if (!confirm(`Supprimer le compte « ${u} » ?`)) return;
+      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'DELETE' });
+    } else {
+      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: b.dataset.v === '1' }) });
+    }
+    loadUsers();
+  }));
+}
+async function addUser() {
+  const note = document.getElementById('acNote');
+  const username = document.getElementById('acUser').value.trim();
+  const password = document.getElementById('acPass').value;
+  const role = document.getElementById('acRole').value;
+  if (!username || !password) { note.textContent = '⚠ Identifiant et mot de passe requis.'; return; }
+  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
+  note.textContent = `✓ Compte « ${username} » enregistré.`;
+  document.getElementById('acUser').value = ''; document.getElementById('acPass').value = '';
+  loadUsers();
 }
 
 function renderSources(status) {
@@ -140,19 +180,27 @@ function renderModuleHint() {
   el.innerHTML = `<b>${m.icon} ${m.label}</b> — ${m.intro}<div style="margin-top:6px">Requis : ${req || '—'}${opt ? ' &nbsp;·&nbsp; Optionnel : ' + opt : ''}</div>`;
 }
 
-// Objectifs (module GA) — stockés dans le navigateur (localStorage)
-function getObj() { try { return JSON.parse(localStorage.getItem('bidash_obj') || '{}'); } catch (e) { return {}; } }
-function setObj(o) { localStorage.setItem('bidash_obj', JSON.stringify(o)); }
+// Objectifs (module GA) — partagés par l'équipe (API serveur)
+let OBJ_CACHE = null;
+async function fetchObjectives() {
+  if (OBJ_CACHE) return OBJ_CACHE;
+  try { const r = await fetch('/api/objectives'); OBJ_CACHE = r.ok ? await r.json() : {}; } catch (e) { OBJ_CACHE = {}; }
+  return OBJ_CACHE;
+}
+async function saveObjectives(o) {
+  OBJ_CACHE = o;
+  try { await fetch('/api/objectives', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }); } catch (e) { /* ignore */ }
+}
 function objRow(label, actual, fmt, key, targetRaw, targetEff) {
   const a = (actual != null && targetEff) ? actual / targetEff : null;
   const c = a == null ? '' : (a >= 1 ? 'up' : (a >= 0.8 ? '' : 'dn'));
   return `<tr><td>${label}</td><td>${fmt(actual)}</td><td><input class="obj" data-k="${key}" type="number" step="any" value="${targetRaw != null ? targetRaw : ''}" style="width:100px"></td><td class="${c}">${a == null ? '—' : fPct(a)}</td></tr>`;
 }
-function renderObjectives(rep) {
+async function renderObjectives(rep) {
   const box = document.getElementById('objBox'); if (!box) return;
   if (CURRENT_MODULE !== 'ga' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
   box.classList.remove('hidden');
-  const o = getObj();
+  const o = await fetchObjectives();
   const sess = rep.ga ? rep.ga.totalSessions : null;
   const ca = (rep.kpiEShop && rep.kpiEShop.n) ? rep.kpiEShop.n.ca : null;
   const tt = (rep.kpiEShop && rep.kpiEShop.n) ? rep.kpiEShop.n.tt : null;
@@ -163,8 +211,9 @@ function renderObjectives(rep) {
       ${objRow('Taux de transfo (%)', tt, fPct, 'tt', o.tt, o.tt != null ? o.tt / 100 : null)}
     </tbody></table>
     <div class="note">Objectifs enregistrés dans ce navigateur. Saisir le TT en %, ex. <b>1.2</b> pour 1,2 %.</div></div>`;
-  box.querySelectorAll('input.obj').forEach(inp => inp.addEventListener('change', () => {
-    const o2 = getObj(); let v = parseFloat(inp.value); if (isNaN(v)) v = null; o2[inp.dataset.k] = v; setObj(o2); renderObjectives(LAST_REP);
+  box.querySelectorAll('input.obj').forEach(inp => inp.addEventListener('change', async () => {
+    const o2 = Object.assign({}, OBJ_CACHE); let v = parseFloat(inp.value); if (isNaN(v)) v = null; o2[inp.dataset.k] = v;
+    await saveObjectives(o2); renderObjectives(LAST_REP);
   }));
 }
 
@@ -630,6 +679,7 @@ document.getElementById('logout').addEventListener('click', async () => {
 document.getElementById('pdf').addEventListener('click', () => {
   window.open(`/api/report/pdf?preset=${CURRENT}&dim=${CURRENT_DIM}`, '_blank');
 });
+document.getElementById('acAdd').addEventListener('click', addUser);
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-preset]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); CURRENT = b.dataset.preset; loadReport();

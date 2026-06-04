@@ -23,6 +23,22 @@
     <div class="note" id="modHint"></div>
   </div>
 
+  <!-- COMPTES ÉQUIPE (admin + base active) -->
+  <div class="card hidden" id="accountsCard">
+    <h3>👥 Comptes équipe</h3>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <input id="acUser" placeholder="identifiant" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
+      <input id="acPass" type="password" placeholder="mot de passe" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
+      <select id="acRole" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
+        <option value="user">Utilisateur</option>
+        <option value="admin">Admin</option>
+      </select>
+      <button class="btn blue" id="acAdd">Ajouter / mettre à jour</button>
+    </div>
+    <div id="acList" style="margin-top:10px"></div>
+    <div class="note" id="acNote"></div>
+  </div>
+
   <!-- DÉPÔT DE FICHIERS -->
   <div class="card">
     <h3>Dépôt des fichiers (gardés en mémoire le temps de la session — archiver via l'export PDF)</h3>

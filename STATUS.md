@@ -2,8 +2,31 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Modules livrés (03/06). Prochaines pistes : **persistance Neon** (supprime le rechargement des fichiers,
-objectifs partagés, comptes équipe), **moteur de reco stratégique** C/M/L terme (API Claude).
+Modules + persistance Neon livrés (03/06). Prochaine grosse pièce : **moteur de reco stratégique**
+C/M/L terme (API Claude), vitrine = module Direction.
+
+⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
+copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
+absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 03/06/2026 (suite) — Persistance Postgres optionnelle (Neon) ✅
+Objectif : tuer la corvée de re-dépôt des fichiers + objectifs partagés + comptes équipe.
+- ✅ **`server/db.js`** : couche Postgres activée seulement si `DATABASE_URL` est définie (require `pg` paresseux,
+  TLS par défaut Neon, `sslmode=disable` géré pour le local). Tables créées au boot (idempotent).
+- ✅ **Store hybride** (`store.js`) : la RAM reste la source vive (interface synchrone inchangée) ;
+  **hydratation au démarrage** depuis la base + **écriture en double** (write-through) à chaque dépôt.
+  → fichiers restaurés automatiquement après veille/redémarrage Render.
+- ✅ **Objectifs partagés** (`objectives.js`, `/api/objectives`) : en base si dispo, sinon mémoire.
+  Le module GA lit/écrit via l'API (plus de localStorage).
+- ✅ **Comptes équipe** (`auth.js`) : table `users` (hash scrypt + sel, rôle admin/user, actif/inactif).
+  Admin env (`ADMIN_USERNAME/PASSWORD`) conservé comme bootstrap/secours. Endpoints CRUD `/auth/users`
+  (admin only). Panneau **« 👥 Comptes équipe »** dans l'UI (visible admin + base active).
+- ✅ **Repli total sans base** : vérifié (report 200, objectifs RAM, `/auth/users` → 400 explicite).
+- ✅ **Chemin base vérifié** en local (cluster Postgres jetable) : persistance + restauration au
+  redémarrage + cycle de vie comptes (créer / désactiver→refus / rôle / supprimer / mauvais mdp→refus).
+- ➕ dépendance `pg` ; `.env.example` documenté pour Neon.
 
 ---
 

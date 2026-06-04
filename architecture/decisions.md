@@ -162,6 +162,17 @@ Dès que possible : libérer la base gratuite existante, OU passer à une base p
 une base existante. À ce moment : réintroduire `db.js` (schéma users + datasets), remplacer
 `store.js` par des accès SQL, restaurer la gestion de comptes.
 
+### Mise à jour (03/06/2026) — persistance Postgres OPTIONNELLE (Neon)
+Persistance réintroduite **sans rendre la base obligatoire** :
+- `server/db.js` : activé seulement si `DATABASE_URL` est définie (sinon, comportement mémoire ci-dessus).
+  Cible privilégiée : **Neon** (Postgres serverless gratuit, indépendant du free tier Render).
+- **`store.js` hybride** plutôt que remplacé : la RAM reste la source vive (interface synchrone
+  conservée → calculs inchangés), avec **hydratation au démarrage** + **write-through** vers la base.
+  Pas de refacto async des appelants → risque minimal.
+- **Comptes** réactivés (table `users`, scrypt+sel, admin/user, actif/inactif) ; l'admin par variables
+  d'env demeure comme **bootstrap/secours**. **Objectifs** partagés en base.
+- L'anonymisation à l'ingestion reste appliquée avant toute écriture en base.
+
 ---
 
 ## ADR-007 — Connecteur GA4 via l'API Analytics Data (priorisé)

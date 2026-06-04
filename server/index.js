@@ -1,18 +1,22 @@
 'use strict';
 // ============================================================================
-// index.js — Application Express (mode sans base de données).
-// Auth partagée (env) · ingestion en mémoire · reporting · export PDF.
+// index.js — Application Express.
+// Auth (env + comptes en base) · ingestion · reporting · export PDF · objectifs.
+// Persistance Postgres optionnelle (DATABASE_URL) : sinon, mode mémoire.
 // ============================================================================
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cookieSession = require('cookie-session');
 
+const db = require('./db');
+const store = require('./store');
 const auth = require('./auth');
 const ingest = require('./ingest');
 const reports = require('./reports');
 const pdf = require('./pdf');
 const ga4 = require('./ga4');
+const objectives = require('./objectives');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +41,7 @@ app.use('/api/ingest', ingest.router);
 app.use('/api/report', reports.router);
 app.use('/api/report', pdf.router);
 app.use('/api/ga4', ga4.router);
+app.use('/api/objectives', objectives.router);
 
 app.use(express.static(path.join(__dirname, '..', 'web')));
 app.get('/', (req, res) => res.redirect('/app.html'));
@@ -44,4 +49,16 @@ app.get('/', (req, res) => res.redirect('/app.html'));
 if (!process.env.ADMIN_PASSWORD) {
   console.warn('[bidash] ADMIN_PASSWORD non défini → connexion impossible. Définir la variable d’environnement.');
 }
-app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT} (mode sans base de données)`));
+
+// Démarrage : init base (si configurée) + hydratation RAM, puis écoute.
+(async () => {
+  try {
+    await db.init();
+    await store.hydrate();
+    await objectives.hydrate();
+  } catch (e) {
+    console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
+  }
+  const mode = db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)';
+  app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT} — ${mode}`));
+})();
