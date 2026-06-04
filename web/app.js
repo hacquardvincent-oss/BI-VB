@@ -1067,24 +1067,25 @@ async function wshopStatus() {
 document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
   const btn = document.getElementById('wshoprefresh');
-  note.textContent = 'Import OMS WSHOP sur la période sélectionnée…';
-  btn.disabled = true;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 150000); // garde-fou 150s
+  btn.disabled = true; note.textContent = 'Lancement de l\'import WSHOP…';
   try {
     const q = new URLSearchParams(currentPeriod()).toString();
-    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST', signal: ctrl.signal });
-    const raw = await r.text(); let j = {}; try { j = JSON.parse(raw); } catch (e) { /* non-JSON */ }
-    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status} — ${raw.slice(0, 140) || 'réponse vide (proxy/timeout)'}`); return; }
-    note.textContent = `✓ OMS WSHOP : ${j.rows} lignes N (${j.from} → ${j.to})${j.n1 ? ` · ${j.n1.rows} lignes N-1` : ''}`;
-    applyCurrentPeriod();
-    await loadStatus();
-    loadReport();
-  } catch (e) {
-    note.textContent = e.name === 'AbortError'
-      ? '⚠ Délai dépassé — réduire l\'historique (WSHOP_MONTHS, ex. 1 ou 3) puis réessayer.'
-      : '⚠ ' + (e.message || 'Erreur réseau WSHOP');
-  } finally { clearTimeout(timer); btn.disabled = false; }
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btn.disabled = false; return; }
+  // Suivi en tâche de fond (pas de requête longue → pas de 502)
+  const poll = async () => {
+    try {
+      const j = await (await fetch('/api/wshop/job')).json();
+      if (j.running) { note.textContent = `Import WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd N${j.ordersN1 ? ` · ${fInt(j.ordersN1)} N-1` : ''}…`; return setTimeout(poll, 2000); }
+      btn.disabled = false;
+      if (j.error) { note.textContent = '⚠ ' + j.error; return; }
+      const res = j.result || {};
+      note.textContent = `✓ OMS WSHOP : ${fInt(res.rows)} lignes N (${res.from} → ${res.to})${res.n1 ? ` · ${fInt(res.n1.rows)} lignes N-1` : ''}`;
+      applyCurrentPeriod(); await loadStatus(); loadReport();
+    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btn.disabled = false; }
+  };
+  setTimeout(poll, 1500);
 });
 document.getElementById('wshopping').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');

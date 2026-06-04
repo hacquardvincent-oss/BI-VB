@@ -95,7 +95,7 @@ async function apiPost(path, body = {}, tries = 3) {
 // (2) ✅ ENDPOINT COMMANDES — POST /api/v1/orders/get ; réponse = tableau d'Orders.
 //     Filtre par date de création (created_from/created_to, "YYYY-MM-DD HH:MM:SS").
 //     Pagination par lots (WSHOP_PAGE, défaut 1000) → petites réponses rapides, on boucle.
-async function fetchOrders(fromISO, toISO) {
+async function fetchOrders(fromISO, toISO, onPage) {
   const all = []; let page = 1;
   const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
   const MAX_PAGES = 1000;
@@ -105,6 +105,7 @@ async function fetchOrders(fromISO, toISO) {
     });
     const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     all.push(...batch);
+    if (onPage) onPage(all.length);
     if (batch.length < limit) break;
     page += 1;
   }
@@ -200,7 +201,7 @@ function buildReturnsDataset(orders, from, to) {
 
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
 // opts : { from, to, cfrom, cto } (ISO YYYY-MM-DD). Sans dates → fenêtre par défaut (WSHOP_MONTHS).
-async function refresh(opts = {}) {
+async function refresh(opts = {}, cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
   const c = CFG();
   const isoD = d => d.toISOString().slice(0, 10);
@@ -209,7 +210,8 @@ async function refresh(opts = {}) {
     const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months);
     from = isoD(f); to = isoD(t);
   }
-  const ordersN = await fetchOrders(from, to);
+  if (cb.phase) cb.phase(`Commandes N (${from}→${to})…`);
+  const ordersN = await fetchOrders(from, to, n => cb.count && cb.count('N', n));
   const dsN = buildOmsDataset(ordersN, from, to);
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
   store.setDataset('oms', 'N', dsN);
@@ -217,7 +219,8 @@ async function refresh(opts = {}) {
   // Période N-1 (comparatif) si fournie
   let n1 = null;
   if (opts.cfrom && opts.cto) {
-    const ordersN1 = await fetchOrders(opts.cfrom, opts.cto);
+    if (cb.phase) cb.phase(`Commandes N-1 (${opts.cfrom}→${opts.cto})…`);
+    const ordersN1 = await fetchOrders(opts.cfrom, opts.cto, n => cb.count && cb.count('N1', n));
     const dsN1 = buildOmsDataset(ordersN1, opts.cfrom, opts.cto);
     if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
     store.setDataset('ret', 'N1', buildReturnsDataset(ordersN1, opts.cfrom, opts.cto));
@@ -249,13 +252,24 @@ router.get('/ping', requireAuth, async (req, res) => {
   res.json(out);
 });
 
-router.post('/refresh', requireAuth, async (req, res) => {
+// Import en TÂCHE DE FOND (évite le timeout 502 du proxy sur les grandes fenêtres).
+// La requête de lancement répond tout de suite ; le client suit via GET /job.
+let JOB = { running: false, phase: '', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: 0 };
+const jobSnapshot = () => ({ running: JOB.running, phase: JOB.phase, ordersN: JOB.ordersN, ordersN1: JOB.ordersN1, done: JOB.done, error: JOB.error, result: JOB.result });
+function startRefresh(opts) {
+  if (JOB.running) return jobSnapshot();
+  JOB = { running: true, phase: 'Authentification…', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: Date.now() };
+  refresh(opts, { phase: t => { JOB.phase = t; }, count: (w, n) => { if (w === 'N') JOB.ordersN = n; else JOB.ordersN1 = n; } })
+    .then(r => { JOB.result = r; JOB.phase = 'Terminé'; })
+    .catch(e => { JOB.error = e.message; JOB.phase = 'Erreur'; })
+    .finally(() => { JOB.running = false; JOB.done = true; });
+  return jobSnapshot();
+}
+
+router.post('/refresh', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
-  try {
-    res.json({ ok: true, ...(await refresh(req.query)) });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  res.status(202).json({ started: true, ...startRefresh(req.query) });
 });
+router.get('/job', requireAuth, (req, res) => res.json(jobSnapshot()));
 
 module.exports = { router, isConfigured, refresh, orderToRows, buildOmsDataset, frDateTime, countryName };
