@@ -929,7 +929,8 @@ document.getElementById('ga4refresh').addEventListener('click', async () => {
   const r = await fetch('/api/ga4/refresh', { method: 'POST' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur GA4'); return; }
-  note.textContent = `✓ GA4 importé : ${j.rowsN} lignes N${j.rowsN1 != null ? ` · ${j.rowsN1} lignes N-1` : ''} (${j.period.start} → ${j.period.end})`;
+  const warn = (j.warnings && j.warnings.length) ? ` · ⚠ ${j.warnings.length} analyse(s) secondaire(s) indisponible(s) (réessayer)` : '';
+  note.textContent = `✓ GA4 importé : ${j.rowsN} lignes N${j.rowsN1 != null ? ` · ${j.rowsN1} lignes N-1` : ''} (${j.period.start} → ${j.period.end})${warn}`;
   await loadStatus();
   loadReport();
 });
@@ -945,13 +946,23 @@ async function wshopStatus() {
 }
 document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
-  note.textContent = 'Import OMS WSHOP en cours…';
-  const r = await fetch('/api/wshop/refresh', { method: 'POST' });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur WSHOP'); return; }
-  note.textContent = `✓ OMS WSHOP importé : ${j.rows} lignes (${j.from} → ${j.to})`;
-  await loadStatus();
-  loadReport();
+  const btn = document.getElementById('wshoprefresh');
+  note.textContent = 'Import OMS WSHOP en cours… (peut prendre 1-2 min selon le volume)';
+  btn.disabled = true;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 150000); // garde-fou 150s
+  try {
+    const r = await fetch('/api/wshop/refresh', { method: 'POST', signal: ctrl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur WSHOP'); return; }
+    note.textContent = `✓ OMS WSHOP importé : ${j.rows} lignes (${j.from} → ${j.to})`;
+    await loadStatus();
+    loadReport();
+  } catch (e) {
+    note.textContent = e.name === 'AbortError'
+      ? '⚠ Délai dépassé — réduire l\'historique (WSHOP_MONTHS, ex. 1 ou 3) puis réessayer.'
+      : '⚠ ' + (e.message || 'Erreur réseau WSHOP');
+  } finally { clearTimeout(timer); btn.disabled = false; }
 });
 
 // Événements

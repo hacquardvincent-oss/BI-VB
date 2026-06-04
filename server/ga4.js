@@ -45,22 +45,31 @@ const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisa
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
   'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier', 'Checkouts', 'Achats e-commerce'];
 
-// ── Helper bas niveau : runReport ───────────────────────────────────────────
-async function post(propertyId, body) {
+// ── Helper bas niveau : runReport (avec retries sur 5xx / erreurs réseau) ────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function post(propertyId, body, tries = 3) {
   const creds = loadCreds();
   if (!creds) throw new Error('Identifiants GA4 absents (Secret File ga4.json ou GA4_SA_KEY)');
   const client = new JWT({ email: creds.client_email, key: creds.private_key, scopes: SCOPES });
   const { token } = await client.getAccessToken();
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`GA4 API ${res.status} : ${txt.slice(0, 300)}`);
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status >= 500) { lastErr = new Error(`GA4 API ${res.status}`); if (i < tries) { await sleep(800 * i); continue; } }
+      if (!res.ok) { const txt = await res.text(); throw new Error(`GA4 API ${res.status} : ${txt.slice(0, 200)}`); }
+      return res.json();
+    } catch (e) {
+      lastErr = e;
+      if (i < tries && !/GA4 API 4\d\d/.test(e.message)) { await sleep(800 * i); continue; } // pas de retry sur 4xx
+      throw e;
+    }
   }
-  return res.json();
+  throw lastErr;
 }
 
 // ── Rapport principal : date × canal × device × pays ────────────────────────
@@ -195,7 +204,9 @@ function toDataset(parsed, startDate, endDate) {
   };
 }
 
-// Rafraîchit ga-N (et ga-N1 si on connaît la période OMS) depuis l'API
+// Rafraîchit ga-N (et ga-N1 si on connaît la période OMS) depuis l'API.
+// Le cœur (sessions/canaux) doit réussir ; les analyses secondaires sont best-effort
+// (un échec sur l'une — ex. 502 transitoire — n'interrompt pas tout l'import).
 async function refresh() {
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) throw new Error('GA4_PROPERTY_ID non défini');
@@ -207,28 +218,29 @@ async function refresh() {
   } else {
     nStart = '30daysAgo'; nEnd = 'yesterday';
   }
-  const dataN = await fetchGA4(propertyId, nStart, nEnd);
+  const warnings = [];
+  const safe = async (label, fn) => { try { await fn(); } catch (e) { warnings.push(`${label}: ${e.message}`); } };
+  const ts = () => new Date().toISOString();
+
+  const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
   store.setDataset('ga', 'N', toDataset(dataN, nStart, nEnd));
-  // Pages (vues) + pages par source
-  store.setDataset('gapages', 'N', { byPage: await fetchPages(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
-  store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
-  store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
-  store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
-  store.setDataset('gacampaigns', 'N', { rows: await fetchCampaigns(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
-  store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  await safe('pages N', async () => store.setDataset('gapages', 'N', { rows: await fetchPages(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('pagesrc N', async () => store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('landing N', async () => store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('items N', async () => store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('campaigns N', async () => store.setDataset('gacampaigns', 'N', { rows: await fetchCampaigns(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('campaignland N', async () => store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
   let n1Count = null;
   if (n1) {
-    const dataN1 = await fetchGA4(propertyId, n1.start, n1.end);
-    store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end));
-    store.setDataset('gapages', 'N1', { byPage: await fetchPages(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    store.setDataset('gaitems', 'N1', { rows: await fetchItemFunnel(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    store.setDataset('gacampaigns', 'N1', { rows: await fetchCampaigns(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    store.setDataset('gacampaignland', 'N1', { rows: await fetchCampaignLanding(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
-    n1Count = dataN1.rows.length;
+    await safe('GA N-1', async () => { const dataN1 = await fetchGA4(propertyId, n1.start, n1.end); store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end)); n1Count = dataN1.rows.length; });
+    await safe('pages N-1', async () => store.setDataset('gapages', 'N1', { rows: await fetchPages(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('pagesrc N-1', async () => store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('landing N-1', async () => store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('items N-1', async () => store.setDataset('gaitems', 'N1', { rows: await fetchItemFunnel(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('campaigns N-1', async () => store.setDataset('gacampaigns', 'N1', { rows: await fetchCampaigns(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('campaignland N-1', async () => store.setDataset('gacampaignland', 'N1', { rows: await fetchCampaignLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
   }
-  return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count };
+  return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count, warnings };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────

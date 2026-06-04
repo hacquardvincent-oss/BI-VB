@@ -56,20 +56,29 @@ async function getToken(force = false) {
   return _tok.value;
 }
 
-async function apiPost(path, body = {}) {
+async function apiPost(path, body = {}, tries = 3) {
   const c = CFG();
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   const call = async () => fetch(c.base + path, {
     method: 'POST',
     headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
   });
-  let res = await call();
-  if (res.status === 401 || res.status === 403) { await getToken(true); res = await call(); } // jeton expiré → régénère une fois
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`WSHOP API ${res.status} ${path} : ${txt.slice(0, 300)}`);
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      let res = await call();
+      if (res.status === 401 || res.status === 403) { await getToken(true); res = await call(); } // jeton expiré → régénère
+      if (res.status >= 500) { lastErr = new Error(`WSHOP API ${res.status}`); if (i < tries) { await sleep(1000 * i); continue; } }
+      if (!res.ok) { const txt = await res.text().catch(() => ''); throw new Error(`WSHOP API ${res.status} ${path} : ${txt.slice(0, 200)}`); }
+      return res.json();
+    } catch (e) {
+      lastErr = e;
+      if (i < tries && !/WSHOP API 4\d\d/.test(e.message)) { await sleep(1000 * i); continue; }
+      throw e;
+    }
   }
-  return res.json();
+  throw lastErr;
 }
 
 // (2) ✅ ENDPOINT COMMANDES — POST /api/v1/orders/get ; réponse = tableau d'Orders.
