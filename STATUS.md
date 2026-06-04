@@ -1,6 +1,19 @@
 # STATUS.md — BiDash
 _Mis à jour : 03/06/2026_
 
+## Épisode « évolutions UX » (en cours, démarré 04/06)
+Demandes : totaux+N-1 partout, Full par défaut + filtres de vue, **sélecteur de dates N/N-1** (calendrier)
+à la place des presets, dimension Global/France/Inter (déjà OK), **PDF luxe**, KPI compact + détail CA,
+suivi temporel N-1 + granularité (heure/jour/semaine) + courbes panier/trafic, manquants triés CA N-1,
+saison via DROP (saisonnier P1/P2/P3 vs permanent PER), cross-canal famille-first + N-1, séparer
+annulations(OMS)/retours(import). Lots : A Navigation&Cadence · B N-1&totaux · C Pilotage&Temporel ·
+D Offre/Cross-canal/Qualité · E PDF luxe.
+- ✅ **Camembert Entrepôt/SFS/Marketplace retiré** (f476bbf).
+- ✅ **Lot B livré** (ac6b506) : N-1 + totaux + « meilleurs N-1 perdus » sur canaux, device, trafic,
+  funnel GA, funnel produit, campagnes, campagne→landing, pages×source. ⚠ Nécessite un « Rafraîchir GA4 »
+  (nouveaux champs sessions/revenu/pays/N1 ; `fetchPagesBySource` passe en landingPage+sessions).
+- ⏭️ Restent A, C, D, E.
+
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
 - **Moteur de reco stratégique** C/M/L terme (API Claude), vitrine = module Direction.
