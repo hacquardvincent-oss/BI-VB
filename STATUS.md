@@ -36,8 +36,10 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
   boot depuis specs/ ; retours via WSHOP (orderRefund) ; import manuel réduit à OMS+Y2.
   **Filtre Périmètre Collection** (scope=collection → produits implantation) ; saisonnier/permanent
   via **DROP** (P*/PER) ; manquants triés CA N-1 ; présélections **Saison Été/Hiver** (fenêtre longue éditable).
-- ⏭️ Restent : reste Lot D (cross-canal famille-first + N-1 « qui vend quoi », séparer annulations/retours
-  dans la carte Qualité), E (PDF luxe). + activer Neon. + endpoint WSHOP retours (raisons/produit) si dispo.
+- ✅ **Lot D complet** (7aa1172) : cross-canal famille-first + famille Δ N-1 + « best par canal en N-1 » ;
+  Qualité = annulations EShop (OMS) vs retours clients (WSHOP) clairement distingués.
+- ⏭️ Restent : **Lot E (PDF luxe)**. + activer Neon. + dates de saison configurables/mémorisées (option).
+  + endpoint WSHOP retours détaillés (raisons/produit) si dispo.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
