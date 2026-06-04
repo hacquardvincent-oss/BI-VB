@@ -40,7 +40,7 @@ function topList(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -64,8 +64,15 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
   const refMap = ref ? calc.buildRefMap(ref) : {};
 
+  // Périmètre « collection » (scope=collection) : zoom sur les produits de l'implantation
+  // (E26 pour N, E25 pour N-1). N'affecte que les ventes OMS (le trafic GA reste global).
+  const scopeColl = scope === 'collection';
+  const refSetN = (scopeColl && implN) ? calc.implRefSet(implN) : null;
+  const refSetN1 = (scopeColl && implN1) ? calc.implRefSet(implN1) : null;
+
   // ── N ──
-  const rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
+  let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
+  if (refSetN) rowsN = calc.filterToRefs(rowsN, omsN.map, refSetN);
   const sessionsN = calc.getSessionsForPeriod(gaNf, from, to, isAll);
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
@@ -85,6 +92,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
     rowsN1 = calc.filterRows(omsN.rows, omsN.map, cf, ct, false);
   }
   if (rowsN1) rowsN1 = calc.filterDim(rowsN1, mapN1, dim);
+  if (rowsN1 && refSetN1) rowsN1 = calc.filterToRefs(rowsN1, mapN1, refSetN1);
   if (rowsN1 && rowsN1.length) {
     const sessionsN1 = calc.getSessionsForPeriod(gaN1f, cf, ct, isAll);
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
@@ -315,7 +323,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
 
   // ── Comparaison de saison (Implantation E26=N vs E25=N-1) ──
   // salesRef est indexé par Ref. externe (= RC) sur les ventes EShop de la période.
-  const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRef) : null;
+  const salesRefN1 = (rowsN1 && rowsN1.length) ? calc.salesByRef(rowsN1, mapN1) : {};
+  const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRef, salesRefN1) : null;
 
   // ── Analyse cross-canal (EShop / Boutiques / GL / Printemps / PDT / Lulli) ──
   // famByRef : RC → famille, depuis référentiel + implantation (saison courante prioritaire).
@@ -342,7 +351,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
-      hasImpl: !!implN, hasImplN1: !!implN1,
+      hasImpl: !!implN, hasImplN1: !!implN1, scope: scopeColl ? 'collection' : 'all',
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
@@ -382,9 +391,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });

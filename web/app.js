@@ -7,6 +7,7 @@ let CURRENT_DIM = 'global';
 let CURRENT_MODULE = 'full';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
+let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
 let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
@@ -315,8 +316,10 @@ function applyCurrentPeriod() {
   }
 }
 function reportQuery() {
-  if (DATES) return `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`;
-  return `preset=all&dim=${CURRENT_DIM}`;
+  const base = DATES
+    ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
+    : `preset=all&dim=${CURRENT_DIM}`;
+  return `${base}&scope=${SCOPE}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -626,27 +629,28 @@ function renderReport(rep) {
   if (sc) {
     const c = sc.counts;
     const famRowsSC = sc.familles.slice(0, 20).map(f => `<tr><td>${esc(f.famille)}</td><td>${fInt(f.modN)}</td><td>${fInt(f.modN1)}</td><td>${delta(f.modN, f.modN1)}</td><td>${fInt(f.varN)}</td></tr>`).join('');
-    const prodRows = arr => (arr || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${fEur(x.ca)}</td><td>${fInt(x.qte)}</td></tr>`).join('');
-    const miniTable = (title, arr) => (arr && arr.length) ? `<h3 style="margin-top:14px">${title}</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>CA EShop</th><th>Qté</th></tr></thead><tbody>${prodRows(arr)}</tbody></table>` : '';
-    const manqRows = (sc.manquants || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${x.prix ? fEur(x.prix) : '—'}</td></tr>`).join('');
+    const prodRows = arr => (arr || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${x.drop ? esc(x.drop) : ''}</td><td>${fEur(x.ca)}</td><td>${delta(x.ca, x.caN1)}</td><td>${fInt(x.qte)}</td></tr>`).join('');
+    const miniTable = (title, arr) => (arr && arr.length) ? `<h3 style="margin-top:14px">${title}</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>Drop</th><th>CA EShop</th><th>Δ N-1</th><th>Qté</th></tr></thead><tbody>${prodRows(arr)}</tbody></table>` : '';
+    const manqRows = (sc.manquants || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${fEur(x.caN1)}</td><td>${fInt(x.qteN1)}</td></tr>`).join('');
     seasonCompareCard = `<div class="card"><h3>🧵 Comparaison de saison — E26 (N) vs E25 (N-1)</h3>
       <div class="kgrid">
         <div class="kc"><div class="l">Modèles E26</div><div class="v">${fInt(c.modN)}</div></div>
         <div class="kc"><div class="l">Modèles E25</div><div class="v">${fInt(c.modN1)}</div></div>
         <div class="kc"><div class="l">Largeur d'offre</div><div class="v">${delta(c.modN, c.modN1)}</div></div>
-        <div class="kc"><div class="l">Nouveautés</div><div class="v">${fInt(c.nouveautes)}</div></div>
-        <div class="kc"><div class="l">Permanents</div><div class="v">${fInt(c.permanents)}</div></div>
+        <div class="kc"><div class="l">Saisonniers (P*)</div><div class="v">${fInt(c.saisonniers)}</div></div>
+        <div class="kc"><div class="l">Permanents (PER)</div><div class="v">${fInt(c.permanents)}</div></div>
         <div class="kc"><div class="l">Manquants (sortis)</div><div class="v">${fInt(c.manquants)}</div></div>
         <div class="kc"><div class="l">Vendus / Non vendus</div><div class="v">${fInt(c.vendus)} / ${fInt(c.nonVendus)}</div></div>
       </div>
       <h3 style="margin-top:14px">Largeur d'offre par famille (modèles)</h3>
       <table><thead><tr><th>Famille</th><th>Modèles E26</th><th>E25</th><th>Δ</th><th>Variantes E26</th></tr></thead><tbody>${famRowsSC}</tbody></table>
       ${miniTable('🏆 Bests E26 (CA EShop)', sc.bests)}
+      ${miniTable('🌱 Top saisonniers (P*) par CA', sc.saisonniers)}
+      ${miniTable('🧱 Top permanents (PER) par CA', sc.permanents)}
       ${miniTable('🐌 Slowers vendus (CA le plus faible)', sc.slowers)}
-      ${miniTable('🌱 Top nouveautés (CA)', sc.nouveautes)}
-      ${(sc.nonVendus && sc.nonVendus.length) ? `<h3 style="margin-top:14px">🪦 Non vendus E26 (à l'offre, sans vente)</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>CA EShop</th><th>Qté</th></tr></thead><tbody>${prodRows(sc.nonVendus)}</tbody></table>` : ''}
-      ${manqRows ? `<h3 style="margin-top:14px">❌ Manquants — présents E25, absents E26</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>Prix</th></tr></thead><tbody>${manqRows}</tbody></table>` : ''}
-      <div class="note">Modèle = REFERENCE (hors couleur). Permanent = présent E25 & E26 ; nouveauté = nouveau modèle E26 ; manquant = modèle E25 non repris. Bests/slowers/non-vendus = ventes EShop de la période (jointure Ref. externe = RC).</div></div>`;
+      ${(sc.nonVendus && sc.nonVendus.length) ? `<h3 style="margin-top:14px">🪦 Non vendus E26 (à l'offre, sans vente)</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>Drop</th><th>CA EShop</th><th>Δ N-1</th><th>Qté</th></tr></thead><tbody>${prodRows(sc.nonVendus)}</tbody></table>` : ''}
+      ${manqRows ? `<h3 style="margin-top:14px">❌ Manquants — présents E25, absents E26 (triés par CA généré l'an dernier)</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>CA N-1</th><th>Qté N-1</th></tr></thead><tbody>${manqRows}</tbody></table>` : ''}
+      <div class="note">Modèle = REFERENCE (hors couleur). <b>Saisonnier</b> = drop P0–P5, <b>permanent</b> = drop PER (champ Drop de l'implantation). Manquant = modèle E25 non repris, classé par CA généré l'an dernier. Bests/slowers = ventes EShop de la période.</div></div>`;
   }
 
   // Performance cross-canal (EShop / Boutiques / Marketplaces)
@@ -823,10 +827,11 @@ function ana(key, rep) {
       const sc = rep.seasonCompare; if (!sc) return '';
       const c = sc.counts;
       const dOff = pc(c.modN, c.modN1);
-      const tNouv = (c.caNouveautes + c.caPermanents) > 0 ? c.caNouveautes / (c.caNouveautes + c.caPermanents) : null;
-      let s = `Offre ${sgn(dOff)} (${fInt(c.modN)} modèles E26 vs ${fInt(c.modN1)}). ${fInt(c.nouveautes)} nouveautés, ${fInt(c.permanents)} permanents, ${fInt(c.manquants)} sortis.`;
-      if (tNouv != null) s += ` Les nouveautés pèsent ${fPct(tNouv)} du CA assortiment.`;
-      if (c.nonVendus > 0) s += ` ⚠ ${fInt(c.nonVendus)} modèles à l'offre sans aucune vente → arbitrer (push merch/visuel ou retrait).`;
+      const tSais = (c.caSaisonniers + c.caPermanents) > 0 ? c.caSaisonniers / (c.caSaisonniers + c.caPermanents) : null;
+      let s = `Offre ${sgn(dOff)} (${fInt(c.modN)} modèles E26 vs ${fInt(c.modN1)}). ${fInt(c.saisonniers)} saisonniers, ${fInt(c.permanents)} permanents, ${fInt(c.manquants)} sortis.`;
+      if (tSais != null) s += ` Les saisonniers pèsent ${fPct(tSais)} du CA assortiment.`;
+      if (sc.manquants && sc.manquants[0] && sc.manquants[0].caN1 > 0) s += ` Top sorti : « ${sc.manquants[0].name} » (${fEur(sc.manquants[0].caN1)} en N-1) → réintégrer/remplacer.`;
+      if (c.nonVendus > 0) s += ` ⚠ ${fInt(c.nonVendus)} modèles sans aucune vente → arbitrer.`;
       return s;
     }
     if (key === 'marketplace') {
@@ -1042,6 +1047,29 @@ document.getElementById('datesAll').addEventListener('click', () => {
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); CURRENT_DIM = b.dataset.dim; loadReport();
+}));
+document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-scope]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); SCOPE = b.dataset.scope; loadReport();
+}));
+// Présélections de saison : remplissent la fenêtre longue N (et N-1 = même saison l'an dernier), éditable
+document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('click', () => {
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const shiftY = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
+  const today = new Date(), Y = today.getFullYear(), m = today.getMonth() + 1;
+  let from, to;
+  if (b.dataset.season === 'ete') { // Été : 1er sept → 31 août
+    const startY = m >= 9 ? Y : Y - 1; from = new Date(startY, 8, 1); to = new Date(startY + 1, 7, 31);
+  } else { // Hiver : 1er juin → 28/29 fév
+    const startY = m >= 6 ? Y : Y - 1; from = new Date(startY, 5, 1); to = new Date(startY + 1, 1, 1); to.setDate(0);
+  }
+  const nf = ymd(from), nt = ymd(to);
+  document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
+  document.getElementById('dCfrom').value = shiftY(nf); document.getElementById('dCto').value = shiftY(nt);
+  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
+  document.getElementById('datesAll').classList.remove('on');
+  document.getElementById('metaNote').textContent = 'Fenêtre de saison pré-remplie (ajuste les dates exactes si besoin) — clique « Appliquer » puis lance les imports API.';
+  applyCurrentPeriod(); loadReport();
 }));
 
 // Init

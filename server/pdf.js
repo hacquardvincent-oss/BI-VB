@@ -202,9 +202,9 @@ function renderReport(doc, rep) {
 
 router.get('/pdf', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope } = req.query;
     const isAll = req.query.isAll === '1';
-    const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto });
+    const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
     if (rep.empty) return res.status(400).json({ error: rep.message });
 
     res.setHeader('Content-Type', 'application/pdf');

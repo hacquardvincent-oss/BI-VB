@@ -659,27 +659,33 @@ function implItems(ds) {
     return { rc, ref, cat: g(r, 'cat'), type: g(r, 'type'), famille: g(r, 'regroupement') || g(r, 'cat') || '(n.c.)', name: g(r, 'name'), prix: fN(g(r, 'prix')), drop: g(r, 'drop') };
   }).filter(x => x.ref);
 }
-// salesRef est indexé par Ref. externe (= RC, ref+couleur). On agrège au modèle (REFERENCE).
-function calcSeasonCompare(implN, implN1, salesRef) {
+// salesRef/salesRefN1 indexés par Ref. externe (= RC). On agrège au modèle (REFERENCE).
+// Saisonnier vs permanent = champ DROP de l'implantation (P0..P5 = saisonnier, PER = permanent).
+const isSeasonal = drop => /^P\d/i.test((drop || '').trim());
+const isPermanent = drop => /^per$/i.test((drop || '').trim());
+function calcSeasonCompare(implN, implN1, salesRef, salesRefN1) {
   const N = implItems(implN), N1 = implItems(implN1);
   if (!N.length) return null;
   const byModel = arr => { const m = new Map(); arr.forEach(x => { if (!m.has(x.ref)) m.set(x.ref, x); }); return m; };
   const mN = byModel(N), mN1 = byModel(N1);
   const refN1 = new Set(mN1.keys()), refN = new Set(mN.keys());
-  const salesModel = {};
-  Object.entries(salesRef || {}).forEach(([rc, v]) => { const b = baseRef(rc); const e = salesModel[b] || (salesModel[b] = { ca: 0, qte: 0, desig: '' }); e.ca += v.ca; e.qte += v.qte; if (!e.desig && v.desig) e.desig = v.desig; });
-  const nameN1 = {}; mN1.forEach((x, ref) => { if (x.name) nameN1[ref] = x.name; }); // E25 porte les noms produits
-  const enrich = x => { const s = salesModel[x.ref] || { ca: 0, qte: 0, desig: '' }; return { ref: x.ref, name: x.name || s.desig || nameN1[x.ref] || x.ref, famille: x.famille, cat: x.cat, prix: x.prix, ca: s.ca, qte: s.qte }; };
+  const toModelSales = ref => { const o = {}; Object.entries(ref || {}).forEach(([rc, v]) => { const b = baseRef(rc); const e = o[b] || (o[b] = { ca: 0, qte: 0, desig: '' }); e.ca += v.ca; e.qte += v.qte; if (!e.desig && v.desig) e.desig = v.desig; }); return o; };
+  const salesModel = toModelSales(salesRef), salesModelN1 = toModelSales(salesRefN1);
+  const nameN1 = {}; mN1.forEach((x, ref) => { if (x.name) nameN1[ref] = x.name; });
+  const enrich = x => { const s = salesModel[x.ref] || { ca: 0, qte: 0, desig: '' }; const s1 = salesModelN1[x.ref] || { ca: 0 }; return { ref: x.ref, name: x.name || s.desig || nameN1[x.ref] || x.ref, famille: x.famille, cat: x.cat, prix: x.prix, drop: x.drop, ca: s.ca, qte: s.qte, caN1: s1.ca }; };
   // Largeur d'offre par famille (nb de modèles + variantes RC)
   const wf = (models, all) => { const o = {}; models.forEach(x => { (o[x.famille] = o[x.famille] || { mod: 0, var: 0 }).mod++; }); all.forEach(x => { (o[x.famille] = o[x.famille] || { mod: 0, var: 0 }).var++; }); return o; };
   const wN = wf([...mN.values()], N), wN1 = wf([...mN1.values()], N1);
   const familles = [...new Set([...Object.keys(wN), ...Object.keys(wN1)])].map(f => ({
     famille: f, modN: (wN[f] || {}).mod || 0, modN1: (wN1[f] || {}).mod || 0, varN: (wN[f] || {}).var || 0, varN1: (wN1[f] || {}).var || 0,
   })).sort((a, b) => b.modN - a.modN);
-  const nouveautes = [...mN.values()].filter(x => !refN1.has(x.ref)).map(enrich).sort((a, b) => b.ca - a.ca);
-  const permanents = [...mN.values()].filter(x => refN1.has(x.ref)).map(enrich).sort((a, b) => b.ca - a.ca);
-  const manquants = [...mN1.values()].filter(x => !refN.has(x.ref)).map(enrich);
   const all = [...mN.values()].map(enrich);
+  // Classification par DROP (implantation E26)
+  const saisonniers = all.filter(x => isSeasonal(x.drop)).sort((a, b) => b.ca - a.ca);
+  const permanents = all.filter(x => isPermanent(x.drop)).sort((a, b) => b.ca - a.ca);
+  const autres = all.filter(x => !isSeasonal(x.drop) && !isPermanent(x.drop));
+  // Manquants = modèles E25 non repris en E26, triés par CA généré l'an dernier (N-1)
+  const manquants = [...mN1.values()].filter(x => !refN.has(x.ref)).map(x => { const s1 = salesModelN1[x.ref] || { ca: 0, qte: 0 }; return { ref: x.ref, name: x.name || s1.desig || x.ref, famille: x.famille, prix: x.prix, caN1: s1.ca, qteN1: s1.qte }; }).sort((a, b) => b.caN1 - a.caN1);
   const sold = all.filter(x => x.qte > 0);
   const bests = [...sold].sort((a, b) => b.ca - a.ca).slice(0, 15);
   const slowers = [...sold].sort((a, b) => a.ca - b.ca).slice(0, 15);
@@ -687,14 +693,23 @@ function calcSeasonCompare(implN, implN1, salesRef) {
   return {
     counts: {
       modN: mN.size, modN1: mN1.size, varN: N.length, varN1: N1.length,
-      nouveautes: nouveautes.length, permanents: permanents.length, manquants: manquants.length,
+      saisonniers: saisonniers.length, permanents: permanents.length, autres: autres.length, manquants: manquants.length,
       vendus: sold.length, nonVendus: nonVendus.length,
-      caNouveautes: nouveautes.reduce((s, x) => s + x.ca, 0), caPermanents: permanents.reduce((s, x) => s + x.ca, 0),
+      caSaisonniers: saisonniers.reduce((s, x) => s + x.ca, 0), caPermanents: permanents.reduce((s, x) => s + x.ca, 0),
     },
     familles,
-    nouveautes: nouveautes.slice(0, 15), permanents: permanents.slice(0, 15), manquants: manquants.slice(0, 15),
+    saisonniers: saisonniers.slice(0, 15), permanents: permanents.slice(0, 15), manquants: manquants.slice(0, 15),
     bests, slowers, nonVendus: nonVendus.slice(0, 15),
   };
+}
+
+// Périmètre « collection » : ensemble des modèles (REFERENCE) d'une implantation,
+// et filtre des lignes OMS à ces modèles (zoom saison sur les produits de la collection).
+function implRefSet(ds) { return new Set(implItems(ds).map(x => x.ref)); }
+function filterToRefs(rows, map, refSet) {
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (ri === undefined || !refSet || !refSet.size) return rows;
+  return rows.filter(r => refSet.has(baseRef((r[ri] || '').toString().trim())));
 }
 
 // ── Analyse cross-canal (EShop / Boutiques / Marketplaces) ──────────────────
@@ -833,6 +848,6 @@ module.exports = {
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
-  baseRef, implItems, calcSeasonCompare,
+  baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs,
   y2Ref, calcCrossChannel,
 };
