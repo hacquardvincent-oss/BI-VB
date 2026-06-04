@@ -157,13 +157,21 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   }
   // Funnel produit : vues → panier → achat (N) — non filtré par pays (dimension item)
   const itemsN = store.getDataset('gaitems', 'N');
+  const itemsN1 = store.getDataset('gaitems', 'N1');
   let itemFunnel = null;
   if (itemsN && itemsN.rows) {
-    itemFunnel = itemsN.rows.slice().sort((a, b) => b.views - a.views).slice(0, 15).map(x => ({
-      item: x.item, views: x.views, carts: x.carts, purchases: x.purchases,
-      viewToCart: x.views > 0 ? x.carts / x.views : null,
-      cartToBuy: x.carts > 0 ? x.purchases / x.carts : null,
-    }));
+    const mi1 = {}; ((itemsN1 && itemsN1.rows) || []).forEach(x => { mi1[x.item] = x; });
+    itemFunnel = itemsN.rows.slice().sort((a, b) => b.views - a.views).slice(0, 15).map(x => {
+      const p = mi1[x.item] || {};
+      return {
+        item: x.item, views: x.views, carts: x.carts, purchases: x.purchases,
+        viewToCart: x.views > 0 ? x.carts / x.views : null,
+        cartToBuy: x.carts > 0 ? x.purchases / x.carts : null,
+        viewsN1: p.views || 0,
+        viewToCartN1: p.views > 0 ? p.carts / p.views : null,
+        cartToBuyN1: p.carts > 0 ? p.purchases / p.carts : null,
+      };
+    });
   }
 
   // Pages vues → byPage filtré pays (nouveau format {rows} ; repli {byPage} global)
@@ -188,7 +196,7 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   }
   // Campagnes (UTM) N vs N-1 — agrégées par campagne après filtre pays
   const campN = store.getDataset('gacampaigns', 'N'), campN1 = store.getDataset('gacampaigns', 'N1');
-  let campaigns = null;
+  let campaigns = null, lostCampaigns = null, campaignsTotals = null;
   if (campN && campN.rows) {
     const aggCamp = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const e = m[x.campaign] || (m[x.campaign] = { sessions: 0, purchases: 0, revenue: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; e.revenue += x.revenue || 0; }); return m; };
     const aN = aggCamp(campN.rows), aN1 = aggCamp(campN1 && campN1.rows);
@@ -197,36 +205,57 @@ async function buildReport({ preset, from, to, isAll, dim }) {
       return {
         campaign, sessions: v.sessions, purchases: v.purchases, revenue: v.revenue,
         conv: v.sessions > 0 ? v.purchases / v.sessions : null,
-        sessionsN1: p.sessions || 0, revenueN1: p.revenue || 0,
+        sessionsN1: p.sessions || 0, purchasesN1: p.purchases || 0, revenueN1: p.revenue || 0,
+        convN1: p.sessions > 0 ? p.purchases / p.sessions : null,
       };
     }).sort((a, b) => b.sessions - a.sessions).slice(0, 20);
+    // Totaux
+    const sum = (o, k) => Object.values(o).reduce((s, x) => s + (x[k] || 0), 0);
+    campaignsTotals = {
+      sessions: sum(aN, 'sessions'), purchases: sum(aN, 'purchases'), revenue: sum(aN, 'revenue'),
+      sessionsN1: sum(aN1, 'sessions'), purchasesN1: sum(aN1, 'purchases'), revenueN1: sum(aN1, 'revenue'),
+    };
+    // Meilleures campagnes N-1 qu'on n'a plus (présentes N-1, absentes/quasi nulles en N)
+    lostCampaigns = Object.entries(aN1).filter(([c, v]) => v.sessions >= 100 && (!aN[c] || aN[c].sessions < v.sessions * 0.2))
+      .map(([campaign, v]) => ({ campaign, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[campaign] || {}).sessions || 0 }))
+      .sort((a, b) => b.revenueN1 - a.revenueN1).slice(0, 10);
   }
-  // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays
-  const clN = store.getDataset('gacampaignland', 'N');
+  // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
+  const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
   let campaignLanding = null;
   if (clN && clN.rows) {
-    const byCL = {};
-    clN.rows.forEach(x => { if (!keepGeoRow(x)) return; const k = x.campaign + '¦' + x.page; const e = byCL[k] || (byCL[k] = { campaign: x.campaign, page: x.page, sessions: 0, purchases: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; });
-    const byC = {};
-    Object.values(byCL).forEach(x => { (byC[x.campaign] = byC[x.campaign] || []).push(x); });
-    campaignLanding = Object.entries(byC).map(([campaign, arr]) => {
-      arr.sort((a, b) => b.sessions - a.sessions);
-      const top = arr[0], tot = arr.reduce((s, a) => s + a.sessions, 0);
+    const topLandByCampaign = rows => {
+      const byCL = {};
+      (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.campaign + '¦' + x.page; const e = byCL[k] || (byCL[k] = { campaign: x.campaign, page: x.page, sessions: 0, purchases: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; });
+      const byC = {};
+      Object.values(byCL).forEach(x => { (byC[x.campaign] = byC[x.campaign] || []).push(x); });
+      const res = {};
+      Object.entries(byC).forEach(([campaign, arr]) => { arr.sort((a, b) => b.sessions - a.sessions); const top = arr[0], tot = arr.reduce((s, a) => s + a.sessions, 0); res[campaign] = { landing: top.page, sessions: top.sessions, purchases: top.purchases, share: tot > 0 ? top.sessions / tot : null }; });
+      return res;
+    };
+    const cN = topLandByCampaign(clN.rows), cN1 = topLandByCampaign(clN1 && clN1.rows);
+    campaignLanding = Object.entries(cN).map(([campaign, v]) => {
+      const p = cN1[campaign] || {};
       return {
-        campaign, landing: top.page, sessions: top.sessions, purchases: top.purchases,
-        share: tot > 0 ? top.sessions / tot : null, conv: top.sessions > 0 ? top.purchases / top.sessions : null,
+        campaign, landing: v.landing, sessions: v.sessions, purchases: v.purchases, share: v.share,
+        conv: v.sessions > 0 ? v.purchases / v.sessions : null,
+        sessionsN1: p.sessions || 0, convN1: p.sessions > 0 ? p.purchases / p.sessions : null,
       };
     }).filter(x => x.sessions >= 20).sort((a, b) => b.sessions - a.sessions).slice(0, 20);
   }
 
-  // Top pages par source (N vs N-1) — agrégées par (source,page) après filtre pays
+  // Top pages par source (N vs N-1) — sessions + revenu, agrégées par (source,page) après filtre pays
   const psN = store.getDataset('gapagesrc', 'N'), psN1 = store.getDataset('gapagesrc', 'N1');
-  let topPagesBySource = null;
+  let topPagesBySource = null, lostPagesBySource = null;
   if (psN && psN.rows) {
-    const aggPS = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.source + '¦' + x.page; const e = m[k] || (m[k] = { source: x.source, page: x.page, views: 0 }); e.views += x.views; }); return m; };
+    const aggPS = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.source + '¦' + x.page; const e = m[k] || (m[k] = { source: x.source, page: x.page, sessions: 0, revenue: 0, views: 0 }); e.sessions += (x.sessions || x.views || 0); e.revenue += x.revenue || 0; e.views += x.views || 0; }); return m; };
     const aN = aggPS(psN.rows), aN1 = aggPS(psN1 && psN1.rows);
-    topPagesBySource = Object.values(aN).sort((a, b) => b.views - a.views).slice(0, 20)
-      .map(x => ({ source: x.source, page: x.page, viewsN: x.views, viewsN1: (aN1[x.source + '¦' + x.page] || {}).views || 0 }));
+    topPagesBySource = Object.values(aN).sort((a, b) => b.sessions - a.sessions).slice(0, 20)
+      .map(x => { const p = aN1[x.source + '¦' + x.page] || {}; return { source: x.source, page: x.page, sessions: x.sessions, revenue: x.revenue, sessionsN1: p.sessions || 0, revenueN1: p.revenue || 0 }; });
+    // Meilleures combinaisons source/page N-1 qu'on n'a plus
+    lostPagesBySource = Object.entries(aN1).filter(([k, v]) => v.sessions >= 50 && (!aN[k] || aN[k].sessions < v.sessions * 0.25))
+      .map(([, v]) => ({ source: v.source, page: v.page, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[v.source + '¦' + v.page] || {}).sessions || 0 }))
+      .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
   }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
   const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
@@ -333,8 +362,11 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     lostPages,
     newPages,
     campaigns,
+    campaignsTotals,
+    lostCampaigns,
     campaignLanding,
     topPagesBySource,
+    lostPagesBySource,
     ga: gaCalcN,
     gaN1: gaCalcN1,
   };
