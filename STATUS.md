@@ -24,7 +24,11 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
   Global/EShop/FR/Inter) ; **Suivi temporel** = N-1 superposé + granularité **Heure/Jour/Semaine**
   (auto ; heure via colonne OMS « Heure ») + 2ᵉ courbe **Trafic (sessions N/N-1) & taux d'ajout panier**.
   Serveur : `gaDailyMetrics`, `dailySeries` enrichi (carts/addRate), `hourlySeries`, `rep.dailyN1`/`rep.hourly`.
-- ⏭️ Restent D (offre/cross-canal/qualité), E (PDF luxe).
+- ✅ **Connecteur WSHOP** (squelette, 75d9f73) : `server/wshop.js` (source OMS via API), calqué sur ga4.js,
+  inactif tant que non configuré. **À finaliser depuis la doc** (403 sur developers.wshop.com) : 3 points
+  marqués — (1) auth, (2) endpoint commandes + pagination, (3) mapping champs JSON → colonnes OMS.
+  Env : WSHOP_API_BASE/TOKEN/SHOP_ID/MONTHS.
+- ⏭️ Restent D (offre/cross-canal/qualité), E (PDF luxe), finalisation WSHOP.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
