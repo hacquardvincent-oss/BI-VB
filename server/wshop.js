@@ -159,6 +159,32 @@ function buildOmsDataset(orders, fromISO, toISO) {
   };
 }
 
+// Retours : extraits du champ orderRefund des commandes → dataset « ret » standard.
+function buildReturnsDataset(orders, from, to) {
+  const hdrs = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses'];
+  const objRows = [];
+  (orders || []).forEach(o => {
+    const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
+    (o.orderRefund || []).forEach(rf => {
+      const m = String(rf.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const raison = rf.refundType === 'manual' ? 'Remboursement manuel' : (rf.refundType === 'return' ? 'Retour client' : (rf.refundType || ''));
+      objRows.push({
+        'Date creation': m ? `${m[3]}/${m[2]}/${m[1]}` : '',
+        'Montant rembourse': Number(rf.amount) || 0,
+        'Numero de retour': rf.returnId || '',
+        'Raison': raison, 'Pays livraison': pays, 'Nb colisages rembourses': 1,
+      });
+    });
+  });
+  const rows = objRows.map(o => hdrs.map(h => (o[h] == null ? '' : String(o[h]))));
+  const map = calc.autoMap(hdrs, calc.RET_ALIASES);
+  const { min, max } = calc.dateBounds(rows, map);
+  return {
+    hdrs, rows, map, filename: `WSHOP retours (${from} → ${to})`,
+    row_count: rows.length, date_min: min, date_max: max, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString(),
+  };
+}
+
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
 // opts : { from, to, cfrom, cto } (ISO YYYY-MM-DD). Sans dates → fenêtre par défaut (WSHOP_MONTHS).
 async function refresh(opts = {}) {
@@ -174,14 +200,17 @@ async function refresh(opts = {}) {
   const dsN = buildOmsDataset(ordersN, from, to);
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
   store.setDataset('oms', 'N', dsN);
+  store.setDataset('ret', 'N', buildReturnsDataset(ordersN, from, to)); // retours (orderRefund)
   // Période N-1 (comparatif) si fournie
   let n1 = null;
   if (opts.cfrom && opts.cto) {
     const ordersN1 = await fetchOrders(opts.cfrom, opts.cto);
     const dsN1 = buildOmsDataset(ordersN1, opts.cfrom, opts.cto);
     if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
+    store.setDataset('ret', 'N1', buildReturnsDataset(ordersN1, opts.cfrom, opts.cto));
   }
-  return { orders: ordersN.length, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1 };
+  const retN = store.getDataset('ret', 'N');
+  return { orders: ordersN.length, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: retN ? retN.row_count : 0 };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────

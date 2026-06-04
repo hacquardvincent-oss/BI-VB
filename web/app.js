@@ -109,11 +109,8 @@ const sgn = p => (p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(0) + '%');
 const PALETTE = ['#f5a623', '#4a9eff', '#22c55e', '#ef4444', '#a78bfa', '#f472b6', '#34d399', '#fbbf24'];
 
 const SOURCES = [
-  { key: 'oms', name: '🛒 EShop (OMS)', periods: ['N', 'N1'] },
+  { key: 'oms', name: '🛒 EShop (OMS) — secours si pas d\'API WSHOP', periods: ['N', 'N1'] },
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
-  { key: 'ref', name: '📋 Référentiel', periods: ['N'] },
-  { key: 'impl', name: '🧵 Implantation saison (N=E26 / N-1=E25)', periods: ['N', 'N1'] },
-  { key: 'ret', name: '↩️ Retours (wshop)', periods: ['N', 'N1'] },
 ];
 
 async function me() {

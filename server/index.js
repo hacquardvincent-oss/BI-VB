@@ -6,6 +6,7 @@
 // ============================================================================
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cookieSession = require('cookie-session');
 
@@ -52,7 +53,26 @@ if (!process.env.ADMIN_PASSWORD) {
   console.warn('[bidash] ADMIN_PASSWORD non défini → connexion impossible. Définir la variable d’environnement.');
 }
 
-// Démarrage : init base (si configurée) + hydratation RAM, puis écoute.
+// Fichiers de référence versionnés (specs/) → chargés automatiquement au démarrage,
+// pour que Référentiel + Implantation E26/E25 soient toujours présents sans dépôt manuel.
+function loadSpecs() {
+  const dir = path.join(__dirname, '..', 'specs');
+  const files = [
+    ['ref', 'N', 'Referentiel produit.xlsx'],
+    ['impl', 'N', 'Implantation E26.xlsx'],
+    ['impl', 'N1', 'Implantation E25.xlsx'],
+  ];
+  for (const [source, period, name] of files) {
+    const p = path.join(dir, name);
+    try {
+      if (!fs.existsSync(p)) { console.warn(`[specs] ${name} introuvable — ignoré`); continue; }
+      const r = ingest.ingestBuffer(source, period, fs.readFileSync(p), name, 'specs');
+      console.log(`[specs] ${name} → ${source}-${period} : ${r.rows} lignes`);
+    } catch (e) { console.error(`[specs] ${name} KO :`, e.message); }
+  }
+}
+
+// Démarrage : init base (si configurée) + hydratation RAM + fichiers specs, puis écoute.
 (async () => {
   try {
     await db.init();
@@ -61,6 +81,7 @@ if (!process.env.ADMIN_PASSWORD) {
   } catch (e) {
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
   }
+  loadSpecs();
   const mode = db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)';
   app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT} — ${mode}`));
 })();

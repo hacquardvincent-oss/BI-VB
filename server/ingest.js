@@ -34,7 +34,8 @@ function anonymize(hdrs, rows) {
 function parseBuffer(buf, filename, source) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (ext === 'xlsx' || ext === 'xls') {
-    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    // sheets:0 → ne parse que la 1ère feuille (classeurs lourds multi-feuilles : perf)
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: 0 });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (source === 'ga') {
       return calc.parseGAcsv(XLSX.utils.sheet_to_csv(sheet, { FS: ',' }));
@@ -53,32 +54,32 @@ function parseBuffer(buf, filename, source) {
 
 const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
 
+// Parse + anonymise + mappe + stocke un buffer (réutilisé par la route ET le chargement auto SPECS)
+function ingestBuffer(source, period, buffer, filename, uploadedBy) {
+  let { hdrs, rows } = parseBuffer(buffer, filename, source);
+  if (!hdrs.length) throw new Error('Fichier vide ou illisible');
+  let dropped = [];
+  if (ANONYMIZE.has(source)) ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
+  const map = calc.autoMap(hdrs, aliasesFor(source));
+  if (source === 'oms') calc.ensureRefExtIdx(hdrs, map);
+  let dateMin = null, dateMax = null;
+  if (source === 'oms' || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
+  store.setDataset(source, period, {
+    hdrs, rows, map, filename,
+    row_count: rows.length, date_min: dateMin, date_max: dateMax,
+    uploaded_by: uploadedBy || 'import', uploaded_at: new Date().toISOString(),
+  });
+  return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
+}
+
 router.post('/:source/:period', requireAuth, upload.single('file'), (req, res) => {
   const { source, period } = req.params;
   if (!SOURCES.includes(source) || !PERIODS.includes(period))
     return res.status(400).json({ error: 'Source ou période invalide' });
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
-
   try {
-    let { hdrs, rows } = parseBuffer(req.file.buffer, req.file.originalname, source);
-    if (!hdrs.length) return res.status(400).json({ error: 'Fichier vide ou illisible' });
-
-    let dropped = [];
-    if (ANONYMIZE.has(source)) ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
-
-    const map = calc.autoMap(hdrs, aliasesFor(source));
-    if (source === 'oms') calc.ensureRefExtIdx(hdrs, map);
-
-    let dateMin = null, dateMax = null;
-    if (source === 'oms' || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
-
-    store.setDataset(source, period, {
-      hdrs, rows, map, filename: req.file.originalname,
-      row_count: rows.length, date_min: dateMin, date_max: dateMax,
-      uploaded_by: req.session.username, uploaded_at: new Date().toISOString(),
-    });
-
-    res.json({ source, period, filename: req.file.originalname, rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped });
+    const r = ingestBuffer(source, period, req.file.buffer, req.file.originalname, req.session.username);
+    res.json({ source, period, filename: req.file.originalname, ...r });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -91,4 +92,4 @@ router.delete('/:source/:period', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router };
+module.exports = { router, ingestBuffer };
