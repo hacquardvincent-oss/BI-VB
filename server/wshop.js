@@ -5,11 +5,9 @@
 // l'API WSHOP et alimente le store comme un dépôt OMS (slot oms-N), AVEC
 // anonymisation by-design (on ne mappe AUCUNE colonne PII).
 //
-// ⚠️ TROIS POINTS À CALER SUR LA DOC WSHOP (https://developers.wshop.com) :
-//    (1) AUTHENTIFICATION  → fonction authHeaders()
-//    (2) ENDPOINT COMMANDES + PAGINATION → fonction fetchOrders()
-//    (3) MAPPING DES CHAMPS JSON → colonnes OMS → fonction orderToRow()
-// Le reste (config, période, assemblage dataset, routes, UI) est prêt.
+//    (1) AUTHENTIFICATION  → ✅ FAIT (POST /api/v1/authenticate {user,pwd} → JWT 1h)
+//    (2) ENDPOINT COMMANDES + PAGINATION → fetchOrders()  ⚠️ à caler (doc inaccessible 403)
+//    (3) MAPPING DES CHAMPS JSON → colonnes OMS → orderToRows()  ⚠️ à caler
 // ============================================================================
 const express = require('express');
 const store = require('./store');
@@ -19,33 +17,50 @@ const calc = require('./calc');
 const router = express.Router();
 
 // ── Configuration (variables d'environnement) ──────────────────────────────
-//   WSHOP_API_BASE  : racine de l'API (ex. https://api.wshop.com)         [requis]
-//   WSHOP_TOKEN     : jeton Bearer (ou clé API)                            [requis]
-//   WSHOP_SHOP_ID   : identifiant boutique si l'API le demande            [optionnel]
-//   WSHOP_MONTHS    : profondeur d'historique à importer (défaut 24 mois) [optionnel]
-const CFG = () => ({
-  base: (process.env.WSHOP_API_BASE || '').replace(/\/$/, ''),
-  token: process.env.WSHOP_TOKEN || '',
-  shopId: process.env.WSHOP_SHOP_ID || '',
-  months: parseInt(process.env.WSHOP_MONTHS || '24', 10) || 24,
-});
-function isConfigured() { const c = CFG(); return !!(c.base && c.token); }
-
-// (1) ⚠️ AUTHENTIFICATION — à confirmer dans la doc (Bearer ? clé API ? en-tête custom ?)
-function authHeaders() {
-  const c = CFG();
+//   WSHOP_INSTANCE : instance attribuée par WSHOP (base https://{instance}.wshop.cloud)
+//   WSHOP_USER     : email de connexion
+//   WSHOP_PWD      : mot de passe
+//   WSHOP_PREPROD  : "1" pour viser la préproduction (preprod-bo-{instance}.wshop.cloud)
+//   WSHOP_API_BASE : override direct de la base (sinon construite depuis l'instance)
+//   WSHOP_MONTHS   : profondeur d'historique importé (défaut 24 mois)
+const CFG = () => {
+  const instance = process.env.WSHOP_INSTANCE || '';
+  const preprod = /^(1|true|yes)$/i.test(process.env.WSHOP_PREPROD || '');
+  const base = (process.env.WSHOP_API_BASE
+    || (instance ? (preprod ? `https://preprod-bo-${instance}.wshop.cloud` : `https://${instance}.wshop.cloud`) : '')).replace(/\/$/, '');
   return {
-    Authorization: `Bearer ${c.token}`, // ← adapter si la doc impose un autre schéma
-    Accept: 'application/json',
-    ...(c.shopId ? { 'X-Shop-Id': c.shopId } : {}), // ← nom d'en-tête à confirmer
+    base, instance,
+    user: process.env.WSHOP_USER || '',
+    pwd: process.env.WSHOP_PWD || '',
+    months: parseInt(process.env.WSHOP_MONTHS || '24', 10) || 24,
   };
+};
+function isConfigured() { const c = CFG(); return !!(c.base && c.user && c.pwd); }
+
+// (1) ✅ AUTHENTIFICATION — POST /api/v1/authenticate {user, pwd} → { success, token }
+//     Le JWT est valable 1h ; on le met en cache (~55 min) et on le rejoue en Bearer.
+let _tok = { value: '', exp: 0 };
+async function getToken(force = false) {
+  if (!force && _tok.value && Date.now() < _tok.exp) return _tok.value;
+  const c = CFG();
+  const res = await fetch(`${c.base}/api/v1/authenticate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ user: c.user, pwd: c.pwd }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.token) throw new Error(`WSHOP auth ${res.status} : ${(j.error && j.error.message) || 'échec d\'authentification'}`);
+  _tok = { value: j.token, exp: Date.now() + 55 * 60 * 1000 };
+  return _tok.value;
 }
 
 async function apiGet(path, params = {}) {
   const c = CFG();
   const url = new URL(c.base + path);
   Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') url.searchParams.set(k, v); });
-  const res = await fetch(url.toString(), { headers: authHeaders() });
+  const call = async () => fetch(url.toString(), { headers: { Authorization: `Bearer ${await getToken()}`, Accept: 'application/json' } });
+  let res = await call();
+  if (res.status === 403) { await getToken(true); res = await call(); } // jeton expiré → on régénère une fois
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`WSHOP API ${res.status} ${path} : ${txt.slice(0, 300)}`);
@@ -114,7 +129,7 @@ function buildOmsDataset(orders, fromISO, toISO) {
 // Importe l'historique OMS depuis WSHOP dans le slot oms-N (le sélecteur de dates
 // gère ensuite N / N-1). Profondeur = WSHOP_MONTHS (défaut 24 mois).
 async function refresh() {
-  if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_API_BASE / WSHOP_TOKEN manquants)');
+  if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
   const c = CFG();
   const to = new Date();
   const from = new Date(); from.setMonth(from.getMonth() - c.months);
