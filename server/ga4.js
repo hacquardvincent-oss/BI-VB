@@ -146,6 +146,40 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
   }));
 }
 
+// ── Campagnes (UTM) : sessions → panier → achat ─────────────────────────────
+async function fetchCampaigns(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'sessionCampaignName' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }, { name: 'addToCarts' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    limit: 150,
+  });
+  return (data.rows || []).map(r => ({
+    campaign: r.dimensionValues[0].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0,
+    purchases: parseFloat(r.metricValues[1].value) || 0,
+    revenue: parseFloat(r.metricValues[2].value) || 0,
+    addToCarts: parseFloat(r.metricValues[3].value) || 0,
+  }));
+}
+
+// ── Campagne × page d'atterrissage (cohérence campagne/redirection/landing) ──
+async function fetchCampaignLanding(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'sessionCampaignName' }, { name: 'landingPage' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    limit: 400,
+  });
+  return (data.rows || []).map(r => ({
+    campaign: r.dimensionValues[0].value, page: r.dimensionValues[1].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0,
+    purchases: parseFloat(r.metricValues[1].value) || 0,
+  }));
+}
+
 function toDataset(parsed, startDate, endDate) {
   const map = calc.autoMap(parsed.hdrs, calc.GA_ALIASES);
   return {
@@ -176,6 +210,8 @@ async function refresh() {
   store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  store.setDataset('gacampaigns', 'N', { rows: await fetchCampaigns(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
+  store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: new Date().toISOString() });
   let n1Count = null;
   if (n1) {
     const dataN1 = await fetchGA4(propertyId, n1.start, n1.end);
@@ -184,6 +220,7 @@ async function refresh() {
     store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     store.setDataset('gaitems', 'N1', { rows: await fetchItemFunnel(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
+    store.setDataset('gacampaigns', 'N1', { rows: await fetchCampaigns(propertyId, n1.start, n1.end), uploaded_at: new Date().toISOString() });
     n1Count = dataN1.rows.length;
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count };

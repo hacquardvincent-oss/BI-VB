@@ -169,6 +169,47 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     topPages = [...keys].map(p => ({ page: p, viewsN: bN[p] || 0, viewsN1: bN1[p] || 0 }))
       .sort((a, b) => b.viewsN - a.viewsN).slice(0, 15);
   }
+  // Pages performantes disparues (fortes en N-1, absentes/faibles en N) & nouvelles
+  let lostPages = null, newPages = null;
+  if (pagesN && pagesN.byPage) {
+    const bN = pagesN.byPage, bN1 = (pagesN1 && pagesN1.byPage) || {};
+    if (Object.keys(bN1).length) {
+      lostPages = Object.keys(bN1).map(p => ({ page: p, viewsN: bN[p] || 0, viewsN1: bN1[p] }))
+        .filter(x => x.viewsN1 >= 50 && x.viewsN < x.viewsN1 * 0.25).sort((a, b) => b.viewsN1 - a.viewsN1).slice(0, 15);
+      newPages = Object.keys(bN).map(p => ({ page: p, viewsN: bN[p], viewsN1: bN1[p] || 0 }))
+        .filter(x => x.viewsN >= 50 && x.viewsN1 < x.viewsN * 0.25).sort((a, b) => b.viewsN - a.viewsN).slice(0, 15);
+    }
+  }
+  // Campagnes (UTM) N vs N-1
+  const campN = store.getDataset('gacampaigns', 'N'), campN1 = store.getDataset('gacampaigns', 'N1');
+  let campaigns = null;
+  if (campN && campN.rows) {
+    const m1 = {}; ((campN1 && campN1.rows) || []).forEach(x => { m1[x.campaign] = x; });
+    campaigns = campN.rows.slice().sort((a, b) => b.sessions - a.sessions).slice(0, 20).map(x => {
+      const p = m1[x.campaign] || {};
+      return {
+        campaign: x.campaign, sessions: x.sessions, purchases: x.purchases, revenue: x.revenue,
+        conv: x.sessions > 0 ? x.purchases / x.sessions : null,
+        sessionsN1: p.sessions || 0, revenueN1: p.revenue || 0,
+      };
+    });
+  }
+  // Cohérence campagne → page d'atterrissage (landing principale + conversion)
+  const clN = store.getDataset('gacampaignland', 'N');
+  let campaignLanding = null;
+  if (clN && clN.rows) {
+    const byC = {};
+    clN.rows.forEach(x => { (byC[x.campaign] = byC[x.campaign] || []).push(x); });
+    campaignLanding = Object.entries(byC).map(([campaign, arr]) => {
+      arr.sort((a, b) => b.sessions - a.sessions);
+      const top = arr[0], tot = arr.reduce((s, a) => s + a.sessions, 0);
+      return {
+        campaign, landing: top.page, sessions: top.sessions, purchases: top.purchases,
+        share: tot > 0 ? top.sessions / tot : null, conv: top.sessions > 0 ? top.purchases / top.sessions : null,
+      };
+    }).filter(x => x.sessions >= 20).sort((a, b) => b.sessions - a.sessions).slice(0, 20);
+  }
+
   // Top pages par source (N vs N-1)
   const psN = store.getDataset('gapagesrc', 'N'), psN1 = store.getDataset('gapagesrc', 'N1');
   let topPagesBySource = null;
@@ -280,6 +321,10 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     landingPages,
     itemFunnel,
     topPages,
+    lostPages,
+    newPages,
+    campaigns,
+    campaignLanding,
     topPagesBySource,
     ga: gaCalcN,
     gaN1: gaCalcN1,

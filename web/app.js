@@ -54,15 +54,15 @@ const MODULES = {
   },
   ga: {
     icon: '🔎', label: 'GA dédié', preset: 'all',
-    intro: 'Analyse GA + objectifs (% d’atteinte). Cadrage période/CA via l’OMS.',
+    intro: 'Analyse GA + objectifs : funnel, campagnes, landing×conv, pages disparues, cohérence campagne→landing.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['gafunnel', 'channels', 'device', 'landing', 'pages', 'pagesrc', 'itemfunnel'],
+    layout: ['gafunnel', 'channels', 'campaigns', 'campaignland', 'device', 'landing', 'pages', 'lostpages', 'pagesrc', 'itemfunnel'],
   },
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
+    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'campaigns', 'campaignland', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'lostpages', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
   },
 };
 
@@ -76,9 +76,9 @@ const THEME_ORDER = ['A', 'T', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const THEME_OF = {
   kpi: 'A', ca: 'A',
   daily: 'T',
-  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B',
+  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B', campaigns: 'B', campaignland: 'B',
   funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
-  pages: 'D', landing: 'D',
+  pages: 'D', landing: 'D', lostpages: 'D',
   famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
   marketplace: 'F', crosschannel: 'F',
   pays: 'G', ttpays: 'G',
@@ -471,9 +471,12 @@ function renderReport(rep) {
   // TT par pays
   const ttRows = (rep.ttPays || []).map(p => `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${fEur(p.ca)}</td></tr>`).join('');
   const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT</th><th>CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources.</div></div>` : '';
-  // Pages d'atterrissage × conversion
-  const landRows = (rep.landingPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.purchases)}</td><td>${p.convRate != null ? fPct(p.convRate) : '—'}</td><td>${fEur(p.revenue)}</td></tr>`).join('');
-  const landingCard = landRows ? `<div class="card"><h3>Pages d'atterrissage × conversion</h3><table><thead><tr><th>Landing page</th><th>Sessions</th><th>Achats</th><th>Conv.</th><th>Revenu</th></tr></thead><tbody>${landRows}</tbody></table><div class="note">Top pages d'entrée : forte audience + faible conversion = trafic peu qualifié ou page à retravailler.</div></div>` : '';
+  // Pages d'atterrissage × conversion (N vs N-1)
+  const landRows = (rep.landingPages || []).map(p => {
+    const dc = pc(p.convRate, p.convRateN1);
+    return `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.purchases)}</td><td>${p.convRate != null ? fPct(p.convRate) : '—'}</td><td>${p.convRateN1 != null ? fPct(p.convRateN1) : '—'}</td><td class="${dc != null && dc < 0 ? 'dn' : (dc > 0 ? 'up' : '')}">${dc != null ? sgn(dc) : '—'}</td><td>${fEur(p.revenue)}</td></tr>`;
+  }).join('');
+  const landingCard = landRows ? `<div class="card"><h3>Pages d'atterrissage × conversion — N vs N-1</h3><table><thead><tr><th>Landing page</th><th>Sessions</th><th>Achats</th><th>Conv. N</th><th>Conv. N-1</th><th>Δ conv.</th><th>Revenu</th></tr></thead><tbody>${landRows}</tbody></table><div class="note">Forte audience + faible conversion = trafic peu qualifié ou page à retravailler. Δ conv. en rouge = la page convertit moins bien que l'an dernier.</div></div>` : '';
   // Funnel produit (vues → panier → achat)
   const itRows = (rep.itemFunnel || []).map(p => `<tr><td title="${esc(p.item)}">${esc(p.item)}</td><td>${fInt(p.views)}</td><td>${fInt(p.carts)}</td><td class="${p.viewToCart != null && p.viewToCart < 0.05 ? 'dn' : ''}">${p.viewToCart != null ? fPct(p.viewToCart) : '—'}</td><td>${fInt(p.purchases)}</td><td>${p.cartToBuy != null ? fPct(p.cartToBuy) : '—'}</td></tr>`).join('');
   const itemFunnelCard = itRows ? `<div class="card"><h3>Funnel produit — vues → panier → achat</h3><table><thead><tr><th>Produit</th><th>Vues</th><th>Paniers</th><th>Vue→Panier</th><th>Achats</th><th>Panier→Achat</th></tr></thead><tbody>${itRows}</tbody></table><div class="note">Faible « vue→panier » (en rouge) = prix/visuel/photo à revoir ; faible « panier→achat » = stock/taille/livraison.</div></div>` : '';
@@ -483,6 +486,19 @@ function renderReport(rep) {
   // Top pages par source
   const psRows = (rep.topPagesBySource || []).map(p => `<tr><td>${esc(p.source)}</td><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN)}</td><td>${fInt(p.viewsN1)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('');
   const pagesrcCard = psRows ? `<div class="card"><h3>Top pages par source — N vs N-1</h3><table><thead><tr><th>Source</th><th>Page</th><th>Vues N</th><th>Vues N-1</th><th>Δ</th></tr></thead><tbody>${psRows}</tbody></table></div>` : '';
+  // Campagnes (UTM) — N vs N-1
+  const campRows = (rep.campaigns || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fInt(c.sessions)}</td><td>${delta(c.sessions, c.sessionsN1)}</td><td>${fInt(c.purchases)}</td><td class="${c.conv != null && c.conv < 0.005 ? 'dn' : ''}">${c.conv != null ? fPct(c.conv) : '—'}</td><td>${fEur(c.revenue)}</td><td>${delta(c.revenue, c.revenueN1)}</td></tr>`).join('');
+  const campaignsCard = campRows ? `<div class="card"><h3>Campagnes (UTM) — N vs N-1</h3><table><thead><tr><th>Campagne</th><th>Sessions</th><th>Δ sess.</th><th>Achats</th><th>Conv.</th><th>Revenu</th><th>Δ rev.</th></tr></thead><tbody>${campRows}</tbody></table><div class="note">Conv. en rouge (&lt;0,5%) = campagne qui amène du trafic mais ne convertit pas → ciblage/landing/offre à revoir.</div></div>` : '';
+  // Pages performantes disparues / nouvelles
+  const lostRows = (rep.lostPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN1)}</td><td>${fInt(p.viewsN)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('');
+  const newRows = (rep.newPages || []).map(p => `<tr><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.viewsN)}</td><td>${fInt(p.viewsN1)}</td></tr>`).join('');
+  const lostPagesCard = (lostRows || newRows) ? `<div class="card"><h3>Pages performantes — disparues vs nouvelles</h3>
+      ${lostRows ? `<h3 style="margin-top:0">📉 Disparues (fortes N-1, absentes cette année)</h3><table><thead><tr><th>Page</th><th>Vues N-1</th><th>Vues N</th><th>Δ</th></tr></thead><tbody>${lostRows}</tbody></table>` : ''}
+      ${newRows ? `<h3 style="margin-top:14px">📈 Nouvelles (fortes cette année, absentes N-1)</h3><table><thead><tr><th>Page</th><th>Vues N</th><th>Vues N-1</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
+      <div class="note">« Disparues » = audience perdue (page dépubliée, perte SEO, merch retiré) → vérifier redirections/réassort. « Nouvelles » = ce qui porte le trafic cette année.</div></div>` : '';
+  // Cohérence campagne → page d'atterrissage
+  const clRows = (rep.campaignLanding || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td title="${esc(c.landing)}">${esc(c.landing)}</td><td>${fInt(c.sessions)}</td><td>${c.share != null ? fPct(c.share) : '—'}</td><td class="${c.conv != null && c.conv < 0.005 ? 'dn' : ''}">${c.conv != null ? fPct(c.conv) : '—'}</td></tr>`).join('');
+  const campaignLandingCard = clRows ? `<div class="card"><h3>Cohérence campagne → landing</h3><table><thead><tr><th>Campagne</th><th>Landing principale</th><th>Sessions</th><th>% du trafic</th><th>Conv.</th></tr></thead><tbody>${clRows}</tbody></table><div class="note">Vérifie la combinaison campagne / redirection / landing / merch : une campagne qui pousse vers une landing à faible conversion (rouge) = mauvais atterrissage (page hors-sujet, produit en rupture, ou merch à aligner sur le message).</div></div>` : '';
 
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
   const kpiCard = `<div class="card"><h3>KPI EShop — ${dimLabel}</h3>
@@ -554,6 +570,7 @@ function renderReport(rep) {
     pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
+    campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
   };
   const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
@@ -674,6 +691,25 @@ function ana(key, rep) {
       const p = rep.topPages; if (!p || !p.length) return '';
       const drop = p.filter(x => x.viewsN1 > 0).map(x => ({ page: x.page, d: pc(x.viewsN, x.viewsN1) })).filter(x => x.d != null).sort((a, b) => a.d - b.d)[0];
       return `Page la plus vue : ${p[0].page}.` + (drop && drop.d < -15 ? ` Forte baisse sur ${drop.page} (${sgn(drop.d)}) → à investiguer.` : '');
+    }
+    if (key === 'campaigns') {
+      const c = rep.campaigns; if (!c || !c.length) return '';
+      const weak = c.filter(x => x.sessions >= 100 && x.conv != null && x.conv < 0.005).sort((a, b) => b.sessions - a.sessions)[0];
+      const best = c.filter(x => x.conv != null).sort((a, b) => b.conv - a.conv)[0];
+      let s = '';
+      if (best) s += `Meilleure conversion : « ${best.campaign} » (${fPct(best.conv)}). `;
+      if (weak) s += `⚠ « ${weak.campaign} » amène ${fInt(weak.sessions)} sessions mais convertit à ${fPct(weak.conv)} → revoir ciblage/landing/offre.`;
+      return s || 'Charge GA4 (campagnes UTM) pour l’analyse.';
+    }
+    if (key === 'lostpages') {
+      const l = rep.lostPages; if (!l || !l.length) return rep.newPages && rep.newPages.length ? '' : '';
+      const tot = l.reduce((s, x) => s + (x.viewsN1 - x.viewsN), 0);
+      return `${l.length} page(s) performante(s) l'an dernier ont quasi disparu (${fInt(tot)} vues perdues), à commencer par « ${l[0].page} » → vérifier dépublication/redirection/SEO ou réassort du merch associé.`;
+    }
+    if (key === 'campaignland') {
+      const cl = rep.campaignLanding; if (!cl || !cl.length) return '';
+      const bad = cl.filter(x => x.sessions >= 50 && x.conv != null && x.conv < 0.005).sort((a, b) => b.sessions - a.sessions)[0];
+      return bad ? `⚠ « ${bad.campaign} » envoie ${fInt(bad.sessions)} sessions vers « ${bad.landing} » qui ne convertit pas (${fPct(bad.conv)}) → mauvaise combinaison campagne/landing/merch à corriger.` : 'Cohérence campagne→landing globalement correcte.';
     }
     if (key === 'saisoncompare') {
       const sc = rep.seasonCompare; if (!sc) return '';
