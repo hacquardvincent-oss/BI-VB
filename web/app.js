@@ -2,9 +2,11 @@
 // ============================================================================
 // app.js — UI BiDash V2 : dépôt fichiers, sélection période, rendu reporting.
 // ============================================================================
-let CURRENT = 'month';
+let CURRENT = 'all';
 let CURRENT_DIM = 'global';
-let CURRENT_MODULE = 'direction';
+let CURRENT_MODULE = 'full';
+let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
+let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
@@ -118,6 +120,11 @@ async function me() {
   if (!r.ok) { location.href = '/login.html'; return null; }
   const u = await r.json();
   document.getElementById('who').textContent = `${u.username}`;
+  PERSIST = !!u.dbAccounts;
+  const pn = document.getElementById('persistNote');
+  if (pn) pn.innerHTML = PERSIST
+    ? '🟢 Persistance active : les fichiers sont conservés (base de données) — pas besoin de les re-déposer.'
+    : '⚠️ <b>Mode mémoire</b> : les fichiers sont perdus si le serveur se met en veille ou redéploie → il faut les re-déposer. Pour ne plus jamais re-importer, activez la base (variable <code>DATABASE_URL</code>).';
   if (u.role === 'admin' && u.dbAccounts) {
     document.getElementById('accountsCard').classList.remove('hidden');
     loadUsers();
@@ -196,18 +203,16 @@ async function loadStatus() {
 // Barre de modules
 function initModules() {
   const bar = document.getElementById('moduleBar');
-  bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Module</span>'
-    + Object.entries(MODULES).map(([k, m]) => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${m.icon} ${m.label}</button>`).join('');
+  const entries = Object.entries(MODULES).sort((a, b) => (a[0] === 'full' ? -1 : b[0] === 'full' ? 1 : 0));
+  bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
+    + entries.map(([k, m]) => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${m.icon} ${m.label}</button>`).join('');
   bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
     bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     CURRENT_MODULE = b.dataset.mod;
     const m = MODULES[CURRENT_MODULE];
-    if (m.preset) {
-      CURRENT = m.preset;
-      document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x.dataset.preset === CURRENT));
-    }
-    // Dimension : module qui l'impose (International → hors France), sinon retour au global
+    // La période est pilotée par le sélecteur de dates (indépendant de la vue).
+    // Dimension : vue qui l'impose (International → hors France), sinon retour au global.
     CURRENT_DIM = m.dim || 'global';
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
     renderModuleHint();
@@ -277,12 +282,29 @@ async function upload(source, period, file) {
   loadReport();
 }
 
+function fillDateInputs(meta) {
+  if (!meta) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+  set('dNfrom', meta.from); set('dNto', meta.to); set('dCfrom', meta.cf); set('dCto', meta.ct);
+}
+function reportQuery() {
+  if (DATES) return `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`;
+  return `preset=all&dim=${CURRENT_DIM}`;
+}
 async function loadReport() {
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement…</div>';
-  const r = await fetch(`/api/report?preset=${CURRENT}&dim=${CURRENT_DIM}`);
+  const r = await fetch(`/api/report?${reportQuery()}`);
   const rep = await r.json();
-  if (rep.empty) { box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée')}</div>`; return; }
+  if (rep.empty) {
+    await loadStatus(); // resynchronise le panneau de dépôt avec l'état réel du serveur
+    box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée')}`
+      + (PERSIST ? '' : '<div class="note">⚠️ Mode mémoire : si des fichiers apparaissent « vide » ci-dessus alors que vous les aviez déposés, le serveur a redémarré/veillé et les a perdus → re-déposez-les. Activez la base (DATABASE_URL) pour ne plus jamais re-importer.</div>')
+      + '</div>';
+    return;
+  }
+  // Pré-remplit les calendriers (1ère fois) avec la plage du rapport
+  fillDateInputs(rep.meta);
   document.getElementById('metaNote').innerHTML =
     `<b>${DIM_LABEL[rep.meta.dim] || 'Global'}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
     + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
@@ -870,13 +892,24 @@ document.getElementById('logout').addEventListener('click', async () => {
   location.href = '/login.html';
 });
 document.getElementById('pdf').addEventListener('click', () => {
-  window.open(`/api/report/pdf?preset=${CURRENT}&dim=${CURRENT_DIM}`, '_blank');
+  window.open(`/api/report/pdf?${reportQuery()}`, '_blank');
 });
 document.getElementById('acAdd').addEventListener('click', addUser);
-document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('[data-preset]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); CURRENT = b.dataset.preset; loadReport();
-}));
+// Sélecteur de dates : Appliquer (plage N + N-1) / Tout (plage complète auto)
+document.getElementById('applyDates').addEventListener('click', () => {
+  const v = id => document.getElementById(id).value;
+  const nf = v('dNfrom'), nt = v('dNto'), cf = v('dCfrom'), ct = v('dCto');
+  if (!nf || !nt) { document.getElementById('metaNote').textContent = '⚠ Renseigner au moins la période N (début et fin).'; return; }
+  DATES = { from: nf, to: nt, cfrom: cf || '', cto: ct || '' };
+  document.getElementById('datesAll').classList.remove('on');
+  loadReport();
+});
+document.getElementById('datesAll').addEventListener('click', () => {
+  DATES = null;
+  document.getElementById('datesAll').classList.add('on');
+  ['dNfrom', 'dNto', 'dCfrom', 'dCto'].forEach(id => { document.getElementById(id).value = ''; });
+  loadReport(); // le rapport renverra la plage complète et re-remplira les calendriers
+});
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); CURRENT_DIM = b.dataset.dim; loadReport();
@@ -886,8 +919,9 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
 (async () => {
   if (!(await me())) return;
   initModules();
-  CURRENT = MODULES[CURRENT_MODULE].preset;
-  document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x.dataset.preset === CURRENT));
+  const m = MODULES[CURRENT_MODULE];
+  CURRENT_DIM = m.dim || 'global';
+  document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
   await loadStatus();
   await ga4Status();
   await loadReport();

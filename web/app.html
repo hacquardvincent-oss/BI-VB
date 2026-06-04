@@ -41,7 +41,8 @@
 
   <!-- DÉPÔT DE FICHIERS -->
   <div class="card">
-    <h3>Dépôt des fichiers (gardés en mémoire le temps de la session — archiver via l'export PDF)</h3>
+    <h3>Dépôt des fichiers</h3>
+    <div class="note" id="persistNote"></div>
     <div class="grid sources" id="sources"></div>
     <div class="note" id="ingestNote"></div>
     <div id="ga4box" class="toolbar hidden" style="margin-top:10px">
@@ -53,12 +54,12 @@
   <!-- TOOLBAR -->
   <div class="card">
     <div class="toolbar">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Cadence</span>
-      <button class="pb" data-preset="today">Quotidien</button>
-      <button class="pb" data-preset="week">Hebdo</button>
-      <button class="pb" data-preset="month">Mensuel</button>
-      <button class="pb" data-preset="ytd">YTD</button>
-      <button class="pb on" data-preset="all">Tout</button>
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Période N</span>
+      <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
+      <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
+      <button class="btn blue" id="applyDates">Appliquer</button>
+      <button class="pb on" id="datesAll">Tout</button>
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px">Dimension</span>
       <button class="pb on" data-dim="global">Global</button>
       <button class="pb" data-dim="fr">France</button>

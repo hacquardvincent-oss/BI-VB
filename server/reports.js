@@ -40,7 +40,7 @@ function topList(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -51,9 +51,10 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
 
-  // Période
+  // Période N (preset hérité, ou plage de dates explicite)
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
-  const cf = shiftYear(from, -1), ct = shiftYear(to, -1);
+  // Période N-1 : plage explicite (sélecteur de dates) sinon décalage d'un an
+  const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
 
   // Dimension Global / FR / International : filtre les jeux GA par pays (si dispo)
   const gaNf = calc.filterGADim(gaN, dim);
@@ -374,9 +375,9 @@ async function buildReport({ preset, from, to, isAll, dim }) {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim } = req.query;
+    const { preset, from, to, dim, cfrom, cto } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
