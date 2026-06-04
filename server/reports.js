@@ -260,6 +260,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
   }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
   const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
+  const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f) : null;
+  const hourly = {
+    n: calc.hourlySeries(rowsN, omsN.map),
+    n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
+  };
 
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
@@ -355,6 +360,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto }) {
     channels,
     device,
     daily,
+    dailyN1,
+    hourly,
     gaFunnel,
     ttPays,
     landingPages,

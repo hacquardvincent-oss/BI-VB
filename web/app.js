@@ -6,6 +6,7 @@ let CURRENT = 'all';
 let CURRENT_DIM = 'global';
 let CURRENT_MODULE = 'full';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
+let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
@@ -312,7 +313,7 @@ async function loadReport() {
   LAST_REP = rep;
   box.innerHTML = renderReport(rep);
   renderObjectives(rep);
-  renderDailyChart(rep.daily);
+  renderDailyChart(rep);
   renderCharts(rep);
 }
 
@@ -388,10 +389,17 @@ function renderReport(rep) {
     funnelCard = `<div class="card"><h3>Funnel de conversion — Sessions → Commandes → CA</h3><div class="kgrid">${tiles}</div></div>`;
   }
 
-  // Suivi quotidien (graphiques)
+  // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
+  const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
   const dailyCard = (rep.daily && rep.daily.length)
-    ? `<div class="card"><h3>Suivi quotidien — CA & Sessions</h3><div style="height:240px"><canvas id="dailyChart"></canvas></div>
-       <h3 style="margin-top:14px">Taux de transformation quotidien</h3><div style="height:160px"><canvas id="ttChart"></canvas></div></div>`
+    ? `<div class="card"><h3>Suivi temporel — N vs N-1</h3>
+       <div class="toolbar" style="margin-bottom:8px"><span class="note" style="margin:0">Granularité</span>
+         ${hasHour ? '<button class="pb gran" data-gran="hour">Heure</button>' : ''}
+         <button class="pb gran" data-gran="day">Jour</button>
+         <button class="pb gran" data-gran="week">Semaine</button></div>
+       <div style="height:240px"><canvas id="dailyChart"></canvas></div>
+       <h3 style="margin-top:14px">Trafic & taux d'ajout panier</h3><div style="height:190px"><canvas id="trafChart"></canvas></div>
+       <h3 style="margin-top:14px">Taux de transformation</h3><div style="height:160px"><canvas id="ttChart"></canvas></div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -569,11 +577,17 @@ function renderReport(rep) {
   const campaignLandingCard = clRows ? `<div class="card"><h3>Cohérence campagne → landing (N vs N-1)</h3><table><thead><tr><th>Campagne</th><th>Landing principale</th><th>Sess. N</th><th>Δ</th><th>% trafic</th><th>Conv. N</th><th>Conv. N-1</th></tr></thead><tbody>${clRows}</tbody></table><div class="note">Vérifie la combinaison campagne / redirection / landing / merch : une campagne qui pousse vers une landing à faible conversion (rouge) = mauvais atterrissage. Conv. N-1 = la même campagne convertissait-elle mieux l'an dernier ?</div></div>` : '';
 
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
-  const kpiCard = `<div class="card"><h3>KPI EShop — ${dimLabel}</h3>
-      <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-      <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
-      ${ttNote}</div>`;
-  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div></div>`;
+  // Pilotage 360 : KPI (compact, à gauche) + détail CA (à droite) dans une même carte
+  const kpiCard = `<div class="card"><h3>Pilotage 360 — KPI EShop & CA — ${dimLabel}</h3>
+      <div class="grid cols2">
+        <div>
+          <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
+          <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
+          ${ttNote}
+        </div>
+        <div><div class="note" style="margin:0 0 6px">Détail du chiffre d'affaires</div><div class="kgrid">${caBlocks}</div></div>
+      </div></div>`;
+  const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
@@ -826,44 +840,78 @@ function renderCharts(rep) {
   }
 }
 
-// Graphiques quotidiens (CA+Sessions, et TT)
+// ── Suivi temporel : granularité heure/jour/semaine, N vs N-1 ───────────────
 const _charts = {};
-function renderDailyChart(daily) {
-  if (!daily || !daily.length || typeof Chart === 'undefined') return;
-  const labels = daily.map(d => { const p = d.date.split('-'); return p[2] + '/' + p[1]; });
-  const c1 = document.getElementById('dailyChart');
-  if (c1) {
-    if (_charts.d) _charts.d.destroy();
-    _charts.d = new Chart(c1.getContext('2d'), {
-      data: {
-        labels, datasets: [
-          { type: 'bar', label: 'CA', yAxisID: 'y', data: daily.map(d => Math.round(d.ca)), backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-          { type: 'line', label: 'Sessions', yAxisID: 'y1', data: daily.map(d => d.sessions), borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2 },
-        ],
-      },
-      options: {
+function isoWeek(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d)); const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - day);
+  const yStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil((((dt - yStart) / 86400000) + 1) / 7);
+  return `S${String(wk).padStart(2, '0')}`;
+}
+// Agrège une série journalière vers la granularité voulue
+function aggDaily(arr, gran) {
+  if (!arr || !arr.length) return [];
+  if (gran === 'week') {
+    const w = {};
+    arr.forEach(d => { const k = isoWeek(d.date); const e = w[k] || (w[k] = { label: k, ca: 0, commandes: 0, sessions: 0, carts: 0 }); e.ca += d.ca; e.commandes += d.commandes; e.sessions += d.sessions || 0; e.carts += d.carts || 0; });
+    return Object.values(w).map(x => ({ label: x.label, ca: x.ca, sessions: x.sessions, tt: x.sessions > 0 ? x.commandes / x.sessions : null, addRate: x.sessions > 0 ? x.carts / x.sessions : null }));
+  }
+  return arr.map(d => ({ label: d.date.slice(5), ca: d.ca, sessions: d.sessions, tt: d.tt, addRate: d.addRate }));
+}
+function renderDailyChart(rep) {
+  if (typeof Chart === 'undefined' || !rep || !rep.daily || !rep.daily.length) return;
+  const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
+  let gran = GRAN;
+  if (gran === 'auto') gran = (rep.daily.length <= 2 && hasHour) ? 'hour' : (rep.daily.length > 45 ? 'week' : 'day');
+  if (gran === 'hour' && !hasHour) gran = 'day';
+  document.querySelectorAll('#report .gran').forEach(b => { b.classList.toggle('on', b.dataset.gran === gran); b.onclick = () => { GRAN = b.dataset.gran; renderDailyChart(LAST_REP); }; });
+
+  let labels, caN, caN1, sessN, sessN1, ttN, ttN1, addN;
+  if (gran === 'hour') {
+    const hN = rep.hourly.n, hN1 = (rep.hourly && rep.hourly.n1) || [];
+    labels = hN.map(x => x.hour + 'h');
+    caN = hN.map(x => Math.round(x.ca)); caN1 = hN.map((x, i) => hN1[i] ? Math.round(hN1[i].ca) : null);
+    sessN = sessN1 = ttN = ttN1 = addN = null; // pas de trafic horaire (GA daté au jour)
+  } else {
+    const sN = aggDaily(rep.daily, gran), sN1 = aggDaily(rep.dailyN1 || [], gran);
+    labels = sN.map(x => x.label);
+    caN = sN.map(x => Math.round(x.ca)); caN1 = sN.map((x, i) => sN1[i] ? Math.round(sN1[i].ca) : null);
+    sessN = sN.map(x => x.sessions); sessN1 = sN.map((x, i) => sN1[i] ? sN1[i].sessions : null);
+    ttN = sN.map(x => x.tt != null ? +(x.tt * 100).toFixed(2) : null); ttN1 = sN.map((x, i) => (sN1[i] && sN1[i].tt != null) ? +(sN1[i].tt * 100).toFixed(2) : null);
+    addN = sN.map(x => x.addRate != null ? +(x.addRate * 100).toFixed(2) : null);
+  }
+  const xax = { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } };
+  const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
+  const mk = (id, datasets, scales, pct) => {
+    const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy();
+    _charts[id] = new Chart(el.getContext('2d'), {
+      data: { labels, datasets }, options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
-        scales: {
-          x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } },
-          y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-          y1: { position: 'right', ticks: { color: '#4a9eff', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { drawOnChartArea: false } },
-        },
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } }, tooltip: pct ? { callbacks: { label: c => ` ${c.dataset.label} ${c.raw}%` } } : {} },
+        scales,
       },
     });
-  }
-  const c2 = document.getElementById('ttChart');
-  if (c2) {
-    if (_charts.tt) _charts.tt.destroy();
-    _charts.tt = new Chart(c2.getContext('2d'), {
-      data: { labels, datasets: [{ type: 'line', label: 'TT', data: daily.map(d => d.tt != null ? +(d.tt * 100).toFixed(2) : null), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' TT ' + ctx.raw + '%' } } },
-        scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#22c55e', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(46,51,80,.4)' } } },
-      },
-    });
-  }
+  };
+  // CA N vs N-1
+  mk('dailyChart', [
+    { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
+    { type: 'line', label: 'CA N-1', yAxisID: 'y', data: caN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+  ], { x: xax, y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } } });
+  // Trafic (sessions N/N-1) + taux d'ajout panier
+  if (sessN) mk('trafChart', [
+    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2 },
+    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Taux ajout panier %', yAxisID: 'y1', data: addN, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+  ], { x: xax, y: { position: 'left', ticks: { color: '#4a9eff', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } }, y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
+  else if (_charts.trafChart) { _charts.trafChart.destroy(); }
+  // TT N vs N-1
+  if (ttN) mk('ttChart', [
+    { type: 'line', label: 'TT N', data: ttN, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true },
+    { type: 'line', label: 'TT N-1', data: ttN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+  ], { x: xax, y: { ticks: { color: '#22c55e', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(46,51,80,.4)' } } }, true);
+  else if (_charts.ttChart) { _charts.ttChart.destroy(); }
 }
 
 // GA4 API

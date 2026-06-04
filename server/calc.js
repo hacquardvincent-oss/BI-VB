@@ -81,6 +81,7 @@ const inRng = (o, f, t) => !!o && (!f || dcmp(o, f) >= 0) && (!t || dcmp(o, t) <
 // ── Dictionnaires de colonnes ───────────────────────────────────────────────
 const OMS_ALIASES = {
   date: ['date commande', 'date de commande', 'date'],
+  heure: ['heure'],
   prix: ['prix de vente paye', 'prix de vente pay', 'prix vente pay'],
   pays: ['pays livraison', 'pays de livraison'],
   mag: ['nom magasin'],
@@ -424,7 +425,26 @@ function calcByDevice(ga) {
   })).sort((x, y) => y.sessions - x.sessions);
 }
 
-// ── Série quotidienne : CA + commandes (OMS) × sessions (GA) → TT par jour ──
+// Métriques GA par jour : sessions + ajouts panier (pour le taux d'ajout panier)
+function gaDailyMetrics(ga) {
+  if (!ga || !ga.rows || !ga.hdrs) return null;
+  const di = ga.hdrs.findIndex(h => { const n = norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
+  if (di < 0) return null;
+  const map = ga.map && Object.keys(ga.map).length ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
+  const si = map.sessions, ai = map.addcart; if (si === undefined) return null;
+  const by = {};
+  ga.rows.forEach(r => {
+    const raw = (r[di] || '').trim(); let iso;
+    if (/^\d{8}$/.test(raw)) iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) iso = raw; else return;
+    const e = by[iso] || (by[iso] = { sessions: 0, carts: 0 });
+    e.sessions += parseInt(r[si]) || 0;
+    if (ai !== undefined) e.carts += parseInt(r[ai]) || 0;
+  });
+  return by;
+}
+
+// ── Série quotidienne : CA + commandes (OMS) × sessions/paniers (GA) → TT & taux d'ajout panier ──
 function dailySeries(rows, map, ga) {
   const di = map.date, pi = map.prix, ni = map.num, ti = map.type;
   const byDay = {};
@@ -436,14 +456,33 @@ function dailySeries(rows, map, ga) {
     byDay[iso].ca += fN(r[pi]);
     if (ni !== undefined && r[ni]) byDay[iso].orders.add(r[ni]);
   });
-  const sess = ga ? (getGADaily(ga) || {}) : {};
-  const days = [...new Set([...Object.keys(byDay), ...Object.keys(sess)])].sort();
+  const gm = ga ? (gaDailyMetrics(ga) || {}) : {};
+  const days = [...new Set([...Object.keys(byDay), ...Object.keys(gm)])].sort();
   return days.map(d => {
     const ca = byDay[d] ? byDay[d].ca : 0;
     const commandes = byDay[d] ? byDay[d].orders.size : 0;
-    const sessions = sess[d] || 0;
-    return { date: d, ca, commandes, sessions, tt: sessions > 0 ? commandes / sessions : null };
+    const m = gm[d] || {}; const sessions = m.sessions || 0, carts = m.carts || 0;
+    return { date: d, ca, commandes, sessions, carts, tt: sessions > 0 ? commandes / sessions : null, addRate: sessions > 0 ? carts / sessions : null };
   });
+}
+
+// ── Série horaire (OMS) : CA + commandes par heure (colonne « Heure ») ──────
+function hourlySeries(rows, map) {
+  const pi = map.prix, ni = map.num, ti = map.type, hi = map.heure;
+  if (hi === undefined) return null;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const h = (r[hi] || '').toString().trim().slice(0, 2);
+    if (!/^\d{1,2}$/.test(h)) return;
+    const k = h.padStart(2, '0');
+    if (!by[k]) by[k] = { ca: 0, orders: new Set() };
+    by[k].ca += fN(r[pi]);
+    if (ni !== undefined && r[ni]) by[k].orders.add(r[ni]);
+  });
+  const hours = Object.keys(by).sort();
+  if (!hours.length) return null;
+  return hours.map(h => ({ hour: h, ca: by[h].ca, commandes: by[h].orders.size }));
 }
 
 // ── Référentiel : ref. externe → famille (regroupement prioritaire) ─────────
@@ -790,7 +829,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  channelPerf, calcByDevice, dailySeries,
+  channelPerf, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
