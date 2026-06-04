@@ -2,12 +2,33 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Modules + persistance Neon livrés (03/06). Prochaine grosse pièce : **moteur de reco stratégique**
-C/M/L terme (API Claude), vitrine = module Direction.
+Réorg en modules + persistance Neon + P1 (sections thématiques) livrés. **Épisode analytique en cours** :
+- **P2 — Compare saison** : dépôt « Implantation » (E26=N / E25=N-1) → largeur d'offre, typologie,
+  nouveautés(saisonniers)/permanents/manquants (intersection des REFERENCE), bests/slowers (jointure ventes).
+- **P3 — Cross-canal produit** : règle Y2 réf unifiée = `Code article`[0..13] + `-` + 1er token `LIBDIM2`
+  (ex. `2EVA96-V04729-001`) → format RC. Tableau perf produit/famille par canal vs N-1 + entre canaux + recos.
+- **P4 — GA approfondi vs N-1** : landing×conversion, pages disparues, top pages N vs N-1, canaux→pages,
+  cohérence campagne/redirection/landing/merch (⚠ enrichir `ga4.js` : dimensions campagne + landing×conv).
+- **P5 — International vs N-1** : sessions/commandes/TT/CA + campagnes + top pages inter.
+- Puis : **moteur de reco stratégique** C/M/L terme (API Claude), vitrine = module Direction.
+
+Taxonomie thèmes (A→H) définie dans `web/app.js` (THEME_OF/THEME_META) : Pilotage, Temporel, Acquisition,
+Conversion, Comportement, Offre, Omnicanal, International, Qualité.
 
 ⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
 copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
 absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 04/06/2026 — Réorg : module Full, dépôt sans GA, sections thématiques (P1) ✅
+- ✅ Module **🔬 Full** (toutes analyses) ; **bloc GA retiré du dépôt** (GA = API uniquement)
+- ✅ **Sections thématiques** dans le rapport : taxonomie A→H (THEME_OF/THEME_META/THEME_ORDER),
+  bandeaux de section masqués si <2 sections ; ordre de thèmes global (récit cohérent inter-modules)
+- ✅ Nouveaux modules **🏬 Omnicanal** (kpi/marketplace/ca/famille/produits) et **🌍 International** (kpi/pays/ttpays)
+- ✅ CSS : `#report` flex+gap, `.section-head`
+- 100 % front ; calculs serveur inchangés ; tests OK
+- ➡️ Suite : P2→P5 (cf. objectif prochaine session) — fichiers Implantation/Y2 analysés et règles validées
 
 ---
 
