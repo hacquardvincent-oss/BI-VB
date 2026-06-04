@@ -2,9 +2,7 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Réorg en modules + persistance Neon + P1 (sections thématiques) livrés. **Épisode analytique en cours** :
-- **P2 — Compare saison** : dépôt « Implantation » (E26=N / E25=N-1) → largeur d'offre, typologie,
-  nouveautés(saisonniers)/permanents/manquants (intersection des REFERENCE), bests/slowers (jointure ventes).
+Réorg modules + persistance Neon + P1 (sections) + **P2 (compare saison)** livrés. **Épisode analytique en cours** :
 - **P3 — Cross-canal produit** : règle Y2 réf unifiée = `Code article`[0..13] + `-` + 1er token `LIBDIM2`
   (ex. `2EVA96-V04729-001`) → format RC. Tableau perf produit/famille par canal vs N-1 + entre canaux + recos.
 - **P4 — GA approfondi vs N-1** : landing×conversion, pages disparues, top pages N vs N-1, canaux→pages,
@@ -18,6 +16,20 @@ Conversion, Comportement, Offre, Omnicanal, International, Qualité.
 ⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
 copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
 absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 04/06/2026 (suite) — P2 : Comparaison de saison (Implantation E26 vs E25) ✅
+- ✅ Source **`impl`** (dépôt Implantation N=E26 / N-1=E25). Parsing xlsx **direct** (`sheet_to_json`,
+  `raw:false`) → corrige la corruption des en-têtes multi-lignes (ex. `Suivi Visuels\nTrafic`) qui
+  cassait l'ancien round-trip CSV (et fiabilise tous les xlsx oms/y2/ref au passage).
+- ✅ `calc.calcSeasonCompare(implN, implN1, salesRef)` : largeur d'offre par famille (modèles +
+  variantes), **nouveautés / permanents / manquants** par REFERENCE, **bests / slowers / non-vendus**
+  via jointure ventes EShop (`Ref. externe` = RC). Noms produits : OMS désignation, repli E25.
+- ✅ Carte **`saisoncompare`** (thème Offre) + reco auto ; module **Saison** recentré dessus ; ajout au Full.
+- ✅ Vérifié sur fichiers réels : 449 modèles E26 vs 459 E25, 306 nouveautés, 143 permanents,
+  316 sortis ; bests/manquants correctement nommés.
+- ℹ️ Bests/slowers = ventes EShop (OMS, hors marketplace). N-1 ventes possible si OMS N-1 chargé (à étendre en P3).
 
 ---
 
