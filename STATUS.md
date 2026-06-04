@@ -38,10 +38,13 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
   via **DROP** (P*/PER) ; manquants triés CA N-1 ; présélections **Saison Été/Hiver** (fenêtre longue éditable).
 - ✅ **Lot D complet** (7aa1172) : cross-canal famille-first + famille Δ N-1 + « best par canal en N-1 » ;
   Qualité = annulations EShop (OMS) vs retours clients (WSHOP) clairement distingués.
-- ✅ **Lot E — PDF maison de luxe** (eb64c5d) : refonte `pdf.js` (Times titres + Helvetica data, accent
-  bronze, tuiles KPI, sections thématiques, tableaux filets fins, pagination bufferPages). Épisode UX A→E complet.
-- ⏭️ Restent : **activer Neon** (persistance) ; **moteur de recommandations stratégiques** (API Claude) ;
-  options : police/logo de marque dans le PDF, dates de saison configurables, endpoint WSHOP retours détaillés.
+- ✅ **Lot E — PDF maison de luxe** (eb64c5d, 23c04ad) : refonte `pdf.js` ; **renommé BI Project** ;
+  correctifs glyphes (→/Δ/espace fine insécable) ; palette interface (bandeau sombre #11142a + ambre) ;
+  donut (répartition CA, mix canaux) + barres (familles/produits/bests). Épisode UX A→E complet.
+- ✅ **Web visuels — salve 1** (c6337f3) : donut CA (Pilotage), funnel visuel, donut device, barres pays
+  (visuel en tête + tableau conservé). Renommage BI Project (web/login).
+- ⏭️ Restent : web visuels salve 2 (marketplace donut, saison barres, retours barres, cross-canal empilé) ;
+  **activer Neon** ; **moteur de recommandations** (API Claude) ; options : police/logo PDF, retours WSHOP détaillés.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
