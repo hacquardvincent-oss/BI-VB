@@ -2,8 +2,19 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Lots A→D terminés + parcours GA4 enrichi (03/06). Prochaines pistes : **moteur de reco stratégique
-court/moyen/long terme** (API Claude), retour d'une base (persistance + comptes), objectifs/atterrissage.
+Modules livrés (03/06). Prochaines pistes : **persistance Neon** (supprime le rechargement des fichiers,
+objectifs partagés, comptes équipe), **moteur de reco stratégique** C/M/L terme (API Claude).
+
+---
+
+## Session du 03/06/2026 (suite) — Segmentation en 6 modules ✅
+Objectif : simplifier l'usage (au lieu d'un seul grand tableau qui exige tous les fichiers).
+- ✅ **Hub de modules** (1 moteur, 6 vues) : 🎯 Direction (360), ☀️ Quotidien (la veille), 📊 Hebdo (détaillé),
+  🧵 Saison (collection, référentiel requis), 🗂️ Annexe (exploration), 🔎 GA dédié (+ objectifs)
+- ✅ Chaque module = **layout de cartes dédié** + **liste de fichiers requis/optionnels** avec badges (chargé/manquant)
+- ✅ Module GA : **objectifs CA/Sessions/TT** saisis (localStorage) → **% d'atteinte** coloré
+- 100 % front (`web/app.js` MODULES + initModules/renderModuleHint/renderObjectives, `app.html`) ; calculs serveur inchangés
+- ℹ️ Le PDF reste l'export complet (toutes sections). Persistance + objectifs partagés = à venir avec la base.
 
 ---
 

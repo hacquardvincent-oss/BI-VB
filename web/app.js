@@ -2,9 +2,51 @@
 // ============================================================================
 // app.js — UI BiDash V2 : dépôt fichiers, sélection période, rendu reporting.
 // ============================================================================
-let CURRENT = 'all';
+let CURRENT = 'month';
 let CURRENT_DIM = 'global';
+let CURRENT_MODULE = 'direction';
+let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
+
+// ── Modules : 1 moteur, 6 vues. Chaque module = layout de cartes + fichiers requis ──
+const MODULES = {
+  direction: {
+    icon: '🎯', label: 'Direction', preset: 'month',
+    intro: 'Synthèse 360 pour la direction — les KPI clés en un écran.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'ca', 'funnel', 'produits'],
+  },
+  quotidien: {
+    icon: '☀️', label: 'Quotidien', preset: 'today',
+    intro: 'Comprendre la veille : ce qui s’est passé hier.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'produits'],
+  },
+  hebdo: {
+    icon: '📊', label: 'Hebdo', preset: 'week',
+    intro: 'Analyse hebdomadaire détaillée, scope par scope.',
+    files: { required: ['oms'], optional: ['ga', 'ret'] },
+    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'itemfunnel', 'pages', 'landing', 'pays', 'ttpays', 'retours'],
+  },
+  saison: {
+    icon: '🧵', label: 'Saison', preset: 'all',
+    intro: 'Analyse collection/saison sur gros volumes (référentiel requis).',
+    files: { required: ['oms', 'ref'], optional: ['ret', 'ga'] },
+    layout: ['kpi', 'ca', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
+  },
+  annexe: {
+    icon: '🗂️', label: 'Annexe', preset: 'all',
+    intro: 'Exploration : tableaux détaillés (marketplace, pays, device…).',
+    files: { required: ['oms'], optional: ['ga', 'y2'] },
+    layout: ['marketplace', 'pays', 'ttpays', 'device', 'channels', 'pagesrc', 'annulations'],
+  },
+  ga: {
+    icon: '🔎', label: 'GA dédié', preset: 'all',
+    intro: 'Analyse GA + objectifs (% d’atteinte). Cadrage période/CA via l’OMS.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['gafunnel', 'channels', 'device', 'landing', 'pages', 'pagesrc', 'itemfunnel'],
+  },
+};
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -63,7 +105,67 @@ function renderSources(status) {
 async function loadStatus() {
   const r = await fetch('/api/ingest/status');
   if (!r.ok) return;
-  renderSources(await r.json());
+  LAST_STATUS = await r.json();
+  renderSources(LAST_STATUS);
+  renderModuleHint();
+}
+
+// Barre de modules
+function initModules() {
+  const bar = document.getElementById('moduleBar');
+  bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Module</span>'
+    + Object.entries(MODULES).map(([k, m]) => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${m.icon} ${m.label}</button>`).join('');
+  bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
+    bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    CURRENT_MODULE = b.dataset.mod;
+    const m = MODULES[CURRENT_MODULE];
+    if (m.preset) {
+      CURRENT = m.preset;
+      document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x.dataset.preset === CURRENT));
+    }
+    renderModuleHint();
+    loadReport();
+  }));
+}
+
+const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace' };
+function fileLoaded(key) { return LAST_STATUS.some(s => s.source === key); }
+function renderModuleHint() {
+  const el = document.getElementById('modHint'); if (!el) return;
+  const m = MODULES[CURRENT_MODULE]; if (!m) return;
+  const badge = (k, req) => { const ok = fileLoaded(k); return `<span class="pill ${ok ? '' : (req ? 'miss' : '')}">${FILE_LABEL[k] || k} ${ok ? '✓' : (req ? 'manquant' : '—')}</span>`; };
+  const req = (m.files.required || []).map(k => badge(k, true)).join(' ');
+  const opt = (m.files.optional || []).map(k => badge(k, false)).join(' ');
+  el.innerHTML = `<b>${m.icon} ${m.label}</b> — ${m.intro}<div style="margin-top:6px">Requis : ${req || '—'}${opt ? ' &nbsp;·&nbsp; Optionnel : ' + opt : ''}</div>`;
+}
+
+// Objectifs (module GA) — stockés dans le navigateur (localStorage)
+function getObj() { try { return JSON.parse(localStorage.getItem('bidash_obj') || '{}'); } catch (e) { return {}; } }
+function setObj(o) { localStorage.setItem('bidash_obj', JSON.stringify(o)); }
+function objRow(label, actual, fmt, key, targetRaw, targetEff) {
+  const a = (actual != null && targetEff) ? actual / targetEff : null;
+  const c = a == null ? '' : (a >= 1 ? 'up' : (a >= 0.8 ? '' : 'dn'));
+  return `<tr><td>${label}</td><td>${fmt(actual)}</td><td><input class="obj" data-k="${key}" type="number" step="any" value="${targetRaw != null ? targetRaw : ''}" style="width:100px"></td><td class="${c}">${a == null ? '—' : fPct(a)}</td></tr>`;
+}
+function renderObjectives(rep) {
+  const box = document.getElementById('objBox'); if (!box) return;
+  if (CURRENT_MODULE !== 'ga' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.classList.remove('hidden');
+  const o = getObj();
+  const sess = rep.ga ? rep.ga.totalSessions : null;
+  const ca = (rep.kpiEShop && rep.kpiEShop.n) ? rep.kpiEShop.n.ca : null;
+  const tt = (rep.kpiEShop && rep.kpiEShop.n) ? rep.kpiEShop.n.tt : null;
+  box.innerHTML = `<div class="card"><h3>🎯 Objectifs GA — période ${rep.meta.from} → ${rep.meta.to}</h3>
+    <table><thead><tr><th>Indicateur</th><th>Réalisé</th><th>Objectif</th><th>% atteinte</th></tr></thead><tbody>
+      ${objRow('CA EShop', ca, fEur, 'ca', o.ca, o.ca)}
+      ${objRow('Sessions', sess, fInt, 'sessions', o.sessions, o.sessions)}
+      ${objRow('Taux de transfo (%)', tt, fPct, 'tt', o.tt, o.tt != null ? o.tt / 100 : null)}
+    </tbody></table>
+    <div class="note">Objectifs enregistrés dans ce navigateur. Saisir le TT en %, ex. <b>1.2</b> pour 1,2 %.</div></div>`;
+  box.querySelectorAll('input.obj').forEach(inp => inp.addEventListener('change', () => {
+    const o2 = getObj(); let v = parseFloat(inp.value); if (isNaN(v)) v = null; o2[inp.dataset.k] = v; setObj(o2); renderObjectives(LAST_REP);
+  }));
 }
 
 async function upload(source, period, file) {
@@ -90,7 +192,9 @@ async function loadReport() {
     `<b>${DIM_LABEL[rep.meta.dim] || 'Global'}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
     + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
+  LAST_REP = rep;
   box.innerHTML = renderReport(rep);
+  renderObjectives(rep);
   renderDailyChart(rep.daily);
   renderCharts(rep);
 }
@@ -309,12 +413,8 @@ function renderReport(rep) {
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
   };
   const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
-  const LAYOUTS = {
-    today: ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'produits'],            // Quotidien : lecture rapide
-    week: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'itemfunnel', 'pages', 'landing', 'pays', 'ttpays'], // Hebdo : tendances
-    month: FULL, ytd: FULL, all: FULL,                                          // Mensuel/YTD/Tout : complet
-  };
-  return (LAYOUTS[CURRENT] || FULL).map(k => {
+  const order = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
+  return order.map(k => {
     let html = C[k] || ''; if (!html) return '';
     const a = ana(k, rep);
     if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
@@ -542,6 +642,9 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
 // Init
 (async () => {
   if (!(await me())) return;
+  initModules();
+  CURRENT = MODULES[CURRENT_MODULE].preset;
+  document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x.dataset.preset === CURRENT));
   await loadStatus();
   await ga4Status();
   await loadReport();
