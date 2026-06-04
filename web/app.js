@@ -470,6 +470,7 @@ function renderReport(rep) {
     }).join('');
     const totRow = `<tr style="font-weight:700"><td>TOTAL</td><td>${fInt(tN.s)}</td><td>${t1.s ? delta(tN.s, t1.s) : '—'}</td><td>100%</td><td>${fPct(tN.s > 0 ? tN.e / tN.s : 0)}</td><td>${t1.s ? fPct(t1.e / t1.s) : '—'}</td><td>${fEur(tN.r)}</td><td>${t1.r ? delta(tN.r, t1.r) : '—'}</td></tr>`;
     deviceCard = `<div class="card"><h3>Mobile vs Desktop — N vs N-1</h3>
+       <div style="height:170px;margin-bottom:10px"><canvas id="devDonut"></canvas></div>
        <table><thead><tr><th>Device</th><th>Sess. N</th><th>Δ</th><th>%</th><th>Conv. N</th><th>Conv. N-1</th><th>Revenu N</th><th>Δ</th></tr></thead>
        <tbody>${rows}${totRow}</tbody></table></div>`;
   }
@@ -559,6 +560,7 @@ function renderReport(rep) {
       ['Commandes OMS', fInt(g.commandes), g.commandes, g1 && g1.commandes],
     ].map(([l, v, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${v} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
     gaFunnelCard = `<div class="card"><h3>Funnel e-commerce — Sessions → Panier → Checkout → Achat (N vs N-1)</h3>
+      <div style="height:200px;margin-bottom:10px"><canvas id="funnelChart"></canvas></div>
       <table><thead><tr><th>Étape</th><th>Volume N</th><th>Δ vs N-1</th><th>Passage N</th><th>Passage N-1</th></tr></thead><tbody>${stepRows}</tbody></table>
       <div class="kgrid" style="margin-top:10px">${tiles}</div>
       <div class="note">${empty ? '⚠ Checkout/achats GA absents → relance « Rafraîchir GA4 » pour le funnel détaillé. ' : ''}« Passage » = conversion depuis l’étape précédente. Écart Achats GA vs Commandes OMS = périmètre de tracking.</div></div>`;
@@ -614,13 +616,14 @@ function renderReport(rep) {
           <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
           ${ttNote}
         </div>
-        <div><div class="note" style="margin:0 0 6px">Détail du chiffre d'affaires</div><div class="kgrid">${caBlocks}</div></div>
+        <div><div class="note" style="margin:0 0 6px">Détail du chiffre d'affaires</div><div class="kgrid">${caBlocks}</div>
+          <div style="height:180px;margin-top:10px"><canvas id="caDonut"></canvas></div></div>
       </div></div>`;
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
-  const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
+  const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
 
   // Comparaison de saison (Implantation E26 vs E25)
@@ -865,6 +868,27 @@ function renderCharts(rep) {
   if (rep.gaN1 && rep.gaN1.byCanal && rep.gaN1.byCanal.length) {
     const s = [...rep.gaN1.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
     mk('chDonutN1', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  // Donut répartition CA (France / International / Marketplace)
+  if (rep.ca && rep.ca.n) {
+    const c = rep.ca.n, mkt = (rep.marketplace && rep.marketplace.n && rep.marketplace.n.total) || 0;
+    const seg = [['EShop France', c.caFR || 0], ['EShop International', c.caInt || 0], ['Marketplace', mkt]].filter(x => x[1] > 0);
+    if (seg.length) mk('caDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  // Funnel e-commerce (barres décroissantes Sessions→Panier→Checkout→Achat)
+  if (rep.gaFunnel && rep.gaFunnel.n && rep.gaFunnel.n.steps) {
+    const st = rep.gaFunnel.n.steps;
+    mk('funnelChart', { type: 'bar', data: { labels: st.map(x => x.label), datasets: [{ data: st.map(x => Math.round(x.value)), backgroundColor: ['#4a9eff', '#a78bfa', '#f5a623', '#22c55e'], borderWidth: 0, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw.toLocaleString('fr-FR') } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
+  }
+  // Donut device (sessions)
+  if (rep.device && rep.device.n && rep.device.n.length) {
+    const d = rep.device.n;
+    mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  // Barres CA par pays (top 10)
+  if (rep.pays && rep.pays.length) {
+    const p = rep.pays.slice(0, 10);
+    mk('paysChart', { type: 'bar', data: { labels: p.map(x => cut(x.pays, 18)), datasets: [{ data: p.map(x => Math.round(x.n.ca)), backgroundColor: 'rgba(34,197,94,.55)', borderColor: '#22c55e', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
   }
   if (rep.famille && rep.famille.length) {
     const f = rep.famille.slice(0, 8);
