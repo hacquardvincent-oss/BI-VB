@@ -46,6 +46,12 @@ const MODULES = {
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['gafunnel', 'channels', 'device', 'landing', 'pages', 'pagesrc', 'itemfunnel'],
   },
+  full: {
+    icon: '🔬', label: 'Full', preset: 'all',
+    intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
+    files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2'] },
+    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'],
+  },
 };
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
@@ -65,7 +71,6 @@ const PALETTE = ['#f5a623', '#4a9eff', '#22c55e', '#ef4444', '#a78bfa', '#f472b6
 const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS)', periods: ['N', 'N1'] },
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
-  { key: 'ga', name: '📈 Google Analytics', periods: ['N', 'N1'] },
   { key: 'ref', name: '📋 Référentiel', periods: ['N'] },
   { key: 'ret', name: '↩️ Retours (wshop)', periods: ['N', 'N1'] },
 ];
