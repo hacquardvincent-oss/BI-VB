@@ -93,10 +93,12 @@ async function apiPost(path, body = {}, tries = 3) {
 }
 
 // (2) ✅ ENDPOINT COMMANDES — POST /api/v1/orders/get ; réponse = tableau d'Orders.
-//     Filtre par date de création (created_from/created_to, "YYYY-MM-DD HH:MM:SS") ;
-//     pagination page/limit (défaut 10000) → on boucle tant qu'une page est pleine.
+//     Filtre par date de création (created_from/created_to, "YYYY-MM-DD HH:MM:SS").
+//     Pagination par lots (WSHOP_PAGE, défaut 1000) → petites réponses rapides, on boucle.
 async function fetchOrders(fromISO, toISO) {
-  const all = []; let page = 1; const limit = 10000; const MAX_PAGES = 500;
+  const all = []; let page = 1;
+  const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
+  const MAX_PAGES = 1000;
   while (page <= MAX_PAGES) {
     const resp = await apiPost('/api/v1/orders/get', {
       created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit,
