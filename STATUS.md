@@ -32,7 +32,12 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
 - ✅ **Refresh API ciblé période** (aab64d9) : GA4 & WSHOP `refresh(opts)` n'appellent l'API que
   sur la fenêtre sélectionnée (N→oms-N, N-1→oms-N1) ; raccourcis Hier/7j/30j/Mois (remplissent N+N-1).
   Règle les timeouts WSHOP (plus de fetch 24 mois). + robustesse : retries 5xx, refresh GA4 résilient.
-- ⏭️ Restent D (offre/cross-canal/qualité), E (PDF luxe). + activer Neon (persistance).
+- ✅ **Sources auto + saison** (e4c5b14, c5049ff) : référentiel + implantation E26/E25 chargés au
+  boot depuis specs/ ; retours via WSHOP (orderRefund) ; import manuel réduit à OMS+Y2.
+  **Filtre Périmètre Collection** (scope=collection → produits implantation) ; saisonnier/permanent
+  via **DROP** (P*/PER) ; manquants triés CA N-1 ; présélections **Saison Été/Hiver** (fenêtre longue éditable).
+- ⏭️ Restent : reste Lot D (cross-canal famille-first + N-1 « qui vend quoi », séparer annulations/retours
+  dans la carte Qualité), E (PDF luxe). + activer Neon. + endpoint WSHOP retours (raisons/produit) si dispo.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
