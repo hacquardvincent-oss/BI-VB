@@ -16,6 +16,7 @@ const ingest = require('./ingest');
 const reports = require('./reports');
 const pdf = require('./pdf');
 const ga4 = require('./ga4');
+const wshop = require('./wshop');
 const objectives = require('./objectives');
 
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/ingest', ingest.router);
 app.use('/api/report', reports.router);
 app.use('/api/report', pdf.router);
 app.use('/api/ga4', ga4.router);
+app.use('/api/wshop', wshop.router);
 app.use('/api/objectives', objectives.router);
 
 app.use(express.static(path.join(__dirname, '..', 'web')));

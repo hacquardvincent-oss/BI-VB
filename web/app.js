@@ -934,6 +934,26 @@ document.getElementById('ga4refresh').addEventListener('click', async () => {
   loadReport();
 });
 
+// WSHOP API (source OMS)
+async function wshopStatus() {
+  try {
+    const r = await fetch('/api/wshop/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) document.getElementById('wshopbox').classList.remove('hidden');
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('wshoprefresh').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  note.textContent = 'Import OMS WSHOP en cours…';
+  const r = await fetch('/api/wshop/refresh', { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur WSHOP'); return; }
+  note.textContent = `✓ OMS WSHOP importé : ${j.rows} lignes (${j.from} → ${j.to})`;
+  await loadStatus();
+  loadReport();
+});
+
 // Événements
 document.getElementById('logout').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
@@ -972,5 +992,6 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
   await loadStatus();
   await ga4Status();
+  await wshopStatus();
   await loadReport();
 })();
