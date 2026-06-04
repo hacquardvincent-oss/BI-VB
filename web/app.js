@@ -1064,28 +1064,44 @@ async function wshopStatus() {
     if (s.configured) document.getElementById('wshopbox').classList.remove('hidden');
   } catch (e) { /* ignore */ }
 }
-document.getElementById('wshoprefresh').addEventListener('click', async () => {
-  const note = document.getElementById('wshopnote');
-  const btn = document.getElementById('wshoprefresh');
-  btn.disabled = true; note.textContent = 'Lancement de l\'import WSHOP…';
-  try {
-    const q = new URLSearchParams(currentPeriod()).toString();
-    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
-  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btn.disabled = false; return; }
-  // Suivi en tâche de fond (pas de requête longue → pas de 502)
+// Suivi partagé de la tâche de fond WSHOP (import complet ou synchro delta) → pas de requête longue → pas de 502.
+function pollWshopJob(btns, note, onSuccess, running) {
   const poll = async () => {
     try {
       const j = await (await fetch('/api/wshop/job')).json();
-      if (j.running) { note.textContent = `Import WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd N${j.ordersN1 ? ` · ${fInt(j.ordersN1)} N-1` : ''}…`; return setTimeout(poll, 2000); }
-      btn.disabled = false;
+      if (j.running) { note.textContent = running(j); return setTimeout(poll, 2000); }
+      btns.forEach(b => { b.disabled = false; });
       if (j.error) { note.textContent = '⚠ ' + j.error; return; }
-      const res = j.result || {};
-      note.textContent = `✓ OMS WSHOP : ${fInt(res.rows)} lignes N (${res.from} → ${res.to})${res.n1 ? ` · ${fInt(res.n1.rows)} lignes N-1` : ''}`;
+      note.textContent = onSuccess(j.result || {});
       applyCurrentPeriod(); await loadStatus(); loadReport();
-    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btn.disabled = false; }
+    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btns.forEach(b => { b.disabled = false; }); }
   };
   setTimeout(poll, 1500);
+}
+document.getElementById('wshoprefresh').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync')];
+  btns.forEach(b => { b.disabled = true; }); note.textContent = 'Lancement de l\'import WSHOP…';
+  try {
+    const q = new URLSearchParams(currentPeriod()).toString();
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  pollWshopJob(btns, note,
+    res => `✓ OMS WSHOP : ${fInt(res.rows)} lignes N (${res.from} → ${res.to})${res.n1 ? ` · ${fInt(res.n1.rows)} lignes N-1` : ''}`,
+    j => `Import WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd N${j.ordersN1 ? ` · ${fInt(j.ordersN1)} N-1` : ''}…`);
+});
+document.getElementById('wshopsync').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync')];
+  btns.forEach(b => { b.disabled = true; }); note.textContent = 'Synchronisation du delta…';
+  try {
+    const r = await fetch('/api/wshop/sync', { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  pollWshopJob(btns, note,
+    res => `✓ Delta synchronisé : ${fInt(res.updated)} commande(s) mise(s) à jour → ${fInt(res.rows)} lignes N (${res.from} → ${res.to})`,
+    j => `Synchro WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd…`);
 });
 document.getElementById('wshopping').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
