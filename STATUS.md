@@ -2,11 +2,11 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Réorg modules + Neon + P1 (sections) + **P2 (compare saison)** + **P3 (cross-canal)** livrés. **Reste** :
-- **P4 — GA approfondi vs N-1** : landing×conversion, pages disparues, top pages N vs N-1, canaux→pages,
-  cohérence campagne/redirection/landing/merch (⚠ enrichir `ga4.js` : dimensions campagne + landing×conv).
-- **P5 — International vs N-1** : sessions/commandes/TT/CA + campagnes + top pages inter.
+Réorg modules + Neon + P1 + **P2** + **P3** + **P4** livrés. **Reste** :
+- **P5 — International vs N-1** : module International enrichi (sessions/commandes/TT/CA inter vs N-1,
+  campagnes & top pages filtrés international — réutiliser les briques GA de P4 + filtre pays).
 - Puis : **moteur de reco stratégique** C/M/L terme (API Claude), vitrine = module Direction.
+- ⚠️ À tester en réel : P4 nécessite un **« Rafraîchir GA4 »** (campagnes UTM) pour peupler les nouvelles cartes.
 
 Taxonomie thèmes (A→H) définie dans `web/app.js` (THEME_OF/THEME_META) : Pilotage, Temporel, Acquisition,
 Conversion, Comportement, Offre, Omnicanal, International, Qualité.
@@ -14,6 +14,19 @@ Conversion, Comportement, Offre, Omnicanal, International, Qualité.
 ⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
 copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
 absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 04/06/2026 (suite) — P4 : GA approfondi vs N-1 ✅
+- ✅ `ga4.js` : `fetchCampaigns` (sessionCampaignName) + `fetchCampaignLanding` (campagne×landingPage)
+  → datasets `gacampaigns` (N/N1) et `gacampaignland` (N).
+- ✅ `reports.js` : `campaigns` (sessions/achats/conv/revenu vs N-1), `lostPages`/`newPages`
+  (pages fortes N-1 disparues / nouvelles, via `gapages`), `campaignLanding` (landing principale + conv/campagne).
+- ✅ Carte **landing enrichie** (conv N vs N-1 + Δ) ; nouvelles cartes **campaigns** (thème Acquisition),
+  **lostpages** (Comportement), **campaignland** (Acquisition) + recos auto. Modules GA dédié + Full.
+- ✅ Rendu gracieux sans GA (blocs null). Syntaxe + tests OK.
+- ⚠️ Non testé en réel (pas de creds GA4 dans l'env de dev) : à valider via « Rafraîchir GA4 » en prod ;
+  fetchs calqués sur les fetchs GA4 existants (dimensions/métriques valides : sessionCampaignName, landingPage…).
 
 ---
 
