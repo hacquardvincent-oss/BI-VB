@@ -51,20 +51,25 @@ async function wfetch(url, opts, ms = 90000) {
 // (1) ✅ AUTHENTIFICATION — POST /api/v1/authenticate {user, pwd} → { success, token }
 //     Le JWT est valable 1h ; on le met en cache (~55 min) et on le rejoue en Bearer.
 let _tok = { value: '', exp: 0 };
+let _authP = null; // dédoublonne les authentifications concurrentes (N & N-1 en parallèle)
 async function getToken(force = false) {
   if (!force && _tok.value && Date.now() < _tok.exp) return _tok.value;
+  if (_authP) return _authP;
   const c = CFG();
   if (!c.base) throw new Error('WSHOP_INSTANCE / WSHOP_API_BASE manquant (base introuvable)');
-  const res = await wfetch(`${c.base}/api/v1/authenticate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ user: c.user, pwd: c.pwd }),
-  }, 30000);
-  const txt = await res.text();
-  let j = {}; try { j = JSON.parse(txt); } catch (e) { /* non-JSON */ }
-  if (!res.ok || !j.token) throw new Error(`auth ${res.status} : ${(j.error && j.error.message) || txt.slice(0, 160) || 'échec'}`);
-  _tok = { value: j.token, exp: Date.now() + 55 * 60 * 1000 };
-  return _tok.value;
+  _authP = (async () => {
+    const res = await wfetch(`${c.base}/api/v1/authenticate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ user: c.user, pwd: c.pwd }),
+    }, 30000);
+    const txt = await res.text();
+    let j = {}; try { j = JSON.parse(txt); } catch (e) { /* non-JSON */ }
+    if (!res.ok || !j.token) throw new Error(`auth ${res.status} : ${(j.error && j.error.message) || txt.slice(0, 160) || 'échec'}`);
+    _tok = { value: j.token, exp: Date.now() + 55 * 60 * 1000 };
+    return _tok.value;
+  })().finally(() => { _authP = null; });
+  return _authP;
 }
 
 async function apiPost(path, body = {}, tries = 3) {
@@ -199,6 +204,43 @@ function buildReturnsDataset(orders, from, to) {
   };
 }
 
+// ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe'];
+const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses'];
+function orderRetRowObjs(o) {
+  const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
+  return (o.orderRefund || []).map(rf => {
+    const m = String(rf.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const raison = rf.refundType === 'manual' ? 'Remboursement manuel' : (rf.refundType === 'return' ? 'Retour client' : (rf.refundType || ''));
+    return { 'Date creation': m ? `${m[3]}/${m[2]}/${m[1]}` : '', 'Montant rembourse': Number(rf.amount) || 0, 'Numero de retour': rf.returnId || '', 'Raison': raison, 'Pays livraison': pays, 'Nb colisages rembourses': 1 };
+  });
+}
+function datasetFromRows(hdrs, rows, source, from, to) {
+  const map = calc.autoMap(hdrs, source === 'ret' ? calc.RET_ALIASES : calc.OMS_ALIASES);
+  if (source === 'oms') calc.ensureRefExtIdx(hdrs, map);
+  const { min, max } = calc.dateBounds(rows, map);
+  return { hdrs, rows, map, filename: `WSHOP ${source} (${from} → ${to})`, row_count: rows.length, date_min: min, date_max: max, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+}
+// Récupère une plage par pages, convertit chaque page en lignes légères et JETTE la page brute.
+async function collectRange(fromISO, toISO, onCount) {
+  const oms = [], ret = []; let page = 1, n = 0;
+  const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
+  const MAX_PAGES = 2000;
+  while (page <= MAX_PAGES) {
+    const resp = await apiPost('/api/v1/orders/get', { created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit });
+    const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+    for (const o of batch) {
+      n++;
+      for (const ro of orderToRows(o)) oms.push(OMS_HDRS.map(h => (ro[h] == null ? '' : String(ro[h]))));
+      for (const rr of orderRetRowObjs(o)) ret.push(RET_HDRS.map(h => (rr[h] == null ? '' : String(rr[h]))));
+    }
+    if (onCount) onCount(n);
+    if (batch.length < limit) break;
+    page += 1;
+  }
+  return { oms, ret, count: n };
+}
+
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
 // opts : { from, to, cfrom, cto } (ISO YYYY-MM-DD). Sans dates → fenêtre par défaut (WSHOP_MONTHS).
 async function refresh(opts = {}, cb = {}) {
@@ -206,27 +248,26 @@ async function refresh(opts = {}, cb = {}) {
   const c = CFG();
   const isoD = d => d.toISOString().slice(0, 10);
   let from = opts.from, to = opts.to;
-  if (!from || !to) { // fallback : derniers WSHOP_MONTHS mois
-    const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months);
-    from = isoD(f); to = isoD(t);
-  }
-  if (cb.phase) cb.phase(`Commandes N (${from}→${to})…`);
-  const ordersN = await fetchOrders(from, to, n => cb.count && cb.count('N', n));
-  const dsN = buildOmsDataset(ordersN, from, to);
+  if (!from || !to) { const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months); from = isoD(f); to = isoD(t); }
+  const hasN1 = !!(opts.cfrom && opts.cto);
+  if (cb.phase) cb.phase(hasN1 ? `Commandes N (${from}→${to}) et N-1 en parallèle…` : `Commandes N (${from}→${to})…`);
+  // N et N-1 récupérées EN PARALLÈLE (≈ 2×), conversion au fil de l'eau (mémoire maîtrisée)
+  const [N, N1] = await Promise.all([
+    collectRange(from, to, n => cb.count && cb.count('N', n)),
+    hasN1 ? collectRange(opts.cfrom, opts.cto, n => cb.count && cb.count('N1', n)) : Promise.resolve(null),
+  ]);
+  if (cb.phase) cb.phase('Construction des jeux de données…');
+  const dsN = datasetFromRows(OMS_HDRS, N.oms, 'oms', from, to);
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
   store.setDataset('oms', 'N', dsN);
-  store.setDataset('ret', 'N', buildReturnsDataset(ordersN, from, to)); // retours (orderRefund)
-  // Période N-1 (comparatif) si fournie
+  store.setDataset('ret', 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
   let n1 = null;
-  if (opts.cfrom && opts.cto) {
-    if (cb.phase) cb.phase(`Commandes N-1 (${opts.cfrom}→${opts.cto})…`);
-    const ordersN1 = await fetchOrders(opts.cfrom, opts.cto, n => cb.count && cb.count('N1', n));
-    const dsN1 = buildOmsDataset(ordersN1, opts.cfrom, opts.cto);
+  if (N1) {
+    const dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', opts.cfrom, opts.cto);
     if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
-    store.setDataset('ret', 'N1', buildReturnsDataset(ordersN1, opts.cfrom, opts.cto));
+    store.setDataset('ret', 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', opts.cfrom, opts.cto));
   }
-  const retN = store.getDataset('ret', 'N');
-  return { orders: ordersN.length, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: retN ? retN.row_count : 0 };
+  return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
