@@ -232,6 +232,16 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   // salesRef est indexé par Ref. externe (= RC) sur les ventes EShop de la période.
   const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRef) : null;
 
+  // ── Analyse cross-canal (EShop / Boutiques / GL / Printemps / PDT / Lulli) ──
+  // famByRef : RC → famille, depuis référentiel + implantation (saison courante prioritaire).
+  const famByRef = Object.assign({}, refMap);
+  if (implN) calc.implItems(implN).forEach(x => { if (x.rc && x.famille) famByRef[x.rc] = x.famille; });
+  const crossChannel = (y2N || (omsN && omsN.rows)) ? calc.calcCrossChannel(
+    rowsN, omsN.map, y2N ? y2N.rows : null, y2N ? y2N.map : {},
+    famByRef,
+    rowsN1, mapN1, y2N1 ? y2N1.rows : null, y2N1 ? y2N1.map : {},
+  ) : null;
+
   // Familles fusionnées N / N-1
   let famille = null;
   if (famNobj) {
@@ -255,6 +265,7 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     pays,
     saison,
     seasonCompare,
+    crossChannel,
     cancellations,
     returns,
     famille,

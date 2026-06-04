@@ -36,9 +36,9 @@ const MODULES = {
   },
   omnicanal: {
     icon: '🏬', label: 'Omnicanal', preset: 'all',
-    intro: 'EShop vs Marketplace : poids des canaux et familles qui portent chacun.',
-    files: { required: ['oms'], optional: ['y2', 'ref'] },
-    layout: ['kpi', 'marketplace', 'ca', 'famille', 'produits'],
+    intro: 'EShop vs Marketplace : performance produit/famille par canal vs N-1 et entre canaux.',
+    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
+    layout: ['kpi', 'marketplace', 'crosschannel', 'ca', 'famille', 'produits'],
   },
   international: {
     icon: '🌍', label: 'International', preset: 'all',
@@ -62,7 +62,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'pays', 'ttpays', 'retours', 'annulations'],
+    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
   },
 };
 
@@ -80,7 +80,7 @@ const THEME_OF = {
   funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
   pages: 'D', landing: 'D',
   famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
-  marketplace: 'F',
+  marketplace: 'F', crosschannel: 'F',
   pays: 'G', ttpays: 'G',
   retours: 'H', annulations: 'H',
 };
@@ -525,10 +525,32 @@ function renderReport(rep) {
       <div class="note">Modèle = REFERENCE (hors couleur). Permanent = présent E25 & E26 ; nouveauté = nouveau modèle E26 ; manquant = modèle E25 non repris. Bests/slowers/non-vendus = ventes EShop de la période (jointure Ref. externe = RC).</div></div>`;
   }
 
+  // Performance cross-canal (EShop / Boutiques / Marketplaces)
+  const cc = rep.crossChannel;
+  let crossChannelCard = '';
+  if (cc && cc.channels && cc.channels.length) {
+    const ch = cc.channels;
+    const naC = '<span class="na">—</span>';
+    const totRow = cc.totals.map(t => `<div class="kc"><div class="l">${esc(t.channel)}</div><div class="v">${fEur(t.ca)}</div><div style="font-size:10px">${delta(t.ca, t.caN1)} vs N-1</div></div>`).join('');
+    const head = `<th>Produit</th><th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
+    const prodRows = cc.products.map(p => `<tr><td title="${esc(p.ref)}">${esc(p.name)}</td><td>${esc(p.famille)}</td>${ch.map(c => `<td>${p.byChannel[c] ? fEur(p.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(p.total)}</b></td><td>${delta(p.total, p.totalN1)}</td></tr>`).join('');
+    const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th>`;
+    const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(f.total)}</b></td></tr>`).join('');
+    const recos = (cc.recos && cc.recos.length) ? `<div class="insight">💡 ${cc.recos.map(esc).join('<br>💡 ')}</div>` : '';
+    crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplace</h3>
+      <div class="kgrid">${totRow}</div>
+      <h3 style="margin-top:14px">Top produits par canal (CA)</h3>
+      <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${prodRows}</tbody></table></div>
+      <h3 style="margin-top:14px">Familles par canal (CA)</h3>
+      <div style="overflow-x:auto"><table><thead><tr>${famHead}</tr></thead><tbody>${famRowsCC}</tbody></table></div>
+      ${recos}
+      <div class="note">Réf. unifiée sur les 3 canaux (OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2). Canaux classés par magasin & type de paiement. Δ N-1 si OMS/Y2 N-1 chargés.</div></div>`;
+  }
+
   // Cartes nommées + layout adapté à la cadence
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
-    channels: channelsCard, device: deviceCard, marketplace: mktCard,
+    channels: channelsCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,

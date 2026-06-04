@@ -100,6 +100,9 @@ const Y2_ALIASES = {
   ttc: ['total ttc ligne'],
   commercial: ['commercial du doc.', 'commercial du doc'],
   ref: ['reference interne doc.', 'reference interne doc', 'ref. interne doc', 'ref interne doc', 'reference interne'],
+  code: ['code article'],
+  libdim2: ['libdim2'],
+  qte: ['quantite ligne'],
 };
 const GA_ALIASES = {
   canal: ['groupe de canaux principal', 'groupe de canaux', 'channel group', 'default channel group'],
@@ -655,6 +658,86 @@ function calcSeasonCompare(implN, implN1, salesRef) {
   };
 }
 
+// ── Analyse cross-canal (EShop / Boutiques / Marketplaces) ──────────────────
+// Référence unifiée Y2 : 13 premiers car. du code article + "-" + code couleur (1er token LIBDIM2)
+const y2Ref = (code, libdim2) => {
+  const c = (code || '').toString().trim().slice(0, 13);
+  const col = (libdim2 || '').toString().trim().split(/\s+/)[0] || '';
+  return c ? (col ? `${c}-${col}` : c) : '';
+};
+function omsChannelOf(mag, type) {
+  const m = (mag || '').toString().toLowerCase(), t = (type || '').toString().toLowerCase();
+  if (t.includes('gl.com') || m.includes('galeries lafayette')) return 'GL';
+  if (t.includes('printemps') || m.includes('printemps')) return 'Printemps';
+  if (m.includes('vanessa bruno -') || m.includes('annul')) return 'Boutiques';
+  return 'EShop'; // WEBSTORE + paiements en ligne par défaut
+}
+function y2ChannelOf(etab) {
+  const e = (etab || '').toString().toLowerCase();
+  if (e.includes('place des tendances')) return 'PDT';
+  if (e.includes('lulli')) return 'Lulli';
+  if (e.includes('haussmann') || e.includes('galeries') || e.startsWith('gl ')) return 'GL';
+  return etab ? etab.toString() : 'Marketplace';
+}
+const CHANNEL_ORDER = ['EShop', 'Boutiques', 'GL', 'Printemps', 'PDT', 'Lulli'];
+function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
+  const byRef = {}, byChannel = {};
+  const add = (ref, name, ch, ca, qte) => {
+    if (!ref) return;
+    const e = byRef[ref] || (byRef[ref] = { name: '', byChannel: {}, total: 0, qte: 0 });
+    if (name && !e.name) e.name = name;
+    e.byChannel[ch] = (e.byChannel[ch] || 0) + ca; e.total += ca; e.qte += qte;
+    const c = byChannel[ch] || (byChannel[ch] = { ca: 0, qte: 0 }); c.ca += ca; c.qte += qte;
+  };
+  const ri = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (omsRows && ri !== undefined) {
+    const pi = omsMap.prix, qi = omsMap.qte, mi = omsMap.mag, ti = omsMap.type, di = omsMap.des;
+    omsRows.forEach(r => add((r[ri] || '').trim(), di !== undefined ? (r[di] || '').trim() : '',
+      omsChannelOf(mi !== undefined ? r[mi] : '', ti !== undefined ? r[ti] : ''),
+      fN(r[pi]), parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1));
+  }
+  if (y2Rows && y2Map && y2Map.code !== undefined) {
+    const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab;
+    y2Rows.forEach(r => add(y2Ref(r[ci], li !== undefined ? r[li] : ''), '',
+      y2ChannelOf(ei !== undefined ? r[ei] : ''),
+      fN(r[tci]), q2 !== undefined ? (parseInt((r[q2] || '1').toString().replace(/\s/g, '')) || 1) : 1));
+  }
+  return { byRef, byChannel };
+}
+function buildCrossRecos(products, channels) {
+  const mp = channels.filter(c => c !== 'EShop' && c !== 'Boutiques');
+  const out = [];
+  products.forEach(p => {
+    const e = p.byChannel['EShop'] || 0;
+    const m = mp.reduce((s, c) => s + (p.byChannel[c] || 0), 0);
+    if (e > 2000 && m < e * 0.1) out.push(`« ${p.name} » performe sur EShop (${Math.round(e).toLocaleString('fr-FR')} €) mais quasi absent en marketplace → opportunité de listing MP.`);
+    else if (m > 2000 && e < m * 0.1) out.push(`« ${p.name} » cartonne en marketplace (${Math.round(m).toLocaleString('fr-FR')} €) mais peu/pas sur EShop → tester en mise en avant EShop.`);
+  });
+  return out.slice(0, 8);
+}
+// famByRef : RC → famille (depuis référentiel + implantation). omsN1/y2N1 facultatifs (delta vs N-1).
+function calcCrossChannel(omsN, omsMapN, y2N, y2MapN, famByRef, omsN1, omsMapN1, y2N1, y2MapN1) {
+  const A = ccAccumulate(omsN, omsMapN, y2N, y2MapN);
+  const B = ccAccumulate(omsN1 || null, omsMapN1 || {}, y2N1 || null, y2MapN1 || {});
+  if (!Object.keys(A.byRef).length && !Object.keys(B.byRef).length) return null;
+  const set = new Set([...Object.keys(A.byChannel), ...Object.keys(B.byChannel)]);
+  const channels = [...set].sort((a, b) => (CHANNEL_ORDER.indexOf(a) < 0 ? 99 : CHANNEL_ORDER.indexOf(a)) - (CHANNEL_ORDER.indexOf(b) < 0 ? 99 : CHANNEL_ORDER.indexOf(b)));
+  const totals = channels.map(ch => ({ channel: ch, ca: (A.byChannel[ch] || {}).ca || 0, qte: (A.byChannel[ch] || {}).qte || 0, caN1: (B.byChannel[ch] || {}).ca || 0 }));
+  const fam = ref => (famByRef && (famByRef[ref] || famByRef[baseRef(ref)])) || '(n.c.)';
+  const products = Object.entries(A.byRef).map(([ref, v]) => ({
+    ref, name: v.name || ref, famille: fam(ref), total: v.total, qte: v.qte, byChannel: v.byChannel,
+    totalN1: (B.byRef[ref] || {}).total || 0,
+  })).sort((a, b) => b.total - a.total).slice(0, 30);
+  const famMap = {};
+  Object.entries(A.byRef).forEach(([ref, v]) => {
+    const f = fam(ref); const e = famMap[f] || (famMap[f] = { byChannel: {}, total: 0 });
+    Object.entries(v.byChannel).forEach(([ch, ca]) => { e.byChannel[ch] = (e.byChannel[ch] || 0) + ca; });
+    e.total += v.total;
+  });
+  const familles = Object.entries(famMap).map(([famille, v]) => ({ famille, total: v.total, byChannel: v.byChannel })).sort((a, b) => b.total - a.total).slice(0, 20);
+  return { channels, totals, products, familles, recos: buildCrossRecos(products, channels) };
+}
+
 // ── Top produits ────────────────────────────────────────────────────────────
 function buildTopProdMap(rows, map) {
   const pi = map.prix, di = map.des, qi = map.qte, ti = map.type;
@@ -712,4 +795,5 @@ module.exports = {
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
   baseRef, implItems, calcSeasonCompare,
+  y2Ref, calcCrossChannel,
 };
