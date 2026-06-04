@@ -30,9 +30,9 @@ const MODULES = {
   },
   saison: {
     icon: '🧵', label: 'Saison', preset: 'all',
-    intro: 'Analyse collection/saison sur gros volumes (référentiel requis).',
-    files: { required: ['oms', 'ref'], optional: ['ret', 'ga'] },
-    layout: ['kpi', 'ca', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
+    intro: 'Collection E26 vs E25 : largeur d’offre, nouveautés/permanents/manquants, bests/slowers (Implantation).',
+    files: { required: ['oms', 'impl'], optional: ['ref', 'ret'] },
+    layout: ['kpi', 'ca', 'saisoncompare', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
   },
   omnicanal: {
     icon: '🏬', label: 'Omnicanal', preset: 'all',
@@ -61,8 +61,8 @@ const MODULES = {
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
-    files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saison', 'marketplace', 'pays', 'ttpays', 'retours', 'annulations'],
+    files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2', 'impl'] },
+    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'pays', 'ttpays', 'retours', 'annulations'],
   },
 };
 
@@ -79,7 +79,7 @@ const THEME_OF = {
   channels: 'B', device: 'B', pagesrc: 'B', ga: 'B',
   funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
   pages: 'D', landing: 'D',
-  famille: 'E', produits: 'E', renta: 'E', saison: 'E',
+  famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
   marketplace: 'F',
   pays: 'G', ttpays: 'G',
   retours: 'H', annulations: 'H',
@@ -109,6 +109,7 @@ const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS)', periods: ['N', 'N1'] },
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
   { key: 'ref', name: '📋 Référentiel', periods: ['N'] },
+  { key: 'impl', name: '🧵 Implantation saison (N=E26 / N-1=E25)', periods: ['N', 'N1'] },
   { key: 'ret', name: '↩️ Retours (wshop)', periods: ['N', 'N1'] },
 ];
 
@@ -495,11 +496,40 @@ function renderReport(rep) {
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
 
+  // Comparaison de saison (Implantation E26 vs E25)
+  const sc = rep.seasonCompare;
+  let seasonCompareCard = '';
+  if (sc) {
+    const c = sc.counts;
+    const famRowsSC = sc.familles.slice(0, 20).map(f => `<tr><td>${esc(f.famille)}</td><td>${fInt(f.modN)}</td><td>${fInt(f.modN1)}</td><td>${delta(f.modN, f.modN1)}</td><td>${fInt(f.varN)}</td></tr>`).join('');
+    const prodRows = arr => (arr || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${fEur(x.ca)}</td><td>${fInt(x.qte)}</td></tr>`).join('');
+    const miniTable = (title, arr) => (arr && arr.length) ? `<h3 style="margin-top:14px">${title}</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>CA EShop</th><th>Qté</th></tr></thead><tbody>${prodRows(arr)}</tbody></table>` : '';
+    const manqRows = (sc.manquants || []).map(x => `<tr><td title="${esc(x.ref)}">${esc(x.name)}</td><td>${esc(x.famille)}</td><td>${x.prix ? fEur(x.prix) : '—'}</td></tr>`).join('');
+    seasonCompareCard = `<div class="card"><h3>🧵 Comparaison de saison — E26 (N) vs E25 (N-1)</h3>
+      <div class="kgrid">
+        <div class="kc"><div class="l">Modèles E26</div><div class="v">${fInt(c.modN)}</div></div>
+        <div class="kc"><div class="l">Modèles E25</div><div class="v">${fInt(c.modN1)}</div></div>
+        <div class="kc"><div class="l">Largeur d'offre</div><div class="v">${delta(c.modN, c.modN1)}</div></div>
+        <div class="kc"><div class="l">Nouveautés</div><div class="v">${fInt(c.nouveautes)}</div></div>
+        <div class="kc"><div class="l">Permanents</div><div class="v">${fInt(c.permanents)}</div></div>
+        <div class="kc"><div class="l">Manquants (sortis)</div><div class="v">${fInt(c.manquants)}</div></div>
+        <div class="kc"><div class="l">Vendus / Non vendus</div><div class="v">${fInt(c.vendus)} / ${fInt(c.nonVendus)}</div></div>
+      </div>
+      <h3 style="margin-top:14px">Largeur d'offre par famille (modèles)</h3>
+      <table><thead><tr><th>Famille</th><th>Modèles E26</th><th>E25</th><th>Δ</th><th>Variantes E26</th></tr></thead><tbody>${famRowsSC}</tbody></table>
+      ${miniTable('🏆 Bests E26 (CA EShop)', sc.bests)}
+      ${miniTable('🐌 Slowers vendus (CA le plus faible)', sc.slowers)}
+      ${miniTable('🌱 Top nouveautés (CA)', sc.nouveautes)}
+      ${(sc.nonVendus && sc.nonVendus.length) ? `<h3 style="margin-top:14px">🪦 Non vendus E26 (à l'offre, sans vente)</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>CA EShop</th><th>Qté</th></tr></thead><tbody>${prodRows(sc.nonVendus)}</tbody></table>` : ''}
+      ${manqRows ? `<h3 style="margin-top:14px">❌ Manquants — présents E25, absents E26</h3><table><thead><tr><th>Produit</th><th>Famille</th><th>Prix</th></tr></thead><tbody>${manqRows}</tbody></table>` : ''}
+      <div class="note">Modèle = REFERENCE (hors couleur). Permanent = présent E25 & E26 ; nouveauté = nouveau modèle E26 ; manquant = modèle E25 non repris. Bests/slowers/non-vendus = ventes EShop de la période (jointure Ref. externe = RC).</div></div>`;
+  }
+
   // Cartes nommées + layout adapté à la cadence
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
     channels: channelsCard, device: deviceCard, marketplace: mktCard,
-    pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, annulations: cancellationsCard,
+    pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
   };
@@ -622,6 +652,16 @@ function ana(key, rep) {
       const p = rep.topPages; if (!p || !p.length) return '';
       const drop = p.filter(x => x.viewsN1 > 0).map(x => ({ page: x.page, d: pc(x.viewsN, x.viewsN1) })).filter(x => x.d != null).sort((a, b) => a.d - b.d)[0];
       return `Page la plus vue : ${p[0].page}.` + (drop && drop.d < -15 ? ` Forte baisse sur ${drop.page} (${sgn(drop.d)}) → à investiguer.` : '');
+    }
+    if (key === 'saisoncompare') {
+      const sc = rep.seasonCompare; if (!sc) return '';
+      const c = sc.counts;
+      const dOff = pc(c.modN, c.modN1);
+      const tNouv = (c.caNouveautes + c.caPermanents) > 0 ? c.caNouveautes / (c.caNouveautes + c.caPermanents) : null;
+      let s = `Offre ${sgn(dOff)} (${fInt(c.modN)} modèles E26 vs ${fInt(c.modN1)}). ${fInt(c.nouveautes)} nouveautés, ${fInt(c.permanents)} permanents, ${fInt(c.manquants)} sortis.`;
+      if (tNouv != null) s += ` Les nouveautés pèsent ${fPct(tNouv)} du CA assortiment.`;
+      if (c.nonVendus > 0) s += ` ⚠ ${fInt(c.nonVendus)} modèles à l'offre sans aucune vente → arbitrer (push merch/visuel ou retrait).`;
+      return s;
     }
     if (key === 'marketplace') {
       const mk = rep.marketplace.n; const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);

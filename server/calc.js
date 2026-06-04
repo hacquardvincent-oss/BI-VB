@@ -137,6 +137,17 @@ const RET_ALIASES = {
   statut: ['statut ret'],
   libelle: ['libelle'],
 };
+// Implantation (catalogue saison E-Store) — 1ère feuille du classeur
+const IMPL_ALIASES = {
+  rc: ['rc'],
+  ref: ['reference'],
+  cat: ['categories'],
+  type: ['type'],
+  regroupement: ['regroupement'],
+  name: ['name referentiel', 'name'],
+  prix: ['prix'],
+  drop: ['drop'],
+};
 
 // ── Détection automatique des colonnes (meilleure correspondance) ───────────
 function autoMap(hdrs, aliases) {
@@ -595,6 +606,55 @@ function productProfitability(sales, returns) {
   });
 }
 
+// ── Comparaison de saison (Implantation E26 vs E25) ─────────────────────────
+const baseRef = rc => { const s = (rc || '').toString().trim(); const m = s.match(/^(.+)-[^-]+$/); return m ? m[1] : s; };
+function implItems(ds) {
+  if (!ds || !ds.rows) return [];
+  const map = (ds.map && Object.keys(ds.map).length) ? ds.map : autoMap(ds.hdrs || [], IMPL_ALIASES);
+  const g = (r, k) => map[k] !== undefined ? (r[map[k]] == null ? '' : r[map[k]].toString().trim()) : '';
+  return ds.rows.map(r => {
+    const rc = g(r, 'rc'), ref = g(r, 'ref') || baseRef(rc);
+    return { rc, ref, cat: g(r, 'cat'), type: g(r, 'type'), famille: g(r, 'regroupement') || g(r, 'cat') || '(n.c.)', name: g(r, 'name'), prix: fN(g(r, 'prix')), drop: g(r, 'drop') };
+  }).filter(x => x.ref);
+}
+// salesRef est indexé par Ref. externe (= RC, ref+couleur). On agrège au modèle (REFERENCE).
+function calcSeasonCompare(implN, implN1, salesRef) {
+  const N = implItems(implN), N1 = implItems(implN1);
+  if (!N.length) return null;
+  const byModel = arr => { const m = new Map(); arr.forEach(x => { if (!m.has(x.ref)) m.set(x.ref, x); }); return m; };
+  const mN = byModel(N), mN1 = byModel(N1);
+  const refN1 = new Set(mN1.keys()), refN = new Set(mN.keys());
+  const salesModel = {};
+  Object.entries(salesRef || {}).forEach(([rc, v]) => { const b = baseRef(rc); const e = salesModel[b] || (salesModel[b] = { ca: 0, qte: 0, desig: '' }); e.ca += v.ca; e.qte += v.qte; if (!e.desig && v.desig) e.desig = v.desig; });
+  const nameN1 = {}; mN1.forEach((x, ref) => { if (x.name) nameN1[ref] = x.name; }); // E25 porte les noms produits
+  const enrich = x => { const s = salesModel[x.ref] || { ca: 0, qte: 0, desig: '' }; return { ref: x.ref, name: x.name || s.desig || nameN1[x.ref] || x.ref, famille: x.famille, cat: x.cat, prix: x.prix, ca: s.ca, qte: s.qte }; };
+  // Largeur d'offre par famille (nb de modèles + variantes RC)
+  const wf = (models, all) => { const o = {}; models.forEach(x => { (o[x.famille] = o[x.famille] || { mod: 0, var: 0 }).mod++; }); all.forEach(x => { (o[x.famille] = o[x.famille] || { mod: 0, var: 0 }).var++; }); return o; };
+  const wN = wf([...mN.values()], N), wN1 = wf([...mN1.values()], N1);
+  const familles = [...new Set([...Object.keys(wN), ...Object.keys(wN1)])].map(f => ({
+    famille: f, modN: (wN[f] || {}).mod || 0, modN1: (wN1[f] || {}).mod || 0, varN: (wN[f] || {}).var || 0, varN1: (wN1[f] || {}).var || 0,
+  })).sort((a, b) => b.modN - a.modN);
+  const nouveautes = [...mN.values()].filter(x => !refN1.has(x.ref)).map(enrich).sort((a, b) => b.ca - a.ca);
+  const permanents = [...mN.values()].filter(x => refN1.has(x.ref)).map(enrich).sort((a, b) => b.ca - a.ca);
+  const manquants = [...mN1.values()].filter(x => !refN.has(x.ref)).map(enrich);
+  const all = [...mN.values()].map(enrich);
+  const sold = all.filter(x => x.qte > 0);
+  const bests = [...sold].sort((a, b) => b.ca - a.ca).slice(0, 15);
+  const slowers = [...sold].sort((a, b) => a.ca - b.ca).slice(0, 15);
+  const nonVendus = all.filter(x => x.qte === 0).sort((a, b) => b.prix - a.prix);
+  return {
+    counts: {
+      modN: mN.size, modN1: mN1.size, varN: N.length, varN1: N1.length,
+      nouveautes: nouveautes.length, permanents: permanents.length, manquants: manquants.length,
+      vendus: sold.length, nonVendus: nonVendus.length,
+      caNouveautes: nouveautes.reduce((s, x) => s + x.ca, 0), caPermanents: permanents.reduce((s, x) => s + x.ca, 0),
+    },
+    familles,
+    nouveautes: nouveautes.slice(0, 15), permanents: permanents.slice(0, 15), manquants: manquants.slice(0, 15),
+    bests, slowers, nonVendus: nonVendus.slice(0, 15),
+  };
+}
+
 // ── Top produits ────────────────────────────────────────────────────────────
 function buildTopProdMap(rows, map) {
   const pi = map.prix, di = map.des, qi = map.qte, ti = map.type;
@@ -642,7 +702,7 @@ function dateBounds(rows, map) {
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES, RET_ALIASES,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
@@ -651,4 +711,5 @@ module.exports = {
   buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
+  baseRef, implItems, calcSeasonCompare,
 };

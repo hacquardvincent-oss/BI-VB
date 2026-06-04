@@ -13,7 +13,7 @@ const calc = require('./calc');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const SOURCES = ['oms', 'y2', 'ga', 'ref', 'ret'];
+const SOURCES = ['oms', 'y2', 'ga', 'ref', 'ret', 'impl'];
 const PERIODS = ['N', 'N1'];
 const ANONYMIZE = new Set(['oms', 'ret']); // sources contenant du PII client
 
@@ -36,14 +36,22 @@ function parseBuffer(buf, filename, source) {
   if (ext === 'xlsx' || ext === 'xls') {
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const text = XLSX.utils.sheet_to_csv(sheet, { FS: source === 'ga' ? ',' : ';' });
-    return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
+    if (source === 'ga') {
+      return calc.parseGAcsv(XLSX.utils.sheet_to_csv(sheet, { FS: ',' }));
+    }
+    // Extraction directe en tableau : évite la corruption des en-têtes/cellules
+    // multi-lignes lors d'un passage par CSV (raw:false → dates/nombres formatés comme affichés).
+    const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, blankrows: false, defval: '' });
+    if (!aoa.length) return { hdrs: [], rows: [] };
+    const hdrs = (aoa[0] || []).map(h => (h == null ? '' : String(h)).replace(/\s+/g, ' ').trim());
+    const rows = aoa.slice(1).map(r => hdrs.map((_, i) => (r[i] == null ? '' : String(r[i]))));
+    return { hdrs, rows };
   }
   const text = source === 'ga' ? buf.toString('utf8') : buf.toString('latin1');
   return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
 }
 
-const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES }[s]);
+const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
 
 router.post('/:source/:period', requireAuth, upload.single('file'), (req, res) => {
   const { source, period } = req.params;

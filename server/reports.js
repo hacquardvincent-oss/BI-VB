@@ -49,6 +49,7 @@ async function buildReport({ preset, from, to, isAll, dim }) {
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
   const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
+  const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
 
   // Période
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
@@ -227,6 +228,10 @@ async function buildReport({ preset, from, to, isAll, dim }) {
     topRetournes: retN ? prof.filter(p => p.caRetourne > 0).sort((a, b) => b.caRetourne - a.caRetourne).slice(0, 10) : [],
   };
 
+  // ── Comparaison de saison (Implantation E26=N vs E25=N-1) ──
+  // salesRef est indexé par Ref. externe (= RC) sur les ventes EShop de la période.
+  const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRef) : null;
+
   // Familles fusionnées N / N-1
   let famille = null;
   if (famNobj) {
@@ -242,12 +247,14 @@ async function buildReport({ preset, from, to, isAll, dim }) {
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
+      hasImpl: !!implN, hasImplN1: !!implN1,
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     marketplace: { n: mktN, n1: mktN1 },
     pays,
     saison,
+    seasonCompare,
     cancellations,
     returns,
     famille,
