@@ -12,7 +12,15 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
 - ✅ **Lot B livré** (ac6b506) : N-1 + totaux + « meilleurs N-1 perdus » sur canaux, device, trafic,
   funnel GA, funnel produit, campagnes, campagne→landing, pages×source. ⚠ Nécessite un « Rafraîchir GA4 »
   (nouveaux champs sessions/revenu/pays/N1 ; `fetchPagesBySource` passe en landingPage+sessions).
-- ⏭️ Restent A, C, D, E.
+- ✅ **Correctif imports** (1130d15) : la perte de fichiers vient de la **mémoire serveur perdue**
+  (mode sans base : Render redéploie/veille → RAM vidée ; aucun code ne supprime le store). Ajout
+  d'un **bandeau de mode** (persistance/mémoire) + **resync du statut** quand le rapport est vide
+  (fin de la contradiction « statut chargé » vs « aucun fichier »). **Correction durable = `DATABASE_URL` (Neon).**
+- ✅ **Lot A livré** (1130d15) : vue **Full par défaut** + en tête ; barre « Vue » (filtre) ;
+  **sélecteur de dates N (début/fin) + N-1 (début/fin)** avec calendriers à la place de la cadence,
+  bouton « Tout » ; `buildReport`/PDF acceptent une plage N-1 explicite (cfrom/cto) ; période
+  découplée de la vue ; dimension Global/France/International déjà en place.
+- ⏭️ Restent C, D, E.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
