@@ -1,5 +1,46 @@
-# STATUS.md — BiDash
-_Mis à jour : 03/06/2026_
+# STATUS.md — BI Project
+_Mis à jour : 04/06/2026_
+
+## 🧭 Roadmap — prochaine itération (cadrée le 04/06/2026)
+Objectif : capitaliser sur le socle (collecte multi-sources + analyse N/N-1 matures) en
+fiabilisant la lecture comparée et en restructurant l'outil en briques métier lisibles.
+
+### Brique 0 — Bilan en tête de dashboard ⬜
+- ⬜ **Scorecard N vs N-1** épinglée en haut de `#report` : CA, commandes, panier moyen,
+  taux de transfo, taux de retour — chaque tuile avec son Δ coloré (vert/rouge).
+- ⬜ **Signaux auto** (règles, sans IA) : meilleure famille en croissance, produit en chute,
+  canal qui décroche, alerte si retours/annulations dépassent un seuil.
+- ⬜ **Synthèse IA** : afficher la `synthese` déjà produite par `reco.js` si `ANTHROPIC_API_KEY`
+  présent (sinon scorecard + signaux seuls). Carte « 🎯 Bilan ».
+- ℹ️ Toute la donnée existe (`buildReport` renvoie tout) → coût faible. Limite assumée : bilan
+  CA+trafic tant que marge / coût média / stock ne sont pas branchés.
+
+### Brique 1 — Fiabiliser la lecture comparée (transverse) ⬜
+- ⬜ **Deltas manquants** : auditer chaque carte/KPI et compléter les Δ N-1 absents
+  (objectif : N-1 systématique partout où c'est calculable).
+- ⬜ **Recommandations vs N-1** : étendre les insights auto (`ana()`) à une lecture
+  systématique « N vs N-1 » (ce qui monte / décroche, et pourquoi).
+- ⬜ **Analyses par saison** : généraliser le prisme saison au-delà de la comparaison
+  implantation E26/E25 (CA, familles, produits, trafic lus à l'échelle d'une saison).
+
+### Brique 2 — Restructuration en briques métier (navigation) ⬜
+Clarifier les modules actuels en parcours dédiés :
+- ⬜ **📊 Suivi e-store & trafic** : pilotage (KPI, CA, funnel conversion, suivi quotidien/temporel).
+- ⬜ **📈 Analyse GA / acquisition** : canaux, campagnes UTM, landing, pages par source.
+- ⬜ **🧵 Saison & produits** : implantation, familles, sell-through, manquants, bests/slowers.
+- ⬜ **🧭 Comportement on-site** : funnel produit (vues→panier→achat), pages, device, parcours.
+- ⬜ **🌍 Prisme Global / FR / International — à revoir** : cohérence du filtre, valeur par défaut,
+  lisibilité (et signaler proprement quand GA géo n'est pas dispo).
+
+### Manques de données identifiés (par métier) — backlog data ⬜
+Diagnostic du 04/06 : on pilote le CA et le trafic, pas la marge / le coût d'acquisition /
+le client dans le temps / le stock. Par ordre impact × effort :
+- ⬜ **Marge / coût d'achat par RC** (1 fichier coût suffit) → débloque rentabilité e-store **et** produit.
+- ⬜ **Dépenses média par canal/campagne** → ROAS, CAC, CPA, CPC (acquisition pilotée, pas à l'aveugle).
+- ⬜ **Stock & ruptures** (mise en marché, stock restant, ventes perdues) → sell-through + ventes perdues.
+- ⬜ **ID client pseudonymisé** (hash stable, sans PII) → ouvre tout le CRM agrégé (réachat, RFM, LTV, cohortes) sans casser le RGPD.
+
+---
 
 ## Épisode « évolutions UX » (en cours, démarré 04/06)
 Demandes : totaux+N-1 partout, Full par défaut + filtres de vue, **sélecteur de dates N/N-1** (calendrier)
@@ -46,7 +87,13 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
 - ✅ **Moteur de recommandations stratégiques** (bfba063) : `server/reco.js` — distille le reporting →
   API Claude (claude-opus-4-8, adaptive thinking, prompt caching system) → recos court/moyen/long terme.
   Inactif sans `ANTHROPIC_API_KEY`. Carte UI « 🧠 Recommandations stratégiques (IA) ».
-- ⏭️ Restent (optionnels) : **activer Neon** ; police/logo de marque PDF ; endpoint WSHOP retours détaillés ;
+- ✅ **Synchro incrémentale WSHOP** (delta) : après un import complet, `oms-N` mémorise sa fenêtre
+  + l'instant d'import (`dsN.sync`) ; `syncIncremental()` ne récupère que les commandes
+  créées/modifiées depuis (begin/end = date de modification, guard sur la fenêtre d'analyse) et
+  fusionne par n° de commande (OMS + retours). `runJob` généralisé (POST /refresh & /sync),
+  bouton « ⚡ Synchroniser le delta » + polling mutualisé. → analyse 1 an maintenue à jour en secondes.
+- ✅ **Neon activé** (persistance confirmée en prod : `[db] Postgres connecté`).
+- ⏭️ Restent (optionnels) : police/logo de marque PDF ; endpoint WSHOP retours détaillés ;
   dates de saison configurables/mémorisées.
 
 ## Objectif de la prochaine session
