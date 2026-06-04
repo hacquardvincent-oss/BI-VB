@@ -2,11 +2,10 @@
 _Mis à jour : 03/06/2026_
 
 ## Objectif de la prochaine session
-Réorg modules + Neon + P1 + **P2** + **P3** + **P4** livrés. **Reste** :
-- **P5 — International vs N-1** : module International enrichi (sessions/commandes/TT/CA inter vs N-1,
-  campagnes & top pages filtrés international — réutiliser les briques GA de P4 + filtre pays).
-- Puis : **moteur de reco stratégique** C/M/L terme (API Claude), vitrine = module Direction.
-- ⚠️ À tester en réel : P4 nécessite un **« Rafraîchir GA4 »** (campagnes UTM) pour peupler les nouvelles cartes.
+Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
+- **Moteur de reco stratégique** C/M/L terme (API Claude), vitrine = module Direction.
+- ⚠️ À valider en réel via **« Rafraîchir GA4 »** : P4 (campagnes UTM) + P5 (GA filtré par pays).
+  Les fetchs GA portent désormais la dimension `country` ; non testés sans creds en dev.
 
 Taxonomie thèmes (A→H) définie dans `web/app.js` (THEME_OF/THEME_META) : Pilotage, Temporel, Acquisition,
 Conversion, Comportement, Offre, Omnicanal, International, Qualité.
@@ -14,6 +13,17 @@ Conversion, Comportement, Offre, Omnicanal, International, Qualité.
 ⚙️ **Action à faire pour activer la persistance** : créer un projet gratuit sur **neon.tech**,
 copier la *connection string*, la poser en variable `DATABASE_URL` dans Render. Tant qu'elle est
 absente, l'app tourne en mémoire (aucune régression).
+
+---
+
+## Session du 04/06/2026 (suite) — P5 : International vs N-1 ✅
+- ✅ Module **International** : bascule auto `dim=inter` (modules sans `dim` → retour global) ;
+  layout enrichi (kpi/ca/daily/channels/campaigns/gafunnel/device/landing/pages/lostpages/pays/ttpays).
+- ✅ `ga4.js` : dimension **`country`** ajoutée aux fetchs landing/pages/pagesrc/campaigns/campaignLanding.
+- ✅ `reports.js` : tous les builders GA agrégés **après filtre pays** (`keepGeoRow`, selon dimension) ;
+  repli pass-through si données anciennes sans pays → global/FR/international cohérents partout.
+- ✅ Vérifié OMS réel : inter = 284 k€ (hors France, top Royaume-Uni) vs global 950 k€. Tests OK.
+- ⚠️ Chemin GA géo à valider via « Rafraîchir GA4 » (non testable sans creds en dev).
 
 ---
 
