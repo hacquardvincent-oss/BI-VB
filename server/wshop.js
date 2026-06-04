@@ -159,19 +159,29 @@ function buildOmsDataset(orders, fromISO, toISO) {
   };
 }
 
-// Importe l'historique OMS depuis WSHOP dans le slot oms-N (le sélecteur de dates
-// gère ensuite N / N-1). Profondeur = WSHOP_MONTHS (défaut 24 mois).
-async function refresh() {
+// Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
+// opts : { from, to, cfrom, cto } (ISO YYYY-MM-DD). Sans dates → fenêtre par défaut (WSHOP_MONTHS).
+async function refresh(opts = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
   const c = CFG();
-  const to = new Date();
-  const from = new Date(); from.setMonth(from.getMonth() - c.months);
-  const iso = d => d.toISOString().slice(0, 10);
-  const orders = await fetchOrders(iso(from), iso(to));
-  const ds = buildOmsDataset(orders, iso(from), iso(to));
-  if (!ds.rows.length) throw new Error('WSHOP : aucune commande reçue (vérifier période / mapping / droits API)');
-  store.setDataset('oms', 'N', ds);
-  return { orders: orders.length, rows: ds.rows.length, from: ds.date_min, to: ds.date_max };
+  const isoD = d => d.toISOString().slice(0, 10);
+  let from = opts.from, to = opts.to;
+  if (!from || !to) { // fallback : derniers WSHOP_MONTHS mois
+    const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months);
+    from = isoD(f); to = isoD(t);
+  }
+  const ordersN = await fetchOrders(from, to);
+  const dsN = buildOmsDataset(ordersN, from, to);
+  if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
+  store.setDataset('oms', 'N', dsN);
+  // Période N-1 (comparatif) si fournie
+  let n1 = null;
+  if (opts.cfrom && opts.cto) {
+    const ordersN1 = await fetchOrders(opts.cfrom, opts.cto);
+    const dsN1 = buildOmsDataset(ordersN1, opts.cfrom, opts.cto);
+    if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
+  }
+  return { orders: ordersN.length, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1 };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -179,7 +189,7 @@ router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfig
 router.post('/refresh', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   try {
-    res.json({ ok: true, ...(await refresh()) });
+    res.json({ ok: true, ...(await refresh(req.query)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

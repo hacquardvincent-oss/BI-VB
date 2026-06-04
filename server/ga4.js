@@ -207,17 +207,20 @@ function toDataset(parsed, startDate, endDate) {
 // Rafraîchit ga-N (et ga-N1 si on connaît la période OMS) depuis l'API.
 // Le cœur (sessions/canaux) doit réussir ; les analyses secondaires sont best-effort
 // (un échec sur l'une — ex. 502 transitoire — n'interrompt pas tout l'import).
-async function refresh() {
+async function refresh(opts = {}) {
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) throw new Error('GA4_PROPERTY_ID non défini');
-  const oms = store.getDataset('oms', 'N');
-  let nStart, nEnd, n1 = null;
-  if (oms && oms.date_min && oms.date_max) {
-    nStart = oms.date_min; nEnd = oms.date_max;
-    n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
-  } else {
-    nStart = '30daysAgo'; nEnd = 'yesterday';
+  // Période N : dates explicites (sélecteur) > bornes OMS > 30 derniers jours
+  let nStart = opts.from, nEnd = opts.to;
+  if (!nStart || !nEnd) {
+    const oms = store.getDataset('oms', 'N');
+    if (oms && oms.date_min && oms.date_max) { nStart = oms.date_min; nEnd = oms.date_max; }
+    else { nStart = '30daysAgo'; nEnd = 'yesterday'; }
   }
+  // Période N-1 : dates explicites > décalage d'un an (si dates ISO)
+  let n1 = null;
+  if (opts.cfrom && opts.cto) n1 = { start: opts.cfrom, end: opts.cto };
+  else if (/^\d{4}-\d{2}-\d{2}$/.test(nStart)) n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
   const warnings = [];
   const safe = async (label, fn) => { try { await fn(); } catch (e) { warnings.push(`${label}: ${e.message}`); } };
   const ts = () => new Date().toISOString();
@@ -249,7 +252,7 @@ router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfig
 router.post('/refresh', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (clé ou GA4_PROPERTY_ID manquants côté serveur)' });
   try {
-    const r = await refresh();
+    const r = await refresh(req.query);
     res.json({ ok: true, ...r });
   } catch (e) {
     res.status(500).json({ error: e.message });

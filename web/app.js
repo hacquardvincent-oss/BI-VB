@@ -288,6 +288,19 @@ function fillDateInputs(meta) {
   const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
   set('dNfrom', meta.from); set('dNto', meta.to); set('dCfrom', meta.cf); set('dCto', meta.ct);
 }
+// Période actuellement saisie dans les calendriers (N début/fin + N-1 début/fin)
+function currentPeriod() {
+  const v = id => document.getElementById(id).value;
+  return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
+}
+// Applique la période saisie au rapport (après un refresh API ciblé)
+function applyCurrentPeriod() {
+  const p = currentPeriod();
+  if (p.from && p.to) {
+    DATES = { from: p.from, to: p.to, cfrom: p.cfrom || '', cto: p.cto || '' };
+    const btn = document.getElementById('datesAll'); if (btn) btn.classList.remove('on');
+  }
+}
 function reportQuery() {
   if (DATES) return `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`;
   return `preset=all&dim=${CURRENT_DIM}`;
@@ -925,12 +938,14 @@ async function ga4Status() {
 }
 document.getElementById('ga4refresh').addEventListener('click', async () => {
   const note = document.getElementById('ga4note');
-  note.textContent = 'Récupération GA4 en cours…';
-  const r = await fetch('/api/ga4/refresh', { method: 'POST' });
+  note.textContent = 'Récupération GA4 sur la période sélectionnée…';
+  const q = new URLSearchParams(currentPeriod()).toString();
+  const r = await fetch('/api/ga4/refresh?' + q, { method: 'POST' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur GA4'); return; }
   const warn = (j.warnings && j.warnings.length) ? ` · ⚠ ${j.warnings.length} analyse(s) secondaire(s) indisponible(s) (réessayer)` : '';
   note.textContent = `✓ GA4 importé : ${j.rowsN} lignes N${j.rowsN1 != null ? ` · ${j.rowsN1} lignes N-1` : ''} (${j.period.start} → ${j.period.end})${warn}`;
+  applyCurrentPeriod();
   await loadStatus();
   loadReport();
 });
@@ -947,15 +962,17 @@ async function wshopStatus() {
 document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
   const btn = document.getElementById('wshoprefresh');
-  note.textContent = 'Import OMS WSHOP en cours… (peut prendre 1-2 min selon le volume)';
+  note.textContent = 'Import OMS WSHOP sur la période sélectionnée…';
   btn.disabled = true;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 150000); // garde-fou 150s
   try {
-    const r = await fetch('/api/wshop/refresh', { method: 'POST', signal: ctrl.signal });
+    const q = new URLSearchParams(currentPeriod()).toString();
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST', signal: ctrl.signal });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur WSHOP'); return; }
-    note.textContent = `✓ OMS WSHOP importé : ${j.rows} lignes (${j.from} → ${j.to})`;
+    note.textContent = `✓ OMS WSHOP : ${j.rows} lignes N (${j.from} → ${j.to})${j.n1 ? ` · ${j.n1.rows} lignes N-1` : ''}`;
+    applyCurrentPeriod();
     await loadStatus();
     loadReport();
   } catch (e) {
@@ -983,8 +1000,25 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
+// Raccourcis de période : remplissent N (et N-1 = même plage l'an dernier) puis appliquent
+document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const shiftY = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
+  const today = new Date(); let from = new Date(), to = new Date();
+  const kind = b.dataset.range;
+  if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
+  else if (kind === '7d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 7); }
+  else if (kind === '30d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 30); }
+  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; }
+  const nf = ymd(from), nt = ymd(to);
+  document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
+  document.getElementById('dCfrom').value = shiftY(nf); document.getElementById('dCto').value = shiftY(nt);
+  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  applyCurrentPeriod(); loadReport();
+}));
 document.getElementById('datesAll').addEventListener('click', () => {
   DATES = null;
+  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
   document.getElementById('datesAll').classList.add('on');
   ['dNfrom', 'dNto', 'dCfrom', 'dCto'].forEach(id => { document.getElementById(id).value = ''; });
   loadReport(); // le rapport renverra la plage complète et re-remplira les calendriers
