@@ -38,8 +38,10 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
   via **DROP** (P*/PER) ; manquants triés CA N-1 ; présélections **Saison Été/Hiver** (fenêtre longue éditable).
 - ✅ **Lot D complet** (7aa1172) : cross-canal famille-first + famille Δ N-1 + « best par canal en N-1 » ;
   Qualité = annulations EShop (OMS) vs retours clients (WSHOP) clairement distingués.
-- ⏭️ Restent : **Lot E (PDF luxe)**. + activer Neon. + dates de saison configurables/mémorisées (option).
-  + endpoint WSHOP retours détaillés (raisons/produit) si dispo.
+- ✅ **Lot E — PDF maison de luxe** (eb64c5d) : refonte `pdf.js` (Times titres + Helvetica data, accent
+  bronze, tuiles KPI, sections thématiques, tableaux filets fins, pagination bufferPages). Épisode UX A→E complet.
+- ⏭️ Restent : **activer Neon** (persistance) ; **moteur de recommandations stratégiques** (API Claude) ;
+  options : police/logo de marque dans le PDF, dates de saison configurables, endpoint WSHOP retours détaillés.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
