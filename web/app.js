@@ -508,7 +508,7 @@ function renderReport(rep) {
       <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
       ${ttNote}</div>`;
-  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div><div style="height:200px;margin-top:12px"><canvas id="caMixChart"></canvas></div></div>`;
+  const caCard = `<div class="card"><h3>Chiffre d'affaires — ${dimLabel}</h3><div class="kgrid">${caBlocks}</div></div>`;
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
@@ -743,10 +743,6 @@ function renderCharts(rep) {
   };
   const cut = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
 
-  if (rep.ca) {
-    const c = rep.ca.n;
-    mk('caMixChart', { type: 'doughnut', data: { labels: ['Entrepôt', 'SFS', 'Marketplace'], datasets: [{ data: [Math.round(c.caEnt), Math.round(c.caSFS), Math.round(c.caMkt)], backgroundColor: ['#f5a623', '#4a9eff', '#22c55e'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
-  }
   if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
     const s = [...rep.ga.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
     mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
