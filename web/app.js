@@ -505,6 +505,7 @@ function renderReport(rep) {
     const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
+      <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       <div class="grid cols2" style="margin-top:10px">
         <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
@@ -621,6 +622,7 @@ function renderReport(rep) {
       </div></div>`;
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
+      <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
@@ -646,6 +648,7 @@ function renderReport(rep) {
         <div class="kc"><div class="l">Vendus / Non vendus</div><div class="v">${fInt(c.vendus)} / ${fInt(c.nonVendus)}</div></div>
       </div>
       <h3 style="margin-top:14px">Largeur d'offre par famille (modèles)</h3>
+      <div style="height:230px;margin-bottom:8px"><canvas id="saisonChart"></canvas></div>
       <table><thead><tr><th>Famille</th><th>Modèles E26</th><th>E25</th><th>Δ</th><th>Variantes E26</th></tr></thead><tbody>${famRowsSC}</tbody></table>
       ${miniTable('🏆 Bests E26 (CA EShop)', sc.bests)}
       ${miniTable('🌱 Top saisonniers (P*) par CA', sc.saisonniers)}
@@ -675,6 +678,7 @@ function renderReport(rep) {
     crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplace</h3>
       <div class="kgrid">${totRow}</div>
       <h3 style="margin-top:14px">Familles par canal (CA) — N vs N-1</h3>
+      <div style="height:240px;margin-bottom:8px"><canvas id="crossStack"></canvas></div>
       <div style="overflow-x:auto"><table><thead><tr>${famHead}</tr></thead><tbody>${famRowsCC}</tbody></table></div>
       <h3 style="margin-top:14px">🔎 Zoom produits par canal (CA)</h3>
       <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${prodRows}</tbody></table></div>
@@ -889,6 +893,28 @@ function renderCharts(rep) {
   if (rep.pays && rep.pays.length) {
     const p = rep.pays.slice(0, 10);
     mk('paysChart', { type: 'bar', data: { labels: p.map(x => cut(x.pays, 18)), datasets: [{ data: p.map(x => Math.round(x.n.ca)), backgroundColor: 'rgba(34,197,94,.55)', borderColor: '#22c55e', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+  }
+  // Donut marketplace (part par enseigne)
+  if (rep.marketplace && rep.marketplace.n) {
+    const m = rep.marketplace.n;
+    const seg = [['Galeries Lafayette', m.glTotal], ['Printemps', m.printemps], ['Place des Tendances', m.pdt], ['Lulli', m.lulli]].filter(x => x[1] > 0);
+    if (seg.length) mk('mktDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+  }
+  // Saison : modèles par famille E26 vs E25 (barres groupées)
+  if (rep.seasonCompare && rep.seasonCompare.familles && rep.seasonCompare.familles.length) {
+    const f = rep.seasonCompare.familles.slice(0, 8);
+    mk('saisonChart', { type: 'bar', data: { labels: f.map(x => cut(x.famille, 18)), datasets: [{ label: 'E26', data: f.map(x => x.modN), backgroundColor: 'rgba(245,166,35,.7)', borderColor: '#f5a623', borderWidth: 1, borderRadius: 3 }, { label: 'E25', data: f.map(x => x.modN1), backgroundColor: 'rgba(148,163,184,.5)', borderColor: '#94a3b8', borderWidth: 1, borderRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
+  }
+  // Retours : top raisons (barres)
+  if (rep.returns && rep.returns.n && rep.returns.n.reasons && rep.returns.n.reasons.length) {
+    const r = rep.returns.n.reasons.slice(0, 8);
+    mk('retoursChart', { type: 'bar', data: { labels: r.map(x => cut(x.reason, 22)), datasets: [{ data: r.map(x => Math.round(x.montant)), backgroundColor: 'rgba(239,68,68,.55)', borderColor: '#ef4444', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+  }
+  // Cross-canal : famille × canal (barres empilées)
+  if (rep.crossChannel && rep.crossChannel.familles && rep.crossChannel.channels) {
+    const cc = rep.crossChannel, fam = cc.familles.slice(0, 8);
+    const ds = cc.channels.map((chn, i) => ({ label: chn, data: fam.map(f => Math.round(f.byChannel[chn] || 0)), backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 0 }));
+    mk('crossStack', { type: 'bar', data: { labels: fam.map(f => cut(f.famille, 16)), datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
   }
   if (rep.famille && rep.famille.length) {
     const f = rep.famille.slice(0, 8);
