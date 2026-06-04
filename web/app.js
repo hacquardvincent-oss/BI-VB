@@ -1074,8 +1074,8 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
   try {
     const q = new URLSearchParams(currentPeriod()).toString();
     const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST', signal: ctrl.signal });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur WSHOP'); return; }
+    const raw = await r.text(); let j = {}; try { j = JSON.parse(raw); } catch (e) { /* non-JSON */ }
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status} — ${raw.slice(0, 140) || 'réponse vide (proxy/timeout)'}`); return; }
     note.textContent = `✓ OMS WSHOP : ${j.rows} lignes N (${j.from} → ${j.to})${j.n1 ? ` · ${j.n1.rows} lignes N-1` : ''}`;
     applyCurrentPeriod();
     await loadStatus();
@@ -1085,6 +1085,16 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
       ? '⚠ Délai dépassé — réduire l\'historique (WSHOP_MONTHS, ex. 1 ou 3) puis réessayer.'
       : '⚠ ' + (e.message || 'Erreur réseau WSHOP');
   } finally { clearTimeout(timer); btn.disabled = false; }
+});
+document.getElementById('wshopping').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  note.textContent = 'Test de connexion WSHOP…';
+  try {
+    const r = await fetch('/api/wshop/ping');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    note.innerHTML = `base <b>${esc(j.base || '?')}</b> · auth <b>${esc(j.auth || '?')}</b>${j.authMs != null ? ' (' + j.authMs + 'ms)' : ''} · commandes <b>${esc(j.orders || '—')}</b>${j.ordersMs != null ? ' (' + j.ordersMs + 'ms)' : ''}${j.sampleKeys ? ' · champs: ' + esc(Array.isArray(j.sampleKeys) ? j.sampleKeys.join(', ') : j.sampleKeys) : ''}`;
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
 // Événements

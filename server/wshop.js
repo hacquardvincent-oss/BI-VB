@@ -39,19 +39,30 @@ const CFG = () => {
 };
 function isConfigured() { const c = CFG(); return !!(c.base && c.user && c.pwd); }
 
+// fetch avec timeout (sinon un appel qui traîne fait répondre le proxy Render en 502 opaque)
+async function wfetch(url, opts, ms = 90000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  catch (e) { throw new Error(e.name === 'AbortError' ? `délai dépassé (${ms / 1000}s)` : (e.message || 'connexion impossible')); }
+  finally { clearTimeout(t); }
+}
+
 // (1) ✅ AUTHENTIFICATION — POST /api/v1/authenticate {user, pwd} → { success, token }
 //     Le JWT est valable 1h ; on le met en cache (~55 min) et on le rejoue en Bearer.
 let _tok = { value: '', exp: 0 };
 async function getToken(force = false) {
   if (!force && _tok.value && Date.now() < _tok.exp) return _tok.value;
   const c = CFG();
-  const res = await fetch(`${c.base}/api/v1/authenticate`, {
+  if (!c.base) throw new Error('WSHOP_INSTANCE / WSHOP_API_BASE manquant (base introuvable)');
+  const res = await wfetch(`${c.base}/api/v1/authenticate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ user: c.user, pwd: c.pwd }),
-  });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j.token) throw new Error(`WSHOP auth ${res.status} : ${(j.error && j.error.message) || 'échec d\'authentification'}`);
+  }, 30000);
+  const txt = await res.text();
+  let j = {}; try { j = JSON.parse(txt); } catch (e) { /* non-JSON */ }
+  if (!res.ok || !j.token) throw new Error(`auth ${res.status} : ${(j.error && j.error.message) || txt.slice(0, 160) || 'échec'}`);
   _tok = { value: j.token, exp: Date.now() + 55 * 60 * 1000 };
   return _tok.value;
 }
@@ -59,7 +70,7 @@ async function getToken(force = false) {
 async function apiPost(path, body = {}, tries = 3) {
   const c = CFG();
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const call = async () => fetch(c.base + path, {
+  const call = async () => wfetch(c.base + path, {
     method: 'POST',
     headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
@@ -215,6 +226,27 @@ async function refresh(opts = {}) {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfigured() }));
+
+// Diagnostic : teste l'auth puis la récupération d'1 commande (30 j). Isole la cause d'un échec.
+router.get('/ping', requireAuth, async (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur' });
+  const c = CFG();
+  const out = { base: c.base, user: c.user ? c.user.replace(/(.{2}).*(@.*)/, '$1***$2') : '', months: c.months };
+  let t = Date.now();
+  try { await getToken(true); out.auth = 'ok'; out.authMs = Date.now() - t; }
+  catch (e) { out.auth = 'KO — ' + e.message; out.authMs = Date.now() - t; return res.json(out); }
+  t = Date.now();
+  try {
+    const to = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
+    const iso = d => d.toISOString().slice(0, 10);
+    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 1 });
+    const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+    out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
+    out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
+  } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
+  res.json(out);
+});
+
 router.post('/refresh', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   try {
