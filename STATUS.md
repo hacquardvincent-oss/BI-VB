@@ -41,10 +41,13 @@ D Offre/Cross-canal/Qualité · E PDF luxe.
 - ✅ **Lot E — PDF maison de luxe** (eb64c5d, 23c04ad) : refonte `pdf.js` ; **renommé BI Project** ;
   correctifs glyphes (→/Δ/espace fine insécable) ; palette interface (bandeau sombre #11142a + ambre) ;
   donut (répartition CA, mix canaux) + barres (familles/produits/bests). Épisode UX A→E complet.
-- ✅ **Web visuels — salve 1** (c6337f3) : donut CA (Pilotage), funnel visuel, donut device, barres pays
-  (visuel en tête + tableau conservé). Renommage BI Project (web/login).
-- ⏭️ Restent : web visuels salve 2 (marketplace donut, saison barres, retours barres, cross-canal empilé) ;
-  **activer Neon** ; **moteur de recommandations** (API Claude) ; options : police/logo PDF, retours WSHOP détaillés.
+- ✅ **Web visuels** (c6337f3, salve 1 + salve 2) : donut CA, funnel, donut device, barres pays,
+  donut marketplace, barres saison (E26/E25), barres retours, cross-canal empilé. Renommage BI Project.
+- ✅ **Moteur de recommandations stratégiques** (bfba063) : `server/reco.js` — distille le reporting →
+  API Claude (claude-opus-4-8, adaptive thinking, prompt caching system) → recos court/moyen/long terme.
+  Inactif sans `ANTHROPIC_API_KEY`. Carte UI « 🧠 Recommandations stratégiques (IA) ».
+- ⏭️ Restent (optionnels) : **activer Neon** ; police/logo de marque PDF ; endpoint WSHOP retours détaillés ;
+  dates de saison configurables/mémorisées.
 
 ## Objectif de la prochaine session
 Réorg modules + Neon + **P1→P5** livrés (épisode analytique complet). **Reste** :
