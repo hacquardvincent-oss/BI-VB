@@ -488,7 +488,7 @@ function renderReport(rep) {
       ['Taux annulation (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
       ['CA annulé (estimé)', fEur(cx.caAnnuleEstime), cx.caAnnuleEstime, cx1.caAnnuleEstime],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
-    cancellationsCard = `<div class="card"><h3>Annulations (pièces non expédiées)</h3><div class="kgrid">${tiles}</div><div class="note">Colonne « Quantité non livré » de l'OMS (≥ 1). CA annulé = estimation au prorata du prix payé.</div></div>`;
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div><div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (rupture, annulation, contrôle). Source OMS (commandé − expédié). CA annulé = estimation au prorata du prix payé. À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
 
   // Retours
@@ -503,12 +503,12 @@ function renderReport(rep) {
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
-    returnsCard = `<div class="card"><h3>Retours</h3><div class="kgrid">${tiles}</div>
+    returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
       <div class="grid cols2" style="margin-top:10px">
         <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
-      <div class="note">Taux de retour = CA retourné / CA EShop de la période.</div></div>`;
+      <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
   // Top produits N vs N-1 + reconquête
@@ -660,19 +660,24 @@ function renderReport(rep) {
     const ch = cc.channels;
     const naC = '<span class="na">—</span>';
     const totRow = cc.totals.map(t => `<div class="kc"><div class="l">${esc(t.channel)}</div><div class="v">${fEur(t.ca)}</div><div style="font-size:10px">${delta(t.ca, t.caN1)} vs N-1</div></div>`).join('');
+    // Familles × canal (d'abord) — avec Δ N-1 sur le total
+    const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
+    const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(f.total)}</b></td><td>${delta(f.total, f.totalN1)}</td></tr>`).join('');
+    // Produits × canal (zoom)
     const head = `<th>Produit</th><th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
     const prodRows = cc.products.map(p => `<tr><td title="${esc(p.ref)}">${esc(p.name)}</td><td>${esc(p.famille)}</td>${ch.map(c => `<td>${p.byChannel[c] ? fEur(p.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(p.total)}</b></td><td>${delta(p.total, p.totalN1)}</td></tr>`).join('');
-    const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th>`;
-    const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(f.total)}</b></td></tr>`).join('');
+    // Qui vendait quoi le mieux en N-1 (top produits par canal sur N-1)
+    const bestN1 = (cc.bestPerChannelN1 || []).map(x => `<tr><td><b>${esc(x.channel)}</b></td><td>${x.top.map(t => `${esc(t.name)} <span style="color:var(--t3)">(${fEur(t.ca)})</span>`).join(' · ')}</td></tr>`).join('');
     const recos = (cc.recos && cc.recos.length) ? `<div class="insight">💡 ${cc.recos.map(esc).join('<br>💡 ')}</div>` : '';
     crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplace</h3>
       <div class="kgrid">${totRow}</div>
-      <h3 style="margin-top:14px">Top produits par canal (CA)</h3>
-      <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${prodRows}</tbody></table></div>
-      <h3 style="margin-top:14px">Familles par canal (CA)</h3>
+      <h3 style="margin-top:14px">Familles par canal (CA) — N vs N-1</h3>
       <div style="overflow-x:auto"><table><thead><tr>${famHead}</tr></thead><tbody>${famRowsCC}</tbody></table></div>
+      <h3 style="margin-top:14px">🔎 Zoom produits par canal (CA)</h3>
+      <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${prodRows}</tbody></table></div>
+      ${bestN1 ? `<h3 style="margin-top:14px">📅 Ce qui marchait le mieux par canal en N-1</h3><table><thead><tr><th>Canal</th><th>Top produits N-1 (CA)</th></tr></thead><tbody>${bestN1}</tbody></table>` : ''}
       ${recos}
-      <div class="note">Réf. unifiée sur les 3 canaux (OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2). Canaux classés par magasin & type de paiement. Δ N-1 si OMS/Y2 N-1 chargés.</div></div>`;
+      <div class="note">Lecture famille → produit. Réf. unifiée sur les 3 canaux (OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2). « N-1 par canal » = meilleurs vendeurs de l'an dernier sur chaque canal (a-t-on gardé/perdu un best ?).</div></div>`;
   }
 
   // Cartes nommées + layout adapté à la cadence

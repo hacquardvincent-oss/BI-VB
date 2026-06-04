@@ -778,18 +778,26 @@ function calcCrossChannel(omsN, omsMapN, y2N, y2MapN, famByRef, omsN1, omsMapN1,
   const channels = [...set].sort((a, b) => (CHANNEL_ORDER.indexOf(a) < 0 ? 99 : CHANNEL_ORDER.indexOf(a)) - (CHANNEL_ORDER.indexOf(b) < 0 ? 99 : CHANNEL_ORDER.indexOf(b)));
   const totals = channels.map(ch => ({ channel: ch, ca: (A.byChannel[ch] || {}).ca || 0, qte: (A.byChannel[ch] || {}).qte || 0, caN1: (B.byChannel[ch] || {}).ca || 0 }));
   const fam = ref => (famByRef && (famByRef[ref] || famByRef[baseRef(ref)])) || '(n.c.)';
+  // Noms produits (depuis N, repli N-1) pour étiqueter même un best N-1 absent en N
+  const nameOf = {}; Object.entries(A.byRef).forEach(([ref, v]) => { if (v.name) nameOf[ref] = v.name; });
+  Object.entries(B.byRef).forEach(([ref, v]) => { if (v.name && !nameOf[ref]) nameOf[ref] = v.name; });
   const products = Object.entries(A.byRef).map(([ref, v]) => ({
     ref, name: v.name || ref, famille: fam(ref), total: v.total, qte: v.qte, byChannel: v.byChannel,
     totalN1: (B.byRef[ref] || {}).total || 0,
   })).sort((a, b) => b.total - a.total).slice(0, 30);
-  const famMap = {};
-  Object.entries(A.byRef).forEach(([ref, v]) => {
-    const f = fam(ref); const e = famMap[f] || (famMap[f] = { byChannel: {}, total: 0 });
-    Object.entries(v.byChannel).forEach(([ch, ca]) => { e.byChannel[ch] = (e.byChannel[ch] || 0) + ca; });
-    e.total += v.total;
-  });
-  const familles = Object.entries(famMap).map(([famille, v]) => ({ famille, total: v.total, byChannel: v.byChannel })).sort((a, b) => b.total - a.total).slice(0, 20);
-  return { channels, totals, products, familles, recos: buildCrossRecos(products, channels) };
+  // Famille × canal (N et N-1)
+  const famAgg = acc => { const m = {}; Object.entries(acc.byRef).forEach(([ref, v]) => { const f = fam(ref); const e = m[f] || (m[f] = { byChannel: {}, total: 0 }); Object.entries(v.byChannel).forEach(([ch, ca]) => { e.byChannel[ch] = (e.byChannel[ch] || 0) + ca; }); e.total += v.total; }); return m; };
+  const famN = famAgg(A), famN1 = famAgg(B);
+  const familles = [...new Set([...Object.keys(famN), ...Object.keys(famN1)])]
+    .map(f => ({ famille: f, total: (famN[f] || {}).total || 0, byChannel: (famN[f] || {}).byChannel || {}, totalN1: (famN1[f] || {}).total || 0, byChannelN1: (famN1[f] || {}).byChannel || {} }))
+    .sort((a, b) => b.total - a.total).slice(0, 20);
+  // « Qui vendait quoi le mieux en N-1 » : top produits par canal sur N-1
+  const bestPerChannelN1 = channels.map(ch => {
+    const arr = Object.entries(B.byRef).map(([ref, v]) => ({ ref, name: nameOf[ref] || ref, famille: fam(ref), ca: v.byChannel[ch] || 0 }))
+      .filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca).slice(0, 3);
+    return { channel: ch, top: arr };
+  }).filter(x => x.top.length);
+  return { channels, totals, products, familles, bestPerChannelN1, recos: buildCrossRecos(products, channels) };
 }
 
 // ── Top produits ────────────────────────────────────────────────────────────
