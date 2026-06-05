@@ -344,6 +344,7 @@ function newCAAudit() {
   const isExclPay = p => { const t = (p || '').toLowerCase(); return t.includes('gl.com') || t.includes('printemps') || t.includes('la redoute') || t.includes('24s'); };
   let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
   let pvpEShop = 0; // PVP hors marketplaces (par type de paiement)
+  const cbDetail = []; // détail des commandes Carte Bancaire (réconciliation API↔OMS)
   let dateMin = '', dateMax = '', splits = 0;
   const byStore = Object.create(null), byPayment = Object.create(null);
   const byOrderStatus = Object.create(null), byStoreStatus = Object.create(null), byCustomerStatus = Object.create(null);
@@ -371,6 +372,13 @@ function newCAAudit() {
       bump(byStore, store, oTot);
       bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Printemps, Global…)
       if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
+      // Détail des commandes Carte Bancaire (où se loge l'écart API↔OMS) pour réconciliation nominative.
+      if (/carte bancaire/i.test(pay)) cbDetail.push({
+        num: oid || mid, pvp: pvpOrder,
+        ss: o.orderStoreStatus || '', cs: o.orderCustomerStatus || '',
+        split: !!(mid && oid && mid !== oid),
+        refund: (o.orderRefund || []).reduce((s2, rf) => s2 + num(rf.amount), 0),
+      });
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -410,6 +418,7 @@ function newCAAudit() {
         dateMin, dateMax, splits, byStore: breakdown(byStore), byPayment: breakdown(byPayment),
         byOrderStatus: breakdown(byOrderStatus), byStoreStatus: breakdown(byStoreStatus),
         byCustomerStatus: breakdown(byCustomerStatus),
+        cbDetail: cbDetail.map(o => ({ ...o, pvp: r2(o.pvp), refund: r2(o.refund) })).sort((a, b) => String(a.num).localeCompare(String(b.num))),
       };
     },
   };
