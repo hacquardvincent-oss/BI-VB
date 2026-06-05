@@ -11,11 +11,11 @@ let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
 let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
-const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
+const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'acquisition', 'saisonprod', 'onsite', 'international', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'estore', 'acquisition', 'saisonprod', 'produit', 'onsite', 'international', 'marketplace', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
@@ -58,6 +58,30 @@ const MODULES = {
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'produits'],
+  },
+  produit: {
+    icon: '🧶', label: 'Produit', preset: 'all',
+    intro: 'Focus produit : familles (CA & quantité), top/reconquête, rentabilité et funnel produit.',
+    files: { required: ['oms'], optional: ['ref', 'impl', 'ret'] },
+    layout: ['kpi', 'famille', 'produits', 'renta', 'itemfunnel'],
+  },
+  marketplace: {
+    icon: '🏬', label: 'Marketplace', preset: 'all',
+    intro: 'Marketplaces : CA par enseigne (GL/Printemps/PDT/Lulli) vs N-1 et lecture cross-canal.',
+    files: { required: ['oms'], optional: ['y2'] },
+    layout: ['marketplace', 'crosschannel'],
+  },
+  omnicanal: {
+    icon: '🔄', label: 'Omnicanal', preset: 'all',
+    intro: 'Vue omnicanale : CA EShop, marketplaces, cross-canal et pays sur un même écran.',
+    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
+    layout: ['ca', 'marketplace', 'crosschannel', 'pays'],
+  },
+  crosscanal: {
+    icon: '🔀', label: 'Cross-canal', preset: 'all',
+    intro: 'Analyse cross-canal : famille × produit par canal (EShop / Boutiques / Marketplaces).',
+    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
+    layout: ['crosschannel'],
   },
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
@@ -123,7 +147,8 @@ async function me() {
     ? '🟢 Persistance active : les fichiers sont conservés (base de données) — pas besoin de les re-déposer.'
     : '⚠️ <b>Mode mémoire</b> : les fichiers sont perdus si le serveur se met en veille ou redéploie → il faut les re-déposer. Pour ne plus jamais re-importer, activez la base (variable <code>DATABASE_URL</code>).';
   if (u.role === 'admin' && u.dbAccounts) {
-    document.getElementById('accountsCard').classList.remove('hidden');
+    const ab = document.getElementById('adminBtn');
+    if (ab) ab.classList.remove('hidden'); // menu Admin (comptes) accessible via l'en-tête
     loadUsers();
   }
   return u;
@@ -1457,6 +1482,19 @@ function renderCAAudit(res) {
   }
 }
 
+// Menu Admin (en-tête) : affiche/masque la carte « Comptes équipe » (rattachée au compte admin)
+(() => {
+  const ab = document.getElementById('adminBtn');
+  if (!ab) return;
+  ab.addEventListener('click', () => {
+    const card = document.getElementById('accountsCard');
+    if (!card) return;
+    const wasHidden = card.classList.contains('hidden');
+    card.classList.toggle('hidden');
+    if (wasHidden) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+})();
+
 // Événements
 document.getElementById('logout').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
@@ -1481,16 +1519,29 @@ document.getElementById('applyDates').addEventListener('click', () => {
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const shiftYearStr = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
   const today = new Date(); let from = new Date(), to = new Date();
   const kind = b.dataset.range;
+  // calendarCompare=true → N-1 = mêmes dates l'an dernier (mois/cumul/année) ;
+  // sinon comparable −364 j (même jour de semaine : hier, semaine, fenêtres glissantes).
+  let calendarCompare = false;
   if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
   else if (kind === '7d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 7); }
   else if (kind === '30d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 30); }
-  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; }
+  else if (kind === 'week') { // semaine en cours, lundi → dimanche
+    const dow = (today.getDay() + 6) % 7; // 0 = lundi
+    from = new Date(today); from.setDate(today.getDate() - dow);
+    to = new Date(from); to.setDate(from.getDate() + 6);
+  }
+  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = new Date(today.getFullYear(), today.getMonth() + 1, 0); calendarCompare = true; }
+  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }
+  else if (kind === 'year') { from = new Date(today.getFullYear(), 0, 1); to = new Date(today.getFullYear(), 11, 31); calendarCompare = true; }
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
-  document.getElementById('dCfrom').value = comparable364(nf); document.getElementById('dCto').value = comparable364(nt);
+  document.getElementById('dCfrom').value = calendarCompare ? shiftYearStr(nf) : comparable364(nf);
+  document.getElementById('dCto').value = calendarCompare ? shiftYearStr(nt) : comparable364(nt);
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  document.getElementById('datesAll').classList.remove('on');
   applyCurrentPeriod(); loadReport();
 }));
 // Saisie manuelle de N → N-1 se recale automatiquement sur le comparable −364 j (jour pour jour).
