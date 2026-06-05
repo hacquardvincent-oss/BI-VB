@@ -344,6 +344,7 @@ async function loadReport() {
   renderObjectives(rep);
   renderDailyChart(rep);
   renderCharts(rep);
+  wireBilan();
 }
 
 function renderReport(rep) {
@@ -706,11 +707,82 @@ function renderReport(rep) {
   };
   const sections = sectionize(layout);
   const showBanners = sections.length >= 2;
-  return sections.map(s => {
+  const body = sections.map(s => {
     const cards = s.blocks.map(card).filter(Boolean).join('\n');
     if (!cards) return '';
     return (showBanners ? `<div class="section-head">${s.label}</div>` : '') + cards;
   }).join('\n');
+  return buildBilan(rep) + body; // Bilan épinglé en tête (scorecard N/N-1 + signaux auto + synthèse IA)
+}
+
+// ── Bilan en tête : scorecard N vs N-1 + signaux automatiques (règles) ──────────
+let RECO_OK = false; // moteur de reco IA configuré côté serveur ?
+function bilanTile(label, disp, n, n1, invert) {
+  const p = pc(n, n1);
+  const good = p == null ? null : ((invert ? -p : p) >= 0);
+  const cls = p == null ? 'na' : (good ? 'up' : 'dn');
+  const arrow = p == null ? '' : (p >= 0 ? '▲ ' : '▼ ');
+  return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>
+    <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1'}</div></div>`;
+}
+// Détecte 3-4 signaux forts à partir du rapport (sans IA, 100% client)
+function bilanSignals(rep) {
+  const out = [];
+  if (rep.famille && rep.famille.length) {
+    const up = rep.famille.filter(f => f.n1 > 0 && f.n > 500).map(f => ({ fam: f.fam, p: pc(f.n, f.n1), ca: f.n })).filter(x => x.p != null).sort((a, b) => b.p - a.p)[0];
+    if (up && up.p > 8) out.push({ tone: 'up', icon: '📈', txt: `Famille en plus forte progression : <b>${esc(up.fam)}</b> (${sgn(up.p)} vs N-1, ${fEur(up.ca)}).` });
+    const dn = rep.famille.filter(f => f.n1 > 1000).map(f => ({ fam: f.fam, p: pc(f.n, f.n1) })).filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
+    if (dn && dn.p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Famille en repli : <b>${esc(dn.fam)}</b> (${sgn(dn.p)} vs N-1) → à relancer.` });
+  }
+  const m = rep.produits && rep.produits.manquants;
+  if (m && m.length) { const tot = m.reduce((s, x) => s + x.perte, 0); out.push({ tone: 'dn', icon: '🎯', txt: `${m.length} produits forts en N-1 en retrait (<b>${fEur(tot)}</b> de CA à reconquérir), à commencer par <b>${esc(m[0].produit)}</b>.` }); }
+  if (rep.channels && rep.channels.n && rep.channels.n1) {
+    const m1 = {}; rep.channels.n1.forEach(x => { m1[x.canal] = x; });
+    const drop = rep.channels.n.map(c => { const p = m1[c.canal]; return (p && p.revenue > 1000) ? { canal: c.canal, p: pc(c.revenue, p.revenue) } : null; }).filter(x => x && x.p != null).sort((a, b) => a.p - b.p)[0];
+    if (drop && drop.p < -10) out.push({ tone: 'dn', icon: '🔻', txt: `Canal d'acquisition en décrochage : <b>${esc(drop.canal)}</b> (revenu ${sgn(drop.p)} vs N-1).` });
+  }
+  if (rep.returns && rep.returns.tauxRetour != null && rep.returns.tauxRetour > 0.25) out.push({ tone: 'dn', icon: '⚠️', txt: `Taux de retour élevé : <b>${fPct(rep.returns.tauxRetour)}</b> du CA EShop → fiches produit / guide des tailles.` });
+  const cx = rep.cancellations && rep.cancellations.n;
+  if (cx && cx.tauxPieces != null && cx.tauxPieces > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `<b>${fPct(cx.tauxPieces)}</b> de pièces non expédiées (${fInt(cx.qteAnnulee)}) → fiabiliser stock/préparation.` });
+  return out;
+}
+function buildBilan(rep) {
+  const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
+  const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
+  const tauxRet = rep.returns ? rep.returns.tauxRetour : null;
+  let tauxRetN1 = null;
+  if (rep.returns && rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) tauxRetN1 = rep.returns.n1.caRetourne / rep.ca.n1.caEShop;
+  const tiles = [
+    bilanTile('CA EShop', fEur(k.ca), k.ca, k1 && k1.ca),
+    bilanTile('Commandes', fInt(k.commandes), k.commandes, k1 && k1.commandes),
+    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1 && k1.pm),
+    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1 && k1.tt),
+  ];
+  if (tauxRet != null) tiles.push(bilanTile('Taux de retour', fPct(tauxRet), tauxRet, tauxRetN1, true));
+  const sigs = bilanSignals(rep);
+  const sigHtml = sigs.length
+    ? `<div class="bilan-sigs">${sigs.slice(0, 4).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
+    : (rep.meta.hasN1 ? '' : '<div class="note">Renseigne une période N-1 pour activer les signaux comparés.</div>');
+  const ia = RECO_OK ? `<div class="toolbar" style="margin-top:12px"><button class="btn blue" id="bilanIA">🧠 Synthèse IA de la période</button><span class="note" id="bilanIANote" style="margin:0">Lecture stratégique en 2-3 phrases par l'IA, sur la période et le périmètre sélectionnés.</span></div><div id="bilanIASynth"></div>` : '';
+  return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
+    <div class="kgrid">${tiles.join('')}</div>
+    ${sigHtml}${ia}</div>`;
+}
+// Bouton « Synthèse IA » du bilan : réutilise /api/reco, n'affiche que la synthèse.
+function wireBilan() {
+  const b = document.getElementById('bilanIA'); if (!b) return;
+  b.addEventListener('click', async () => {
+    const out = document.getElementById('bilanIASynth'); b.disabled = true;
+    out.innerHTML = '<div class="note" style="margin-top:8px">Génération en cours (10–30 s)…</div>';
+    try {
+      const r = await fetch('/api/reco?' + reportQuery());
+      const j = await r.json();
+      if (!r.ok) { out.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+      const syn = j.reco && j.reco.synthese;
+      out.innerHTML = syn ? `<div class="insight" style="margin-top:10px">💡 <b>Synthèse IA.</b> ${esc(syn)}</div>` : '<div class="note" style="margin-top:8px">Réponse vide.</div>';
+    } catch (e) { out.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
+    finally { b.disabled = false; }
+  });
 }
 
 // ── Analyse / recommandation auto par tableau ───────────────────────────────
@@ -1028,7 +1100,7 @@ async function recoStatus() {
   try {
     const r = await fetch('/api/reco/status');
     if (!r.ok) return;
-    if ((await r.json()).configured) document.getElementById('recoCard').classList.remove('hidden');
+    if ((await r.json()).configured) { RECO_OK = true; document.getElementById('recoCard').classList.remove('hidden'); }
   } catch (e) { /* ignore */ }
 }
 function renderReco(d) {
