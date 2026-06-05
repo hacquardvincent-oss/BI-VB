@@ -67,7 +67,7 @@
       <button class="btn blue" id="wshoprefresh">🔄 Importer OMS depuis WSHOP (API)</button>
       <button class="btn" id="wshopsync" title="Récupère uniquement les commandes nouvelles ou modifiées depuis le dernier import">⚡ Synchroniser le delta</button>
       <button class="btn" id="wshopping">🩺 Tester la connexion</button>
-      <input type="date" id="wshopauditday" value="2026-06-05" title="Jour à auditer" style="background:var(--s2);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:5px 8px">
+      <input type="date" id="wshopauditday" title="Jour à auditer (vide = jour N-1 du sélecteur)" style="background:var(--s2);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:5px 8px">
       <button class="btn" id="wshopcaaudit" title="Rejoue les commandes du jour choisi et somme tous les champs prix pour retrouver le « prix de vente payé »">🧮 Auditer le CA (jour)</button>
       <span class="note" id="wshopnote">Récupère les commandes OMS via l'API WSHOP sur la période sélectionnée</span>
     </div>
