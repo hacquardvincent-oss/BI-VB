@@ -335,11 +335,23 @@ function newCAAudit() {
     ['compareAt', it => num(it.compareAtPrice)],
   ];
   let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
+  let dateMin = '', dateMax = '', splits = 0;
+  const byStatus = Object.create(null), byStore = Object.create(null);
+  const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
       orders++;
       const oTot = num(o.orderTotal), oShip = num(o.orderShippingFees), oVat = num(o.orderVat);
       (o.orderRefund || []).forEach(rf => { refunds += num(rf.amount); });
+      // Répartition pour diagnostiquer un éventuel manque de volume (scope/statut/date).
+      const dt = String(o.orderDate || '');
+      if (dt) { if (!dateMin || dt < dateMin) dateMin = dt; if (!dateMax || dt > dateMax) dateMax = dt; }
+      const oid = o.orderId || '', mid = o.mainOrderId || '';
+      if (mid && oid && mid !== oid) splits++;
+      const status = o.orderStatus || o.orderStoreStatus || o.orderCustomerStatus || '';
+      const store = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
+      bump(byStatus, status, oTot);
+      bump(byStore, store, oTot);
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -369,7 +381,13 @@ function newCAAudit() {
       const candidates = Object.keys(sums)
         .map(label => ({ label, value: r2(sums[label]) }))
         .sort((a, b) => b.value - a.value);
-      return { candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered };
+      const breakdown = map => Object.keys(map)
+        .map(k => ({ key: k, count: map[k].count, total: r2(map[k].total) }))
+        .sort((a, b) => b.total - a.total);
+      return {
+        candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered,
+        dateMin, dateMax, splits, byStatus: breakdown(byStatus), byStore: breakdown(byStore),
+      };
     },
   };
 }

@@ -1247,7 +1247,7 @@ document.getElementById('wshopcaaudit').addEventListener('click', async () => {
   const poll = async () => {
     try {
       const j = await (await fetch('/api/wshop/job')).json();
-      if (j.running) { note.textContent = `Audit CA N-1 : ${j.phase} — ${fInt(j.ordersN1 || 0)} commande(s)…`; return setTimeout(poll, 2000); }
+      if (j.running) { note.textContent = `Audit CA : ${j.phase} — ${fInt(j.ordersN1 || 0)} commande(s)…`; return setTimeout(poll, 2000); }
       btns.forEach(b => { b.disabled = false; });
       if (j.error) { note.textContent = '⚠ ' + j.error; return; }
       showCAAudit(j.result || {});
@@ -1282,7 +1282,18 @@ function renderCAAudit(res) {
     + `<table style="margin-top:6px;font-size:12px;border-collapse:collapse"><tbody>`
     + cands.map(row).join('')
     + `</tbody></table>`
-    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">${fInt(a.linesPartial || 0)} ligne(s) partiellement livrées · ${fInt(a.linesOffered || 0)} avec articles offerts. Le candidat surligné = la règle à verrouiller.</div>`;
+    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">${fInt(a.linesPartial || 0)} ligne(s) partiellement livrées · ${fInt(a.linesOffered || 0)} avec articles offerts · ${fInt(a.splits || 0)} commande(s) scindées.</div>`
+    + brk('Par statut', a.byStatus) + brk('Par magasin / canal', a.byStore)
+    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">Plage des commandes récupérées : <b>${esc(a.dateMin || '—')}</b> → <b>${esc(a.dateMax || '—')}</b>. Si le volume est trop faible vs ton CA réel, c'est un manque de commandes (journée incomplète, scope magasin, ou champ de date), pas un mauvais champ prix.</div>`;
+  function brk(title, arr) {
+    if (!arr || !arr.length) return '';
+    return `<div style="margin-top:6px;font-size:11px;color:var(--mut)">${esc(title)} :</div>`
+      + `<table style="font-size:11px;border-collapse:collapse"><tbody>`
+      + arr.map(e => `<tr><td style="padding:1px 10px 1px 0">${esc(e.key)}</td>`
+        + `<td style="padding:1px 10px 1px 0;text-align:right">${fInt(e.count)} cmd</td>`
+        + `<td style="padding:1px 0;text-align:right;font-variant-numeric:tabular-nums">${eur(e.total)}</td></tr>`).join('')
+      + `</tbody></table>`;
+  }
 }
 
 // Événements
