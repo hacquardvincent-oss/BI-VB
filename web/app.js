@@ -766,43 +766,89 @@ function bilanTile(label, disp, n, n1, invert) {
   return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>
     <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1'}</div></div>`;
 }
-// Détecte 3-4 signaux forts à partir du rapport (sans IA, 100% client)
+// Détecte les signaux/recommandations prioritaires (par impact CA) — 100% client.
 function bilanSignals(rep) {
   const out = [];
+  const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
+  // Produit : CA à reconquérir (souvent le plus fort levier)
+  const m = rep.produits && rep.produits.manquants;
+  if (m && m.length) { const tot = m.reduce((s, x) => s + x.perte, 0); out.push({ tone: 'dn', icon: '🎯', txt: `Produit — ${m.length} forts en N-1 en retrait (<b>${fEur(tot)}</b> de CA à reconquérir), à commencer par <b>${esc(m[0].produit)}</b>.` }); }
+  // TT (taux de transfo)
+  if (k && k1 && k.tt != null && k1.tt != null) {
+    const p = pc(k.tt, k1.tt);
+    if (p != null && p < -5) out.push({ tone: 'dn', icon: '🛒', txt: `TT en baisse (${sgn(p)} vs N-1) → fiches produit, réassurance, simplifier le checkout.` });
+  }
+  // Sessions (trafic)
+  if (k && k1 && k.sessions != null && k1.sessions != null) {
+    const p = pc(k.sessions, k1.sessions);
+    if (p != null && p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Trafic en recul (${sgn(p)} sessions vs N-1) → relancer l'acquisition (SEA/SEO/CRM).` });
+  }
+  // Annulations (pièces non expédiées)
+  const cx = rep.cancellations && rep.cancellations.n;
+  if (cx && cx.tauxPieces != null && cx.tauxPieces > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `Annulation — <b>${fPct(cx.tauxPieces)}</b> de pièces non expédiées (${fInt(cx.qteAnnulee)}) → fiabiliser stock/préparation.` });
+  // International : que faire sur les pays #2/#3/#4 par CA (hors France)
+  if (rep.pays && rep.pays.length) {
+    const foreign = rep.pays.filter(p => (p.pays || '').trim().toLowerCase() !== 'france' && p.n && p.n.ca > 0).slice(0, 3);
+    if (foreign.length) {
+      const txt = foreign.map(p => `${esc(p.pays)} (${fEur(p.n.ca)}${p.n1 ? ', ' + sgn(pc(p.n.ca, p.n1.ca)) : ''})`).join(' · ');
+      out.push({ tone: 'up', icon: '🌍', txt: `International — prioriser ${txt} : réassort, langue, délais/coûts de livraison.` });
+    }
+  }
+  // Marketplace : enseigne en repli ou suivi global
+  const mk = rep.marketplace && rep.marketplace.n;
+  if (mk && mk.total > 0) {
+    const mk1 = (rep.marketplace && rep.marketplace.n1) || {};
+    const items = [['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]]
+      .map(([n, v, v1]) => ({ n, v, p: pc(v, v1) })).filter(x => x.v > 500);
+    const worst = items.filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
+    const pTot = pc(mk.total, mk1.total);
+    if (worst && worst.p < -10) out.push({ tone: 'dn', icon: '🏬', txt: `Marketplace — <b>${esc(worst.n)}</b> en repli (${sgn(worst.p)} vs N-1) → vérifier listing/stock/prix sur ce canal.` });
+    else out.push({ tone: 'up', icon: '🏬', txt: `Marketplace ${fEur(mk.total)}${pTot != null ? ' (' + sgn(pTot) + ' vs N-1)' : ''} → surveiller la part de chaque enseigne.` });
+  }
+  // Compléments (familles, canal) si place restante
   if (rep.famille && rep.famille.length) {
     const up = rep.famille.filter(f => f.n1 > 0 && f.n > 500).map(f => ({ fam: f.fam, p: pc(f.n, f.n1), ca: f.n })).filter(x => x.p != null).sort((a, b) => b.p - a.p)[0];
     if (up && up.p > 8) out.push({ tone: 'up', icon: '📈', txt: `Famille en plus forte progression : <b>${esc(up.fam)}</b> (${sgn(up.p)} vs N-1, ${fEur(up.ca)}).` });
     const dn = rep.famille.filter(f => f.n1 > 1000).map(f => ({ fam: f.fam, p: pc(f.n, f.n1) })).filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
     if (dn && dn.p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Famille en repli : <b>${esc(dn.fam)}</b> (${sgn(dn.p)} vs N-1) → à relancer.` });
   }
-  const m = rep.produits && rep.produits.manquants;
-  if (m && m.length) { const tot = m.reduce((s, x) => s + x.perte, 0); out.push({ tone: 'dn', icon: '🎯', txt: `${m.length} produits forts en N-1 en retrait (<b>${fEur(tot)}</b> de CA à reconquérir), à commencer par <b>${esc(m[0].produit)}</b>.` }); }
   if (rep.channels && rep.channels.n && rep.channels.n1) {
     const m1 = {}; rep.channels.n1.forEach(x => { m1[x.canal] = x; });
     const drop = rep.channels.n.map(c => { const p = m1[c.canal]; return (p && p.revenue > 1000) ? { canal: c.canal, p: pc(c.revenue, p.revenue) } : null; }).filter(x => x && x.p != null).sort((a, b) => a.p - b.p)[0];
     if (drop && drop.p < -10) out.push({ tone: 'dn', icon: '🔻', txt: `Canal d'acquisition en décrochage : <b>${esc(drop.canal)}</b> (revenu ${sgn(drop.p)} vs N-1).` });
   }
-  if (rep.returns && rep.returns.tauxRetour != null && rep.returns.tauxRetour > 0.25) out.push({ tone: 'dn', icon: '⚠️', txt: `Taux de retour élevé : <b>${fPct(rep.returns.tauxRetour)}</b> du CA EShop → fiches produit / guide des tailles.` });
-  const cx = rep.cancellations && rep.cancellations.n;
-  if (cx && cx.tauxPieces != null && cx.tauxPieces > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `<b>${fPct(cx.tauxPieces)}</b> de pièces non expédiées (${fInt(cx.qteAnnulee)}) → fiabiliser stock/préparation.` });
   return out;
 }
 function buildBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
-  const tauxRet = rep.returns ? rep.returns.tauxRetour : null;
-  let tauxRetN1 = null;
-  if (rep.returns && rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) tauxRetN1 = rep.returns.n1.caRetourne / rep.ca.n1.caEShop;
+  const cn = rep.cancellations && rep.cancellations.n, cn1 = rep.cancellations && rep.cancellations.n1;
+  const tauxAnn = cn ? cn.tauxPieces : null, tauxAnnN1 = cn1 ? cn1.tauxPieces : null;
+  // Ordre recette : CA Global (EShop hors MP) · Commandes · TT · Sessions · Panier moyen · Annulations
   const tiles = [
-    bilanTile('CA EShop', fEur(k.ca), k.ca, k1 && k1.ca),
+    bilanTile('CA Global (hors MP)', fEur(k.ca), k.ca, k1 && k1.ca),
     bilanTile('Commandes', fInt(k.commandes), k.commandes, k1 && k1.commandes),
-    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1 && k1.pm),
     bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1 && k1.tt),
+    bilanTile('Sessions', fInt(k.sessions), k.sessions, k1 && k1.sessions),
+    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1 && k1.pm),
+    bilanTile('Taux d\'annulation', tauxAnn != null ? fPct(tauxAnn) : '—', tauxAnn, tauxAnnN1, true),
   ];
-  if (tauxRet != null) tiles.push(bilanTile('Taux de retour', fPct(tauxRet), tauxRet, tauxRetN1, true));
+  // KPI Marketplace : CA total + détail par enseigne, vs N-1
+  const mk = rep.marketplace && rep.marketplace.n, mk1 = (rep.marketplace && rep.marketplace.n1) || {};
+  let mkHtml = '';
+  if (mk && mk.total > 0) {
+    const mkT = [
+      ['CA Marketplace', mk.total, mk1.total],
+      ['Galeries Lafayette', mk.glTotal, mk1.glTotal],
+      ['Printemps', mk.printemps, mk1.printemps],
+      ['Place des Tendances', mk.pdt, mk1.pdt],
+      ['Lulli', mk.lulli, mk1.lulli],
+    ].filter(([, v]) => v > 0).map(([l, n, n1]) => bilanTile(l, fEur(n), n, n1)).join('');
+    mkHtml = `<div class="section-head" style="margin-top:10px">🏬 Marketplace</div><div class="kgrid">${mkT}</div>`;
+  }
   const sigs = bilanSignals(rep);
   const sigHtml = sigs.length
-    ? `<div class="bilan-sigs">${sigs.slice(0, 4).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
+    ? `<div class="bilan-sigs">${sigs.slice(0, 6).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
     : (rep.meta.hasN1 ? '' : '<div class="note">Renseigne une période N-1 pour activer les signaux comparés.</div>');
   const copyBtn = `<button class="btn" id="bilanCopy">📋 Copier le contexte pour Claude.ai</button>`;
   const iaBtn = RECO_OK ? `<button class="btn blue" id="bilanIA">🧠 Synthèse IA</button>` : '';
@@ -812,7 +858,7 @@ function buildBilan(rep) {
   const ia = `<div class="toolbar" style="margin-top:12px">${copyBtn}${iaBtn}<span class="note" style="margin:0">${iaNote}</span></div><div id="bilanIASynth"></div>`;
   return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
     <div class="kgrid">${tiles.join('')}</div>
-    ${sigHtml}${ia}</div>`;
+    ${mkHtml}${sigHtml}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
