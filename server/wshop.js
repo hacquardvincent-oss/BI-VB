@@ -348,10 +348,14 @@ function newCAAudit() {
   ];
   // « PVP » = prix de vente payé de l'export OMS = unitPrice × quantité commandée (champ confirmé).
   const pvpOf = it => num(it.unitPrice) * (parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0);
-  // Exclusion périmètre EShop : GL / Printemps détectés par paiement GL.com OU nom de magasin
-  // (l'API n'a pas de paiement « Printemps » → on retombe sur le magasin). Même logique que channelPayLabel.
-  const isExclChannel = (pay, store) => { const ch = channelPayLabel(pay, store); return ch === 'GL.com' || ch === 'Printemps'; };
-  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0, pvpEShop = 0;
+  // Détections de périmètre, testées en 4 variantes (le filtre OMS « type de paiement » de
+  // l'utilisateur ne se reconstitue pas pareil côté API : GL.com est un paiement, Printemps non).
+  const isGLpay = p => { const t = (p || '').toLowerCase().trim(); return t === 'gl' || t.includes('gl.com'); };
+  const isGLstore = s => { const t = (s || '').toLowerCase(); return t.includes('galeries lafayette') || t.startsWith('gl '); };
+  const isPrintStore = s => (s || '').toLowerCase().includes('printemps');
+  const isPrintPay = p => (p || '').toLowerCase().includes('printemps');
+  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
+  const peri = { glPayOnly: 0, storeOnly: 0, glPayPrintStore: 0, both: 0 }; // variantes de PVP périmètre
   let dateMin = '', dateMax = '', splits = 0;
   const byStatus = Object.create(null), byStore = Object.create(null), byPayment = Object.create(null);
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
@@ -374,7 +378,12 @@ function newCAAudit() {
       bump(byStatus, status, oTot);
       bump(byStore, store, oTot);
       bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Global…)
-      if (!isExclChannel(pay, store)) pvpEShop += pvpOrder; // périmètre EShop (hors GL/Printemps)
+      // 4 variantes de périmètre EShop (chacune ajoute le PVP de la commande si NON exclue) :
+      const gp = isGLpay(pay), gs = isGLstore(store), ps = isPrintStore(store), pp = isPrintPay(pay);
+      if (!(gp)) peri.glPayOnly += pvpOrder;                         // hors GL.com (paiement seul)
+      if (!(gs || ps)) peri.storeOnly += pvpOrder;                   // hors GL/Printemps (magasin seul)
+      if (!(gp || ps)) peri.glPayPrintStore += pvpOrder;            // hors GL.com(paiement) + Printemps(magasin)
+      if (!(gp || gs || ps || pp)) peri.both += pvpOrder;          // hors GL/Printemps (paiement + magasin)
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -401,8 +410,11 @@ function newCAAudit() {
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
-      // Candidat « périmètre EShop » : PVP hors GL/Printemps (paiement GL.com OU nom de magasin).
-      sums['périmètre:PVP hors GL/Printemps (paiement+magasin)'] = pvpEShop;
+      // Candidats « périmètre EShop » : 4 variantes d'exclusion GL/Printemps (repère celle = 24 372 €).
+      sums['périmètre A: hors GL.com (paiement seul)'] = peri.glPayOnly;
+      sums['périmètre B: hors GL/Printemps (magasin seul)'] = peri.storeOnly;
+      sums['périmètre C: hors GL.com(paiement) + Printemps(magasin)'] = peri.glPayPrintStore;
+      sums['périmètre D: hors GL/Printemps (paiement + magasin)'] = peri.both;
       const candidates = Object.keys(sums)
         .map(label => ({ label, value: r2(sums[label]) }))
         .sort((a, b) => b.value - a.value);
