@@ -131,6 +131,18 @@ const COUNTRY = {
 };
 const countryName = code => COUNTRY[(code || '').toUpperCase()] || code || '';
 
+// « Type de paiement » à la sauce export OMS : pour les concessions grands magasins,
+// l'OMS met le CANAL (GL / Printemps) à la place du moyen de paiement. Or l'API expose
+// le vrai moyen (GL.com existe, mais PAS Printemps : ces ventes ne se voient que dans le
+// NOM MAGASIN). On reconstitue donc le canal via paiement GL.com OU nom de magasin, afin
+// que la règle de périmètre EShop (calc.js : isMkt) exclue correctement GL et Printemps.
+function channelPayLabel(payLabel, storeLabel) {
+  const p = (payLabel || '').toLowerCase().trim(), s = (storeLabel || '').toLowerCase();
+  if (p === 'gl' || p.includes('gl.com') || s.includes('galeries lafayette') || s.startsWith('gl ')) return 'GL.com';
+  if (p.includes('printemps') || s.includes('printemps')) return 'Printemps';
+  return payLabel || '';
+}
+
 // (3) ✅ MAPPING Order → lignes OMS (une ligne par orderItems). Anonymisé : on n'utilise
 //     AUCUN champ client (nom, email, adresse, téléphone). Colonnes = en-têtes OMS reconnus.
 function orderToRows(order) {
@@ -138,7 +150,7 @@ function orderToRows(order) {
   const { date, time } = frDateTime(o.orderDate);
   const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
   const mag = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
-  const pay = (o.payment_method && o.payment_method.label) || '';
+  const pay = channelPayLabel((o.payment_method && o.payment_method.label) || '', mag);
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   return items.map(it => {
@@ -336,8 +348,9 @@ function newCAAudit() {
   ];
   // « PVP » = prix de vente payé de l'export OMS = unitPrice × quantité commandée (champ confirmé).
   const pvpOf = it => num(it.unitPrice) * (parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0);
-  // Exclusion périmètre EShop : retire les types de paiement GL / Printemps (concessions grands magasins).
-  const isExclPay = s => { const t = (s || '').toLowerCase().trim(); return t === 'gl' || t.includes('gl.com') || t.includes('galeries') || t.includes('printemps'); };
+  // Exclusion périmètre EShop : GL / Printemps détectés par paiement GL.com OU nom de magasin
+  // (l'API n'a pas de paiement « Printemps » → on retombe sur le magasin). Même logique que channelPayLabel.
+  const isExclChannel = (pay, store) => { const ch = channelPayLabel(pay, store); return ch === 'GL.com' || ch === 'Printemps'; };
   let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0, pvpEShop = 0;
   let dateMin = '', dateMax = '', splits = 0;
   const byStatus = Object.create(null), byStore = Object.create(null), byPayment = Object.create(null);
@@ -360,8 +373,8 @@ function newCAAudit() {
       const pvpOrder = itemsArr.reduce((s2, it) => s2 + pvpOf(it), 0);
       bump(byStatus, status, oTot);
       bump(byStore, store, oTot);
-      bump(byPayment, pay, pvpOrder);
-      if (!isExclPay(pay)) pvpEShop += pvpOrder; // périmètre EShop (hors GL/Printemps)
+      bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Global…)
+      if (!isExclChannel(pay, store)) pvpEShop += pvpOrder; // périmètre EShop (hors GL/Printemps)
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -388,8 +401,8 @@ function newCAAudit() {
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
-      // Candidat « périmètre EShop » mis en tête : PVP hors GL/Printemps (type paiement).
-      sums['périmètre:PVP hors GL/Printemps (type paiement)'] = pvpEShop;
+      // Candidat « périmètre EShop » : PVP hors GL/Printemps (paiement GL.com OU nom de magasin).
+      sums['périmètre:PVP hors GL/Printemps (paiement+magasin)'] = pvpEShop;
       const candidates = Object.keys(sums)
         .map(label => ({ label, value: r2(sums[label]) }))
         .sort((a, b) => b.value - a.value);
