@@ -10,6 +10,7 @@ let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, 
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
 let PERSIST = false;       // base de données active (persistance) ?
+let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
 
@@ -142,6 +143,9 @@ async function me() {
   const u = await r.json();
   document.getElementById('who').textContent = `${u.username}`;
   PERSIST = !!u.dbAccounts;
+  // RBAC par vue : restreint la barre de vues si le compte a une liste autorisée.
+  ALLOWED_VIEWS = (Array.isArray(u.allowedViews) && u.allowedViews.length) ? u.allowedViews : null;
+  if (ALLOWED_VIEWS && !ALLOWED_VIEWS.includes(CURRENT_MODULE)) CURRENT_MODULE = ALLOWED_VIEWS.find(k => MODULES[k]) || CURRENT_MODULE;
   const pn = document.getElementById('persistNote');
   if (pn) pn.innerHTML = PERSIST
     ? '🟢 Persistance active : les fichiers sont conservés (base de données) — pas besoin de les re-déposer.'
@@ -154,26 +158,54 @@ async function me() {
   return u;
 }
 
-// ── Gestion des comptes (admin) ──
+// ── Gestion des comptes (admin) + droits par vue (RBAC simple) ──
+function viewList() {
+  return MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)))
+    .map(k => ({ key: k, label: MODULES[k].label }));
+}
+function renderViewChecks(container, selected) {
+  if (!container) return;
+  const sel = new Set(selected || []);
+  container.innerHTML = viewList().map(v => `<label style="font-size:11px;display:inline-flex;align-items:center;gap:3px;background:var(--s2);border:1px solid var(--bd,#2e3350);border-radius:6px;padding:3px 7px;cursor:pointer"><input type="checkbox" data-view="${v.key}"${sel.has(v.key) ? ' checked' : ''}> ${esc(v.label)}</label>`).join('');
+}
+function readViewChecks(container) {
+  return container ? [...container.querySelectorAll('input[data-view]')].filter(i => i.checked).map(i => i.dataset.view) : [];
+}
 async function loadUsers() {
   const list = document.getElementById('acList'); if (!list) return;
+  renderViewChecks(document.getElementById('acViews'), null); // sélecteur du formulaire de création
   const r = await fetch('/auth/users'); if (!r.ok) return;
   const users = await r.json();
-  list.innerHTML = users.length ? `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th></th></tr></thead><tbody>${users.map(u => `
-    <tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
+  if (!users.length) { list.innerHTML = '<div class="note">Aucun compte en base (le compte admin d’environnement reste actif).</div>'; return; }
+  const vLabel = k => (MODULES[k] && MODULES[k].label) || k;
+  const rows = users.map(u => {
+    const av = Array.isArray(u.allowed_views) && u.allowed_views.length ? u.allowed_views : null;
+    const viewsTxt = u.role === 'admin' ? '<span class="na">toutes</span>' : (av ? esc(av.map(vLabel).join(', ')) : '<span class="na">toutes</span>');
+    const editor = u.role === 'admin' ? '' :
+      `<tr class="rights-row hidden" data-rights="${esc(u.username)}"><td colspan="5"><div class="note">Vues autorisées (aucune = toutes) :</div><div class="vbox" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0"></div><button class="btn blue" data-act="saverights" data-u="${esc(u.username)}">Enregistrer les droits</button></td></tr>`;
+    return `<tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
       <td>${u.active ? '<span class="pill">actif</span>' : '<span class="pill miss">inactif</span>'}</td>
-      <td><button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button>
-          <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>`).join('')}</tbody></table>`
-    : '<div class="note">Aucun compte en base (le compte admin d’environnement reste actif).</div>';
+      <td style="font-size:11px;color:var(--t2)">${viewsTxt}</td>
+      <td>${u.role === 'admin' ? '' : `<button class="btn" data-act="rights" data-u="${esc(u.username)}">Droits</button> `}<button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button> <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>${editor}`;
+  }).join('');
+  list.innerHTML = `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Vues</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  const rightsRow = u => [...list.querySelectorAll('tr[data-rights]')].find(tr => tr.dataset.rights === u);
   list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', async () => {
     const u = b.dataset.u;
-    if (b.dataset.act === 'del') {
-      if (!confirm(`Supprimer le compte « ${u} » ?`)) return;
-      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'DELETE' });
-    } else {
-      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: b.dataset.v === '1' }) });
+    if (b.dataset.act === 'del') { if (!confirm(`Supprimer le compte « ${u} » ?`)) return; await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'DELETE' }); loadUsers(); }
+    else if (b.dataset.act === 'toggle') { await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: b.dataset.v === '1' }) }); loadUsers(); }
+    else if (b.dataset.act === 'rights') {
+      const row = rightsRow(u); if (!row) return;
+      const wasHidden = row.classList.toggle('hidden');
+      if (!wasHidden) { const usr = users.find(x => x.username === u); renderViewChecks(row.querySelector('.vbox'), Array.isArray(usr.allowed_views) ? usr.allowed_views : null); }
     }
-    loadUsers();
+    else if (b.dataset.act === 'saverights') {
+      const row = rightsRow(u); if (!row) return;
+      const allowedViews = readViewChecks(row.querySelector('.vbox'));
+      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowedViews }) });
+      document.getElementById('acNote').textContent = `✓ Droits de « ${u} » mis à jour.`;
+      loadUsers();
+    }
   }));
 }
 async function addUser() {
@@ -182,10 +214,11 @@ async function addUser() {
   const password = document.getElementById('acPass').value;
   const role = document.getElementById('acRole').value;
   if (!username || !password) { note.textContent = '⚠ Identifiant et mot de passe requis.'; return; }
-  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role }) });
+  const allowedViews = readViewChecks(document.getElementById('acViews'));
+  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role, allowedViews }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
-  note.textContent = `✓ Compte « ${username} » enregistré.`;
+  note.textContent = `✓ Compte « ${username} » enregistré${allowedViews.length ? ` (${allowedViews.length} vue(s))` : ' (toutes vues)'}.`;
   document.getElementById('acUser').value = ''; document.getElementById('acPass').value = '';
   loadUsers();
 }
@@ -242,7 +275,8 @@ function updateApiHint() {
 // Barre de modules
 function initModules() {
   const bar = document.getElementById('moduleBar');
-  const order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
+  let order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
+  if (ALLOWED_VIEWS) order = order.filter(k => ALLOWED_VIEWS.includes(k)); // RBAC : vues autorisées
   bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
     + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('');
   bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {

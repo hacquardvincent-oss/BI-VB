@@ -61,9 +61,17 @@ router.post('/login', async (req, res) => {
 
 router.post('/logout', (req, res) => { req.session = null; res.json({ ok: true }); });
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session || !req.session.uid) return res.status(401).json({ error: 'Non connecté' });
-  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled });
+  // RBAC par vue : null = toutes les vues (admins + comptes sans restriction).
+  let allowedViews = null;
+  if (db.enabled && req.session.role !== 'admin') {
+    try {
+      const { rows } = await db.query('SELECT allowed_views FROM users WHERE username = $1', [req.session.username]);
+      if (rows[0] && Array.isArray(rows[0].allowed_views) && rows[0].allowed_views.length) allowedViews = rows[0].allowed_views;
+    } catch (e) { /* en cas d'erreur, on n'impose aucune restriction */ }
+  }
+  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled, allowedViews });
 });
 
 function requireAuth(req, res, next) {
@@ -81,21 +89,25 @@ function requireDb(req, res, next) {
   next();
 }
 
+// Normalise une liste de vues autorisées → jsonb (string) ou null (= toutes les vues)
+const normViews = v => (Array.isArray(v) && v.length) ? JSON.stringify(v.filter(x => typeof x === 'string')) : null;
+
 router.get('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
-  const { rows } = await db.query('SELECT username, role, active, created_at FROM users ORDER BY username');
+  const { rows } = await db.query('SELECT username, role, active, allowed_views, created_at FROM users ORDER BY username');
   res.json(rows);
 });
 
 router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
-    const { username, password, role } = req.body || {};
+    const { username, password, role, allowedViews } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
     const r = (role === 'admin') ? 'admin' : 'user';
+    const views = normViews(allowedViews);
     const { hash, salt } = hashPassword(password);
     await db.query(
-      `INSERT INTO users (username, pass_hash, pass_salt, role, active) VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, pass_salt = EXCLUDED.pass_salt, role = EXCLUDED.role`,
-      [username, hash, salt, r],
+      `INSERT INTO users (username, pass_hash, pass_salt, role, active, allowed_views) VALUES ($1, $2, $3, $4, true, $5)
+       ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, pass_salt = EXCLUDED.pass_salt, role = EXCLUDED.role, allowed_views = EXCLUDED.allowed_views`,
+      [username, hash, salt, r, views],
     );
     res.json({ username, role: r, active: true });
   } catch (e) {
@@ -106,11 +118,12 @@ router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => 
 router.patch('/users/:username', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
     const { username } = req.params;
-    const { active, role, password } = req.body || {};
+    const { active, role, password, allowedViews } = req.body || {};
     const sets = [], vals = []; let i = 1;
     if (typeof active === 'boolean') { sets.push(`active = $${i++}`); vals.push(active); }
     if (role === 'admin' || role === 'user') { sets.push(`role = $${i++}`); vals.push(role); }
     if (password) { const { hash, salt } = hashPassword(password); sets.push(`pass_hash = $${i++}`, `pass_salt = $${i++}`); vals.push(hash, salt); }
+    if (allowedViews !== undefined) { sets.push(`allowed_views = $${i++}`); vals.push(normViews(allowedViews)); }
     if (!sets.length) return res.status(400).json({ error: 'Rien à modifier' });
     vals.push(username);
     const { rowCount } = await db.query(`UPDATE users SET ${sets.join(', ')} WHERE username = $${i}`, vals);
