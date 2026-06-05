@@ -120,6 +120,16 @@ const GA_ALIASES = {
   checkouts: ['checkouts', 'validations panier', 'begin checkout'],
   purchases: ['achats e-commerce', 'achats ecommerce', 'ecommerce purchases', 'purchases', 'achats'],
 };
+// Google Ads (export par campagne, FR ou EN — coût/clics/impressions/conversions/valeur)
+const ADS_ALIASES = {
+  campaign: ['campagne', 'nom de la campagne', 'campaign', 'campaign name'],
+  date: ['jour', 'date', 'day'],
+  cost: ['cout', 'cost', 'depenses', 'depense', 'spend'],
+  impressions: ['impressions', 'impr'],
+  clicks: ['clics', 'clicks'],
+  conversions: ['conversions', 'conv'],
+  convValue: ['valeur de conversion', 'valeur des conversions', 'all conv value', 'conv value', 'conversion value'],
+};
 const REF_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
   famille: ['familles principales', 'famille principale', 'famille'],
@@ -405,6 +415,52 @@ function channelPerf(g) {
     caPerSession: c.sessions > 0 ? c.revenue / c.sessions : 0,
     shareTraffic: c.sessions / totS, shareRevenue: c.revenue / totR,
   })).sort((a, b) => b.revenue - a.revenue);
+}
+
+// ── Google Ads : coût / ROAS / efficacité par campagne ──────────────────────
+// Parse numérique tolérant (Google Ads : "1 234,56" FR ou "1,234.56" US, symboles devise).
+const numAds = s => {
+  let t = String(s == null ? '' : s).replace(/[^\d,.-]/g, '');
+  if (t.includes(',') && t.includes('.')) t = t.replace(/,/g, '');   // 1,234.56 → 1234.56
+  else if (t.includes(',')) t = t.replace(',', '.');                 // 1234,56 → 1234.56
+  const v = parseFloat(t); return isNaN(v) ? 0 : v;
+};
+function calcAds(rows, map) {
+  if (!rows || !rows.length || !map || map.cost === undefined) return null;
+  const ci = map.campaign, costI = map.cost, impI = map.impressions, clkI = map.clicks,
+    cvI = map.conversions, cvvI = map.convValue;
+  let cost = 0, impressions = 0, clicks = 0, conversions = 0, convValue = 0;
+  const acc = {};
+  rows.forEach(r => {
+    const c = numAds(r[costI]),
+      im = impI !== undefined ? numAds(r[impI]) : 0,
+      ck = clkI !== undefined ? numAds(r[clkI]) : 0,
+      cv = cvI !== undefined ? numAds(r[cvI]) : 0,
+      cvv = cvvI !== undefined ? numAds(r[cvvI]) : 0;
+    cost += c; impressions += im; clicks += ck; conversions += cv; convValue += cvv;
+    const k = (ci !== undefined ? (r[ci] || '').trim() : '') || '(toutes campagnes)';
+    if (!acc[k]) acc[k] = { campaign: k, cost: 0, impressions: 0, clicks: 0, conversions: 0, convValue: 0 };
+    const a = acc[k];
+    a.cost += c; a.impressions += im; a.clicks += ck; a.conversions += cv; a.convValue += cvv;
+  });
+  const rates = a => ({
+    ...a,
+    ctr: a.impressions > 0 ? a.clicks / a.impressions : null,
+    cpc: a.clicks > 0 ? a.cost / a.clicks : null,
+    cpa: a.conversions > 0 ? a.cost / a.conversions : null,
+    convRate: a.clicks > 0 ? a.conversions / a.clicks : null,
+    roasGA: a.cost > 0 ? a.convValue / a.cost : null,
+  });
+  const byCampaign = Object.values(acc).map(rates).sort((a, b) => b.cost - a.cost);
+  return {
+    cost, impressions, clicks, conversions, convValue,
+    ctr: impressions > 0 ? clicks / impressions : null,
+    cpc: clicks > 0 ? cost / clicks : null,
+    cpa: conversions > 0 ? cost / conversions : null,
+    convRate: clicks > 0 ? conversions / clicks : null,
+    roasGA: cost > 0 ? convValue / cost : null,
+    byCampaign,
+  };
 }
 
 // ── Répartition par device (mobile / desktop / tablet) ──────────────────────
@@ -847,10 +903,10 @@ function dateBounds(rows, map) {
 }
 
 module.exports = {
-  norm, fN, fGA, parseCSV, parseGAcsv,
+  norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
-  autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
+  autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

@@ -13,7 +13,7 @@ const calc = require('./calc');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const SOURCES = ['oms', 'y2', 'ga', 'ref', 'ret', 'impl'];
+const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl'];
 const PERIODS = ['N', 'N1'];
 const ANONYMIZE = new Set(['oms', 'ret']); // sources contenant du PII client
 
@@ -31,8 +31,45 @@ function anonymize(hdrs, rows) {
   return { hdrs: keep.map(i => hdrs[i]), rows: rows.map(r => keep.map(i => r[i])), dropped };
 }
 
+// Google Ads : les exports ont un préambule (titre, période) avant l'en-tête, et une ligne
+// « Total : … » en pied. On localise la vraie ligne d'en-tête via les alias, puis on retire
+// préambule, lignes vides et la ligne de total (qui doublerait le coût).
+function buildAdsTable(aoa) {
+  const aliasVals = Object.values(calc.ADS_ALIASES).flat();
+  let hi = 0;
+  for (let i = 0; i < Math.min(aoa.length, 20); i++) {
+    const cells = (aoa[i] || []).map(c => calc.norm(c));
+    const hits = cells.filter(c => c && aliasVals.some(a => c === a || c.includes(a))).length;
+    if (hits >= 2) { hi = i; break; }
+  }
+  const hdrs = (aoa[hi] || []).map(h => (h == null ? '' : String(h)).replace(/\s+/g, ' ').trim());
+  const rows = [];
+  for (let i = hi + 1; i < aoa.length; i++) {
+    const r = hdrs.map((_, j) => (aoa[i] && aoa[i][j] != null ? String(aoa[i][j]) : ''));
+    if (!r.some(c => c.trim())) continue;                         // ligne vide
+    if (r.some(c => /^total\b/i.test(calc.norm(c)))) continue;     // ligne « Total : … » (pied)
+    rows.push(r);
+  }
+  return { hdrs, rows };
+}
+function csvToAoa(text) {
+  text = text.replace(/^﻿/, '');
+  const lines = text.split(/\r?\n/).filter(l => l.length);
+  const sep = (() => { const l = lines.find(x => x.trim()) || ''; for (const s of ['\t', ';', ',']) if (l.includes(s)) return s; return ','; })();
+  const split = calc.makeSplitLine ? calc.makeSplitLine(sep) : (l => l.split(sep));
+  return lines.map(split);
+}
+
 function parseBuffer(buf, filename, source) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
+  if (source === 'ads') {
+    if (ext === 'xlsx' || ext === 'xls') {
+      const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: 0 });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, blankrows: false, defval: '' });
+      return buildAdsTable(aoa);
+    }
+    return buildAdsTable(csvToAoa(buf.toString('utf8')));
+  }
   if (ext === 'xlsx' || ext === 'xls') {
     // sheets:0 → ne parse que la 1ère feuille (classeurs lourds multi-feuilles : perf)
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: 0 });
@@ -52,7 +89,7 @@ function parseBuffer(buf, filename, source) {
   return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
 }
 
-const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
+const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
 
 // Parse + anonymise + mappe + stocke un buffer (réutilisé par la route ET le chargement auto SPECS)
 function ingestBuffer(source, period, buffer, filename, uploadedBy) {

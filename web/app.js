@@ -20,8 +20,8 @@ const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
     intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'funnel', 'produits'],
+    files: { required: ['oms'], optional: ['ga', 'ads'] },
+    layout: ['kpi', 'ca', 'ads', 'funnel', 'produits'],
   },
   estore: {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
@@ -32,8 +32,8 @@ const MODULES = {
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
     intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
+    files: { required: ['oms'], optional: ['ga', 'ads'] },
+    layout: ['ads', 'channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
   },
   saisonprod: {
     icon: '🧵', label: 'Saison & produits', preset: 'all',
@@ -62,8 +62,8 @@ const MODULES = {
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
-    files: { required: ['oms'], optional: ['ga', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'device', 'pagesrc', 'ga', 'campaigns', 'campaignland', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'lostpages', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
+    files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
+    layout: ['kpi', 'ca', 'daily', 'ads', 'channels', 'device', 'pagesrc', 'ga', 'campaigns', 'campaignland', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'lostpages', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
   },
 };
 
@@ -77,7 +77,7 @@ const THEME_ORDER = ['A', 'T', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const THEME_OF = {
   kpi: 'A', ca: 'A',
   daily: 'T',
-  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B', campaigns: 'B', campaignland: 'B',
+  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B', campaigns: 'B', campaignland: 'B', ads: 'B',
   funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
   pages: 'D', landing: 'D', lostpages: 'D',
   famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
@@ -109,6 +109,7 @@ const PALETTE = ['#f5a623', '#4a9eff', '#22c55e', '#ef4444', '#a78bfa', '#f472b6
 const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS) — secours si pas d\'API WSHOP', periods: ['N', 'N1'] },
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
+  { key: 'ads', name: '📣 Google Ads (export campagnes : coût/clics/conv.)', periods: ['N', 'N1'] },
 ];
 
 async function me() {
@@ -705,6 +706,27 @@ function renderReport(rep) {
       <div class="note">Lecture famille → produit. Réf. unifiée sur les 3 canaux (OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2). « N-1 par canal » = meilleurs vendeurs de l'an dernier sur chaque canal (a-t-on gardé/perdu un best ?).</div></div>`;
   }
 
+  // Google Ads — coût & ROAS (croisé CA EShop) + efficacité par campagne
+  let adsCard = '';
+  if (rep.ads && rep.ads.n) {
+    const A = rep.ads, a = A.n, a1 = A.n1 || {};
+    const roas = v => (v == null ? '—' : v.toFixed(2) + '×');
+    const kc = (l, v, d) => `<div class="kc"><div class="l">${l}</div><div class="v">${v}</div>${d ? `<div style="font-size:11px">${d}</div>` : ''}</div>`;
+    const tiles = [
+      kc('Dépense Google Ads', fEur(a.cost), a1.cost ? delta(a.cost, a1.cost) : ''),
+      kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
+      kc('Coût / commande', A.cac && A.cac.n != null ? fEur(A.cac.n) : '—', A.cac && A.cac.n1 != null ? 'N-1 ' + fEur(A.cac.n1) : ''),
+      kc('Clics', fInt(a.clicks), a1.clicks ? delta(a.clicks, a1.clicks) : ''),
+      kc('Conversions Ads', fInt(a.conversions), a1.conversions ? delta(a.conversions, a1.conversions) : ''),
+      kc('CPC moyen', a.cpc != null ? f2(a.cpc) : '—', a.ctr != null ? 'CTR ' + fPct(a.ctr) : ''),
+    ].join('');
+    const rows = (a.byCampaign || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
+    adsCard = `<div class="card"><h3>📣 Google Ads — Coût &amp; ROAS${A.n1 ? ' · N vs N-1' : ''}</h3>
+      <div class="kgrid">${tiles}</div>
+      <table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Clics</th><th>CTR</th><th>CPC</th><th>Conv.</th><th>CPA</th><th>ROAS Ads</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="note">ROAS = CA EShop (hors marketplaces) ÷ dépense Google Ads. ROAS Ads (par campagne) = valeur de conversion Google Ads ÷ dépense. Coût/commande = dépense ÷ commandes EShop. Import manuel — pense à charger l'export de la même période que N (et N-1).</div></div>`;
+  }
+
   // Cartes nommées + layout adapté à la cadence
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
@@ -713,6 +735,7 @@ function renderReport(rep) {
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
+    ads: adsCard,
   };
   const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
