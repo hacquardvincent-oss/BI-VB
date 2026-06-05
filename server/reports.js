@@ -50,6 +50,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
   const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
+  const adsN = await loadDataset('ads', 'N'), adsN1 = await loadDataset('ads', 'N1');
 
   // Période N (preset hérité, ou plage de dates explicite)
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
@@ -121,6 +122,17 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
     n1: kpiEShopN1 ? { sessions: kpiEShopN1.sessions, commandes: kpiEShopN1.commandes, ca: kpiEShopN1.ca, tt: kpiEShopN1.tt, caPerSession: cps(kpiEShopN1) } : null,
   };
   const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
+
+  // ── Google Ads : coût / ROAS / coût par commande (croisé avec le CA EShop) ──
+  const adsCalcN = adsN ? calc.calcAds(adsN.rows, adsN.map) : null;
+  const adsCalcN1 = adsN1 ? calc.calcAds(adsN1.rows, adsN1.map) : null;
+  const roasOf = (cost, ca) => (cost > 0 && ca != null) ? ca / cost : null;
+  const cacOf = (cost, cmd) => (cost > 0 && cmd > 0) ? cost / cmd : null;
+  const ads = adsCalcN ? {
+    n: adsCalcN, n1: adsCalcN1,
+    roas: { n: roasOf(adsCalcN.cost, kpiEShopN.ca), n1: adsCalcN1 && kpiEShopN1 ? roasOf(adsCalcN1.cost, kpiEShopN1.ca) : null },
+    cac: { n: cacOf(adsCalcN.cost, kpiEShopN.commandes), n1: adsCalcN1 && kpiEShopN1 ? cacOf(adsCalcN1.cost, kpiEShopN1.commandes) : null },
+  } : null;
 
   // Funnel e-commerce GA détaillé : Sessions → Panier → Checkout → Achat (taux + déperdition)
   const mkFunnel = (g, kpi) => {
@@ -356,7 +368,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
-      hasImpl: !!implN, hasImplN1: !!implN1, scope: scopeColl ? 'collection' : 'all',
+      hasImpl: !!implN, hasImplN1: !!implN1, hasAds: !!adsN, scope: scopeColl ? 'collection' : 'all',
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
@@ -391,6 +403,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
     lostPagesBySource,
     ga: gaCalcN,
     gaN1: gaCalcN1,
+    ads,
   };
 }
 

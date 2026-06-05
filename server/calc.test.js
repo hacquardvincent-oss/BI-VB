@@ -188,4 +188,23 @@ const fG = calc.calcGA(fDs);
 assert.strictEqual(fG.totalCheckouts, 75, 'total checkouts');
 assert.strictEqual(fG.totalPurchases, 33, 'total achats');
 
+// ── Google Ads : coût / ROAS / efficacité par campagne ──────────────────────
+const adsHdrs = ['Campagne', 'Coût', 'Impressions', 'Clics', 'Conversions', 'Valeur de conversion'];
+const adsRows = [
+  ['Search FR', '1 000,50', '50000', '1000', '40', '6 000'],
+  ['PMax', '500,00', '25000', '300', '10', '2 000'],
+];
+const adsMap = calc.autoMap(adsHdrs, calc.ADS_ALIASES);
+const adsCalc = calc.calcAds(adsRows, adsMap);
+assert.ok(Math.abs(adsCalc.cost - 1500.5) < 1e-9, 'coût total Ads (FR "1 000,50" + "500,00")');
+assert.strictEqual(adsCalc.clicks, 1300, 'clics totaux');
+assert.strictEqual(adsCalc.conversions, 50, 'conversions totales');
+assert.ok(Math.abs(adsCalc.convValue - 8000) < 1e-9, 'valeur de conversion totale');
+assert.ok(Math.abs(adsCalc.byCampaign[0].cpc - 1000.5 / 1000) < 1e-9, 'CPC Search FR (coût/clics)');
+assert.strictEqual(adsCalc.byCampaign[0].campaign, 'Search FR', 'campagne #1 = plus forte dépense');
+assert.ok(Math.abs(adsCalc.roasGA - 8000 / 1500.5) < 1e-9, 'ROAS Ads = valeur conv / coût');
+// parse US "1,234.56" et symboles devise
+const adsUS = calc.calcAds([['X', '$1,234.56', '0', '0', '0', '0']], calc.autoMap(adsHdrs, calc.ADS_ALIASES));
+assert.ok(Math.abs(adsUS.cost - 1234.56) < 1e-9, 'coût US "$1,234.56" → 1234.56');
+
 console.log('✅ calc.test.js : tous les calculs OK');
