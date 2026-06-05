@@ -39,6 +39,10 @@ function topList(byProd, n = 10) {
   return Object.entries(byProd).sort((a, b) => b[1].ca - a[1].ca).slice(0, n)
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
+function topListQte(byProd, n = 10) {
+  return Object.entries(byProd).sort((a, b) => b[1].qte - a[1].qte).slice(0, n)
+    .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
+}
 
 async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) {
   dim = dim || 'global';
@@ -362,6 +366,18 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
       .sort((a, b) => b.n - a.n);
   }
 
+  // CA + Quantité par famille (Pilotage 360) — fusion N / N-1
+  let familleDetail = null;
+  const famDetN = calc.calcFamilleDetail(rowsN, omsN.map, refMap);
+  if (famDetN) {
+    const famDetN1 = (rowsN1 && rowsN1.length) ? calc.calcFamilleDetail(rowsN1, mapN1, refMap) : null;
+    const keys = new Set([...Object.keys(famDetN), ...(famDetN1 ? Object.keys(famDetN1) : [])]);
+    familleDetail = [...keys].filter(k => k !== '(non référencé)').map(f => ({
+      fam: f, caN: (famDetN[f] || {}).ca || 0, qteN: (famDetN[f] || {}).qte || 0,
+      caN1: famDetN1 ? ((famDetN1[f] || {}).ca || 0) : null, qteN1: famDetN1 ? ((famDetN1[f] || {}).qte || 0) : null,
+    })).sort((a, b) => b.caN - a.caN);
+  }
+
   return {
     empty: false,
     meta: {
@@ -381,6 +397,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
     returns,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
+    topProduitsQte: { n: topListQte(topNobj), n1: topN1obj ? topListQte(topN1obj) : null },
+    familleDetail,
     produits,
     funnel,
     channels,

@@ -572,6 +572,23 @@ function calcCAFamille(rows, omsMap, refMap) {
   return byFam;
 }
 
+// CA ET Quantité par famille (hors marketplaces) — { fam: { ca, qte } }
+function calcFamilleDetail(rows, omsMap, refMap) {
+  if (!refMap || Object.keys(refMap).length === 0) return null;
+  const pi = omsMap.prix, ti = omsMap.type, qi = omsMap.qte;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined) return null;
+  const byFam = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const fam = refMap[(r[refIdx] || '').trim()] || '(non référencé)';
+    if (!byFam[fam]) byFam[fam] = { ca: 0, qte: 0 };
+    byFam[fam].ca += fN(r[pi]);
+    byFam[fam].qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  return byFam;
+}
+
 // ── Saison : ref. externe → saison (depuis le référentiel) ──────────────────
 function buildSeasonMap(ref) {
   if (!ref || !ref.rows || !ref.hdrs) return {};
@@ -911,7 +928,7 @@ module.exports = {
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
-  buildRefMap, calcCAFamille, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcFamilleDetail, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs,

@@ -207,4 +207,19 @@ assert.ok(Math.abs(adsCalc.roasGA - 8000 / 1500.5) < 1e-9, 'ROAS Ads = valeur co
 const adsUS = calc.calcAds([['X', '$1,234.56', '0', '0', '0', '0']], calc.autoMap(adsHdrs, calc.ADS_ALIASES));
 assert.ok(Math.abs(adsUS.cost - 1234.56) < 1e-9, 'coût US "$1,234.56" → 1234.56');
 
+// ── CA & Quantité par famille (Pilotage 360) ────────────────────────────────
+const fdHdrs = ['Prix de vente paye', 'quantites commandees', 'Ref. externe', 'Type Paiement'];
+const fdMap = calc.ensureRefExtIdx(fdHdrs, calc.autoMap(fdHdrs, calc.OMS_ALIASES));
+const fdRows = [
+  ['100', '2', 'REFA', 'Carte Bancaire'],   // Robes
+  ['50', '1', 'REFB', 'Carte Bancaire'],    // Sacs
+  ['30', '1', 'REFA', 'GL.com'],            // marketplace → exclu
+  ['40', '3', 'REFA', 'Paypal'],            // Robes
+];
+const fd = calc.calcFamilleDetail(fdRows, fdMap, { REFA: 'Robes', REFB: 'Sacs' });
+assert.strictEqual(fd['Robes'].ca, 140, 'CA famille Robes (hors GL.com)');
+assert.strictEqual(fd['Robes'].qte, 5, 'Qté famille Robes (2+3, hors mkt)');
+assert.strictEqual(fd['Sacs'].ca, 50, 'CA famille Sacs');
+assert.strictEqual(fd['Sacs'].qte, 1, 'Qté famille Sacs');
+
 console.log('✅ calc.test.js : tous les calculs OK');
