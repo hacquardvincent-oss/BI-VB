@@ -334,6 +334,18 @@ router.get('/ping', requireAuth, async (req, res) => {
     const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
     out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
+    // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
+    // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
+    const o0 = arr[0];
+    if (o0) {
+      const items = Array.isArray(o0.orderItems) ? o0.orderItems : [];
+      const PR = /(price|amount|total|discount|tax|montant|remise|prix|unit|qty|quantit|paid|net)/i;
+      const pick = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { const v = obj[k]; if (PR.test(k) && (typeof v === 'number' || typeof v === 'string')) r[k] = v; }); return r; };
+      out.itemKeys = items[0] ? Object.keys(items[0]) : '(aucun orderItem)';
+      out.orderPriceFields = pick(o0);
+      out.itemPriceFields = items[0] ? pick(items[0]) : {};
+      out.itemCount = items.length;
+    }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
   res.json(out);
 });
