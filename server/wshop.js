@@ -316,48 +316,60 @@ async function syncIncremental(cb = {}) {
 }
 
 // ── Audit « règle CA » ─────────────────────────────────────────────────────────
-// Rejoue les commandes d'une période et calcule plusieurs totaux candidats pour
-// « Prix de vente payé », afin d'identifier la combinaison (TTC/HT × commandé/livré/
-// payé) qui correspond au CA de référence. Anonyme : prix & quantités uniquement.
+// Rejoue les commandes d'une période et somme TOUS les champs prix plausibles
+// (niveau commande ET niveau ligne × quantités). Objectif : repérer le champ/formule
+// dont la somme = le CA de référence (ex. « prix de vente payé » de l'export OMS),
+// y compris quand une démarque additionnelle rend la reconstruction unitaire fausse.
+// Anonyme : prix & quantités uniquement (aucun champ client).
 function newCAAudit() {
   const num = x => Number(x) || 0;
-  const s = {
-    ttcOrd: 0, ttcShip: 0, ttcPaid: 0, htOrd: 0, htShip: 0, htPaid: 0,
-    orderTotal: 0, refunds: 0, orders: 0, lines: 0, linesPartial: 0, linesOffered: 0,
-  };
+  const sums = Object.create(null);       // label -> total
+  const addK = (k, v) => { sums[k] = (sums[k] || 0) + v; };
+  // Champs prix au niveau ligne (valeur unitaire) : on testera × commandé/livré/payé.
+  const LINE_FIELDS = [
+    ['unitPrice', it => num(it.unitPrice)],
+    ['origUnit', it => num(it.originalUnitPrice)],
+    ['origUnitNet', it => num(it.originalUnitPriceNet)],
+    ['discUnit', it => num(it.originalDiscountedUnitPrice) || num(it.unitPrice)],
+    ['discUnitNet', it => num(it.originalDiscountedUnitPriceNet) || num(it.originalUnitPriceNet)],
+    ['compareAt', it => num(it.compareAtPrice)],
+  ];
+  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
   return {
     add(o) {
-      s.orders++;
-      s.orderTotal += num(o.orderTotal);
-      (o.orderRefund || []).forEach(rf => { s.refunds += num(rf.amount); });
+      orders++;
+      const oTot = num(o.orderTotal), oShip = num(o.orderShippingFees), oVat = num(o.orderVat);
+      (o.orderRefund || []).forEach(rf => { refunds += num(rf.amount); });
+      // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
+      addK('commande:orderTotal', oTot);
+      addK('commande:orderTotal − port', oTot - oShip);
+      addK('commande:orderTotal − TVA', oTot - oVat);
+      addK('commande:orderTotal − port − TVA', oTot - oShip - oVat);
+      addK('commande:orderShippingFees', oShip);
+      addK('commande:orderVat', oVat);
       const items = Array.isArray(o.orderItems) ? o.orderItems : [];
       for (const it of items) {
-        s.lines++;
+        lines++;
         const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
         const qShip = parseInt(it.quantityShipped != null ? it.quantityShipped : qOrd) || 0;
         const qOff = parseInt(it.quantityOffered != null ? it.quantityOffered : 0) || 0;
         const qPaid = Math.max(0, qShip - qOff);
-        if (qShip < qOrd) s.linesPartial++;
-        if (qOff > 0) s.linesOffered++;
-        // TTC payé : unitPrice (déjà net de remise) ; replis remise/original.
-        const ttc = num(it.unitPrice) || num(it.originalDiscountedUnitPrice) || num(it.originalUnitPrice);
-        // HT dérivé du payé via le taux de TVA de la ligne (respecte les remises) ; repli champ net.
-        const vr0 = num(it.vatRate); const vr = vr0 > 1 ? vr0 / 100 : vr0;
-        const ht = vr > 0 ? ttc / (1 + vr)
-          : (num(it.originalDiscountedUnitPriceNet) || num(it.originalUnitPriceNet) || ttc);
-        s.ttcOrd += ttc * qOrd; s.ttcShip += ttc * qShip; s.ttcPaid += ttc * qPaid;
-        s.htOrd += ht * qOrd; s.htShip += ht * qShip; s.htPaid += ht * qPaid;
+        if (qShip < qOrd) linesPartial++;
+        if (qOff > 0) linesOffered++;
+        for (const [name, get] of LINE_FIELDS) {
+          const u = get(it);
+          addK(`ligne:${name} × commandé`, u * qOrd);
+          addK(`ligne:${name} × livré`, u * qShip);
+          addK(`ligne:${name} × payé`, u * qPaid);
+        }
       }
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
-      return {
-        ttcOrd: r2(s.ttcOrd), ttcShip: r2(s.ttcShip), ttcPaid: r2(s.ttcPaid),
-        htOrd: r2(s.htOrd), htShip: r2(s.htShip), htPaid: r2(s.htPaid),
-        orderTotal: r2(s.orderTotal), refunds: r2(s.refunds),
-        ttcPaidNetRefunds: r2(s.ttcPaid - s.refunds),
-        orders: s.orders, lines: s.lines, linesPartial: s.linesPartial, linesOffered: s.linesOffered,
-      };
+      const candidates = Object.keys(sums)
+        .map(label => ({ label, value: r2(sums[label]) }))
+        .sort((a, b) => b.value - a.value);
+      return { candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered };
     },
   };
 }
@@ -440,8 +452,9 @@ router.post('/sync', requireAuth, (req, res) => {
 router.post('/ca-audit', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   const q = req.query || {};
-  const from = q.cfrom || q.from, to = q.cto || q.to;
-  if (!from || !to) return res.status(400).json({ error: 'Période manquante : renseignez N-1 (ou N) dans le sélecteur de dates.' });
+  // Priorité à un jour précis (q.day) ; sinon plage N-1 (cfrom/cto) ; sinon N (from/to).
+  const from = q.day || q.cfrom || q.from, to = q.day || q.cto || q.to;
+  if (!from || !to) return res.status(400).json({ error: 'Période manquante : renseignez un jour (ou la plage) dans le sélecteur.' });
   res.status(202).json({ started: true, ...runJob('ca-audit', cb => auditCARange(from, to, n => cb.count && cb.count('N1', n))) });
 });
 router.get('/job', requireAuth, (req, res) => res.json(jobSnapshot()));
