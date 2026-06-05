@@ -1297,24 +1297,8 @@ function renderCAAudit(res) {
     + `<table style="margin-top:6px;font-size:12px;border-collapse:collapse"><tbody>`
     + cands.map(row).join('')
     + `</tbody></table>`
-    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">${fInt(a.linesPartial || 0)} ligne(s) partiellement livrées · ${fInt(a.linesOffered || 0)} avec articles offerts · ${fInt(a.splits || 0)} commande(s) scindées.</div>`
-    + brk('Par type de paiement (PVP)', a.byPayment)
-    + brk('Par orderStatus (PVP)', a.byOrderStatus) + brk('Par orderStoreStatus (PVP)', a.byStoreStatus)
-    + brk('Par orderCustomerStatus (PVP)', a.byCustomerStatus) + brk('Par magasin / canal', a.byStore)
-    + cbTable(a.cbDetail)
-    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">Plage des commandes récupérées : <b>${esc(a.dateMin || '—')}</b> → <b>${esc(a.dateMax || '—')}</b>. Si le volume est trop faible vs ton CA réel, c'est un manque de commandes (journée incomplète, scope magasin, ou champ de date), pas un mauvais champ prix.</div>`;
-  function cbTable(arr) {
-    if (!arr || !arr.length) return '';
-    return `<div style="margin-top:6px;font-size:11px;color:var(--mut)">Détail commandes Carte Bancaire (${arr.length}) — n° | PVP | storeStatus | custStatus | scindée | rembours. :</div>`
-      + `<table style="font-size:10px;border-collapse:collapse"><tbody>`
-      + arr.map(o => `<tr><td style="padding:1px 8px 1px 0">${esc(o.num)}</td>`
-        + `<td style="padding:1px 8px 1px 0;text-align:right;font-variant-numeric:tabular-nums">${eur(o.pvp)}</td>`
-        + `<td style="padding:1px 8px 1px 0">${esc(o.ss || '—')}</td>`
-        + `<td style="padding:1px 8px 1px 0">${esc(o.cs || '—')}</td>`
-        + `<td style="padding:1px 8px 1px 0">${o.split ? 'oui' : ''}</td>`
-        + `<td style="padding:1px 0;text-align:right">${o.refund ? eur(o.refund) : ''}</td></tr>`).join('')
-      + `</tbody></table>`;
-  }
+    + brk('Par type de paiement (PVP)', a.byPayment) + brk('Par magasin / canal (PVP)', a.byStore)
+    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">Plage des commandes récupérées : <b>${esc(a.dateMin || '—')}</b> → <b>${esc(a.dateMax || '—')}</b>. CA EShop = PVP hors GL.com/Printemps (type de paiement), magasins ship-from-store conservés.</div>`;
   function brk(title, arr) {
     if (!arr || !arr.length) return '';
     return `<div style="margin-top:6px;font-size:11px;color:var(--mut)">${esc(title)} :</div>`
