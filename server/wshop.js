@@ -334,9 +334,13 @@ function newCAAudit() {
     ['discUnitNet', it => num(it.originalDiscountedUnitPriceNet) || num(it.originalUnitPriceNet)],
     ['compareAt', it => num(it.compareAtPrice)],
   ];
-  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
+  // « PVP » = prix de vente payé de l'export OMS = unitPrice × quantité commandée (champ confirmé).
+  const pvpOf = it => num(it.unitPrice) * (parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0);
+  // Exclusion périmètre EShop : retire les types de paiement GL / Printemps (concessions grands magasins).
+  const isExclPay = s => { const t = (s || '').toLowerCase().trim(); return t === 'gl' || t.includes('gl.com') || t.includes('galeries') || t.includes('printemps'); };
+  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0, pvpEShop = 0;
   let dateMin = '', dateMax = '', splits = 0;
-  const byStatus = Object.create(null), byStore = Object.create(null);
+  const byStatus = Object.create(null), byStore = Object.create(null), byPayment = Object.create(null);
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
@@ -350,8 +354,14 @@ function newCAAudit() {
       if (mid && oid && mid !== oid) splits++;
       const status = o.orderStatus || o.orderStoreStatus || o.orderCustomerStatus || '';
       const store = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
+      const pay = (o.payment_method && o.payment_method.label) || '';
+      // PVP de la commande (= Σ lignes unitPrice × commandé) → réparti par type de paiement.
+      const itemsArr = Array.isArray(o.orderItems) ? o.orderItems : [];
+      const pvpOrder = itemsArr.reduce((s2, it) => s2 + pvpOf(it), 0);
       bump(byStatus, status, oTot);
       bump(byStore, store, oTot);
+      bump(byPayment, pay, pvpOrder);
+      if (!isExclPay(pay)) pvpEShop += pvpOrder; // périmètre EShop (hors GL/Printemps)
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -378,6 +388,8 @@ function newCAAudit() {
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
+      // Candidat « périmètre EShop » mis en tête : PVP hors GL/Printemps (type paiement).
+      sums['périmètre:PVP hors GL/Printemps (type paiement)'] = pvpEShop;
       const candidates = Object.keys(sums)
         .map(label => ({ label, value: r2(sums[label]) }))
         .sort((a, b) => b.value - a.value);
@@ -387,6 +399,7 @@ function newCAAudit() {
       return {
         candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered,
         dateMin, dateMax, splits, byStatus: breakdown(byStatus), byStore: breakdown(byStore),
+        byPayment: breakdown(byPayment),
       };
     },
   };
