@@ -18,6 +18,7 @@ const reports = require('./reports');
 const pdf = require('./pdf');
 const ga4 = require('./ga4');
 const wshop = require('./wshop');
+const googleads = require('./googleads');
 const reco = require('./reco');
 const objectives = require('./objectives');
 
@@ -45,6 +46,7 @@ app.use('/api/report', reports.router);
 app.use('/api/report', pdf.router);
 app.use('/api/ga4', ga4.router);
 app.use('/api/wshop', wshop.router);
+app.use('/api/googleads', googleads.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 
