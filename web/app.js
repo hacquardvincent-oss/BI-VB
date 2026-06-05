@@ -379,11 +379,15 @@ function renderReport(rep) {
   else if (k.sessions == null) ttNote = '<div class="note">⚠ Sessions/TT non datables sur cette période — utiliser « Tout » ou rafraîchir GA4.</div>';
 
   const c = rep.ca.n, c1 = rep.ca.n1 || {};
-  const caBlocks = [
+  const caRowsDef = [
     ['CA Global', c.caGlob, c1.caGlob], ['CA EShop', c.caEShop, c1.caEShop],
     ['CA France', c.caFR, c1.caFR], ['CA International', c.caInt, c1.caInt],
     ['CA Entrepôt', c.caEnt, c1.caEnt], ['CA SFS', c.caSFS, c1.caSFS],
-  ].map(([l, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${fEur(n)}</div><div style="font-size:11px">${delta(n, n1)}</div></div>`).join('');
+  ];
+  // Démarque : Full Price / Off Price (si les colonnes prix vente/remisé sont présentes)
+  if (c.caFP != null) caRowsDef.push(['CA Full Price', c.caFP, c1.caFP]);
+  if (c.caOP != null) caRowsDef.push(['CA Off Price', c.caOP, c1.caOP]);
+  const caBlocks = caRowsDef.map(([l, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${fEur(n)}</div><div style="font-size:11px">${delta(n, n1)}</div></div>`).join('');
 
   const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
   const mkRows = [
@@ -629,7 +633,46 @@ function renderReport(rep) {
   const campaignLandingCard = clRows ? `<div class="card"><h3>Cohérence campagne → landing (N vs N-1)</h3><table><thead><tr><th>Campagne</th><th>Landing principale</th><th>Sess. N</th><th>Δ</th><th>% trafic</th><th>Conv. N</th><th>Conv. N-1</th></tr></thead><tbody>${clRows}</tbody></table><div class="note">Vérifie la combinaison campagne / redirection / landing / merch : une campagne qui pousse vers une landing à faible conversion (rouge) = mauvais atterrissage. Conv. N-1 = la même campagne convertissait-elle mieux l'an dernier ?</div></div>` : '';
 
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
-  // Pilotage 360 : KPI (compact, à gauche) + détail CA (à droite) dans une même carte
+  // ── Pilotage 360 : sous-blocs (détail MP, Top 5 pays inter/canaux/pages, familles, produits) ──
+  const miniPanel = (title, head, rows) => rows
+    ? `<div><div class="note" style="margin:0 0 6px"><b>${title}</b></div><table style="font-size:11px"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`
+    : '';
+  // Détail Marketplace (remplace le camembert)
+  const pmk = rep.marketplace ? rep.marketplace.n : null, pmk1 = (rep.marketplace && rep.marketplace.n1) || {};
+  let mpMini = '<div class="note" style="margin-top:10px">Aucune vente marketplace sur la période.</div>';
+  if (pmk && pmk.total > 0) {
+    const mr = [['Galeries Lafayette', pmk.glTotal, pmk1.glTotal], ['Printemps', pmk.printemps, pmk1.printemps], ['Place des Tendances', pmk.pdt, pmk1.pdt], ['Lulli', pmk.lulli, pmk1.lulli]].filter(([, v]) => v > 0);
+    mpMini = `<div class="note" style="margin:10px 0 6px"><b>Détail Marketplace — N vs N-1</b></div>
+      <table style="font-size:11px"><thead><tr><th>Enseigne</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>
+      ${mr.map(([l, n, n1]) => `<tr><td>${l}</td><td>${fEur(n)}</td><td>${fEur(n1)}</td><td>${delta(n, n1)}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td>Total</td><td>${fEur(pmk.total)}</td><td>${fEur(pmk1.total)}</td><td>${delta(pmk.total, pmk1.total)}</td></tr></tbody></table>`;
+  }
+  // Top 5 pays International (hors France) par CA
+  const paysInter = (rep.pays || []).filter(p => (p.pays || '').trim().toLowerCase() !== 'france' && p.n && p.n.ca > 0).slice(0, 5);
+  const paysInterP = miniPanel('Top 5 pays International (CA)', ['Pays', 'CA', 'Δ N-1'],
+    paysInter.length ? paysInter.map(p => `<tr><td>${esc(p.pays)}</td><td>${fEur(p.n.ca)}</td><td>${p.n1 ? delta(p.n.ca, p.n1.ca) : '—'}</td></tr>`).join('') : null);
+  // Top 5 canaux de communication (par revenu GA)
+  const chN = (rep.channels && rep.channels.n) || []; const ch1m = {}; ((rep.channels && rep.channels.n1) || []).forEach(x => { ch1m[x.canal] = x; });
+  const canauxP = miniPanel('Top 5 canaux (revenu)', ['Canal', 'Revenu', 'Δ N-1'],
+    chN.length ? chN.slice(0, 5).map(c => `<tr><td>${esc(c.canal)}</td><td>${fEur(c.revenue)}</td><td>${ch1m[c.canal] ? delta(c.revenue, ch1m[c.canal].revenue) : '—'}</td></tr>`).join('') : null);
+  // Top 5 pages vues
+  const topPagesV = [...(rep.topPages || [])].sort((a, b) => b.viewsN - a.viewsN).slice(0, 5);
+  const pagesP = miniPanel('Top 5 pages vues', ['Page', 'Vues N', 'Δ N-1'],
+    topPagesV.length ? topPagesV.map(p => `<tr><td title="${esc(p.page)}">${esc((p.page || '').slice(0, 32))}</td><td>${fInt(p.viewsN)}</td><td>${delta(p.viewsN, p.viewsN1)}</td></tr>`).join('') : null);
+  // Top 5 produits par CA et par Quantité
+  const tpCA = (rep.topProduits && rep.topProduits.n || []).slice(0, 5);
+  const prodCAP = miniPanel('Top 5 produits (CA)', ['Produit', 'CA', 'Qté'],
+    tpCA.length ? tpCA.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td>${fEur(p.ca)}</td><td>${fInt(p.qte)}</td></tr>`).join('') : null);
+  const tpQte = (rep.topProduitsQte && rep.topProduitsQte.n || []).slice(0, 5);
+  const prodQteP = miniPanel('Top 5 produits (Quantité)', ['Produit', 'Qté', 'CA'],
+    tpQte.length ? tpQte.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('') : null);
+  // CA & Quantité par famille
+  const famD = (rep.familleDetail || []).slice(0, 8);
+  const famDetP = miniPanel('CA & Quantité par famille', ['Famille', 'CA', 'Δ', 'Qté', 'Δ'],
+    famD.length ? famD.map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.caN)}</td><td>${f.caN1 != null ? delta(f.caN, f.caN1) : '—'}</td><td>${fInt(f.qteN)}</td><td>${f.qteN1 != null ? delta(f.qteN, f.qteN1) : '—'}</td></tr>`).join('') : null);
+  const pilotPanels = [paysInterP, canauxP, pagesP, prodCAP, prodQteP, famDetP].filter(Boolean).join('');
+
+  // Pilotage 360 : KPI (gauche) + détail CA & Marketplace (droite) + panneaux Top 5
   const kpiCard = `<div class="card"><h3>Pilotage 360 — KPI EShop & CA — ${dimLabel}</h3>
       <div class="grid cols2">
         <div>
@@ -638,8 +681,9 @@ function renderReport(rep) {
           ${ttNote}
         </div>
         <div><div class="note" style="margin:0 0 6px">Détail du chiffre d'affaires</div><div class="kgrid">${caBlocks}</div>
-          <div style="height:180px;margin-top:10px"><canvas id="caDonut"></canvas></div></div>
-      </div></div>`;
+          ${mpMini}</div>
+      </div>
+      ${pilotPanels ? `<div class="grid cols2" style="margin-top:12px">${pilotPanels}</div>` : ''}</div>`;
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
