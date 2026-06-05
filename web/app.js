@@ -1234,6 +1234,46 @@ document.getElementById('wshopping').addEventListener('click', async () => {
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
+document.getElementById('wshopcaaudit').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync'), document.getElementById('wshopcaaudit')];
+  btns.forEach(b => { b.disabled = true; }); note.textContent = 'Audit CA en cours…';
+  try {
+    const q = new URLSearchParams(currentPeriod()).toString();
+    const r = await fetch('/api/wshop/ca-audit?' + q, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  const poll = async () => {
+    try {
+      const j = await (await fetch('/api/wshop/job')).json();
+      if (j.running) { note.textContent = `Audit CA N-1 : ${j.phase} — ${fInt(j.ordersN1 || 0)} commande(s)…`; return setTimeout(poll, 2000); }
+      btns.forEach(b => { b.disabled = false; });
+      if (j.error) { note.textContent = '⚠ ' + j.error; return; }
+      note.innerHTML = renderCAAudit(j.result || {});
+    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btns.forEach(b => { b.disabled = false; }); }
+  };
+  setTimeout(poll, 1500);
+});
+function renderCAAudit(res) {
+  const a = res.audit || {}; const eur = x => fInt(Math.round(Number(x) || 0)) + ' €';
+  const row = (lbl, val, hint) => `<tr><td style="padding:2px 10px 2px 0">${esc(lbl)}</td><td style="padding:2px 0;text-align:right;font-variant-numeric:tabular-nums"><b>${eur(val)}</b></td><td style="padding:2px 0 2px 12px;color:var(--mut)">${esc(hint || '')}</td></tr>`;
+  return `<div style="margin-top:8px"><b>Audit règle CA</b> · période ${esc((res.period || {}).from || '?')} → ${esc((res.period || {}).to || '?')} · `
+    + `${fInt(res.count || 0)} commandes, ${fInt(a.lines || 0)} lignes</div>`
+    + `<table style="margin-top:6px;font-size:12px;border-collapse:collapse"><tbody>`
+    + row('TTC × commandé', a.ttcOrd, 'règle actuelle')
+    + row('TTC × livré', a.ttcShip, 'exclut le non-expédié')
+    + row('TTC × payé', a.ttcPaid, 'livré − offert')
+    + row('TTC × payé − remboursements', a.ttcPaidNetRefunds, 'net encaissé')
+    + row('HT × commandé', a.htOrd, '')
+    + row('HT × livré', a.htShip, '')
+    + row('HT × payé', a.htPaid, 'livré − offert, hors taxe')
+    + `<tr><td colspan="3" style="border-top:1px solid var(--bd);padding-top:4px"></td></tr>`
+    + row('Σ orderTotal (commande)', a.orderTotal, 'recoupement niveau commande')
+    + row('Σ remboursements', a.refunds, '')
+    + `</tbody></table>`
+    + `<div style="margin-top:4px;color:var(--mut);font-size:11px">${fInt(a.linesPartial || 0)} ligne(s) partiellement livrées · ${fInt(a.linesOffered || 0)} ligne(s) avec articles offerts. Repérez la valeur = 22 283 € → c'est la bonne règle.</div>`;
+}
+
 // Événements
 document.getElementById('logout').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
