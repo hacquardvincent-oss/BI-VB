@@ -6,6 +6,10 @@ Objectif : capitaliser sur le socle (collecte multi-sources + analyse N/N-1 matu
 fiabilisant la lecture comparée et en restructurant l'outil en briques métier lisibles.
 
 ### Brique 0 — Bilan en tête de dashboard ✅ (livré 04/06)
+_+ Option **« 📋 Copier le contexte pour Claude.ai »** (endpoint `/api/reco/context`, sans
+appel API → 0 €) : prépare le prompt + reporting distillé à coller dans Claude.ai (couvert par
+l'abonnement Pro/Max). Disponible même sans `ANTHROPIC_API_KEY`. Le bouton « Synthèse IA »
+(API payante) reste optionnel à côté._
 - ⬜ **Scorecard N vs N-1** épinglée en haut de `#report` : CA, commandes, panier moyen,
   taux de transfo, taux de retour — chaque tuile avec son Δ coloré (vert/rouge).
 - ⬜ **Signaux auto** (règles, sans IA) : meilleure famille en croissance, produit en chute,

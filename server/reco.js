@@ -16,8 +16,8 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 function isConfigured() { return !!process.env.ANTHROPIC_API_KEY; }
 
-// System prompt STABLE (caché) — aucune donnée volatile ici (sinon le cache casse).
-const SYSTEM = `Tu es un consultant senior en stratégie e-commerce et retail pour une maison de mode française (prêt-à-porter et accessoires haut de gamme). Tu analyses un reporting chiffré et tu produis des recommandations stratégiques actionnables, hiérarchisées par horizon de temps.
+// Cadre d'analyse STABLE et réutilisable (API + copier/coller). Aucune donnée volatile ici.
+const BRIEF = `Tu es un consultant senior en stratégie e-commerce et retail pour une maison de mode française (prêt-à-porter et accessoires haut de gamme). Tu analyses un reporting chiffré et tu produis des recommandations stratégiques actionnables, hiérarchisées par horizon de temps.
 
 Cadre d'analyse :
 - Court terme (≤ 1 mois) : actions rapides à fort effet de levier (merchandising, réassort, prix, push d'un best-seller, correction d'un point de fuite conversion/retours).
@@ -28,7 +28,10 @@ Règles :
 - Appuie CHAQUE recommandation sur un chiffre précis du reporting (cite la donnée).
 - Priorise par impact business attendu. Sois concret et opérationnel, jamais générique.
 - Tiens compte des spécificités mode : saisonnalité, nouveautés vs permanents, largeur d'offre, retours, omnicanal (EShop, boutiques, Galeries Lafayette, Printemps, Place des Tendances, Lulli).
-- Si une donnée manque (ex. GA non chargé), signale-le brièvement plutôt que d'inventer.
+- Si une donnée manque (ex. GA non chargé), signale-le brièvement plutôt que d'inventer.`;
+
+// Sortie JSON pour l'API (parsée par l'app). System prompt = cadre + format JSON.
+const SYSTEM = BRIEF + `
 
 Réponds UNIQUEMENT par un objet JSON valide, sans texte autour, au format exact :
 {
@@ -38,6 +41,13 @@ Réponds UNIQUEMENT par un objet JSON valide, sans texte autour, au format exact
   "long":  [{ "titre": "...", "action": "...", "donnee": "...", "impact": "..." }]
 }
 Entre 2 et 4 recommandations par horizon. Tout en français.`;
+
+// Sortie LISIBLE pour un collage dans Claude.ai (lecture humaine, sans JSON, 0 € d'API).
+const PASTE_TAIL = `
+
+Structure ta réponse en français, lisible et hiérarchisée :
+1. **Synthèse** — 2 à 3 phrases de diagnostic global.
+2. **☀️ Court terme (≤ 1 mois)**, **📈 Moyen terme (1-3 mois)**, **🧭 Long terme (3-12 mois)** — 2 à 4 recommandations par horizon. Pour chacune : l'action concrète, la donnée chiffrée qui la justifie, et l'impact business attendu.`;
 
 // ── Distillation du rapport en résumé compact ───────────────────────────────
 const r0 = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -137,6 +147,22 @@ function parseJSON(text) {
 const CACHE = new Map();
 
 router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfigured() }));
+
+// Contexte prêt à coller dans Claude.ai (couvert par l'abonnement Pro/Max) — 0 € d'API.
+// N'appelle PAS l'API : disponible même sans ANTHROPIC_API_KEY.
+router.get('/context', requireAuth, async (req, res) => {
+  try {
+    const { preset, from, to, dim, cfrom, cto, scope } = req.query;
+    const isAll = req.query.isAll === '1';
+    const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
+    if (rep.empty) return res.status(400).json({ error: rep.message || 'Aucune donnée à analyser.' });
+    const context = distill(rep);
+    const prompt = BRIEF + PASTE_TAIL + '\n\n---\n\nVoici le reporting à analyser :\n\n' + context;
+    res.json({ prompt, chars: prompt.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get('/', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'Moteur de recommandations non configuré (ANTHROPIC_API_KEY absent côté serveur).' });

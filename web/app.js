@@ -765,24 +765,49 @@ function buildBilan(rep) {
   const sigHtml = sigs.length
     ? `<div class="bilan-sigs">${sigs.slice(0, 4).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
     : (rep.meta.hasN1 ? '' : '<div class="note">Renseigne une période N-1 pour activer les signaux comparés.</div>');
-  const ia = RECO_OK ? `<div class="toolbar" style="margin-top:12px"><button class="btn blue" id="bilanIA">🧠 Synthèse IA de la période</button><span class="note" id="bilanIANote" style="margin:0">Lecture stratégique en 2-3 phrases par l'IA, sur la période et le périmètre sélectionnés.</span></div><div id="bilanIASynth"></div>` : '';
+  const copyBtn = `<button class="btn" id="bilanCopy">📋 Copier le contexte pour Claude.ai</button>`;
+  const iaBtn = RECO_OK ? `<button class="btn blue" id="bilanIA">🧠 Synthèse IA</button>` : '';
+  const iaNote = RECO_OK
+    ? 'Colle le contexte dans Claude.ai (abonnement, 0 €) ou génère la synthèse via l\'API.'
+    : 'Colle le contexte dans Claude.ai (couvert par ton abonnement Pro/Max) — 0 € d\'API.';
+  const ia = `<div class="toolbar" style="margin-top:12px">${copyBtn}${iaBtn}<span class="note" style="margin:0">${iaNote}</span></div><div id="bilanIASynth"></div>`;
   return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
     <div class="kgrid">${tiles.join('')}</div>
     ${sigHtml}${ia}</div>`;
 }
-// Bouton « Synthèse IA » du bilan : réutilise /api/reco, n'affiche que la synthèse.
+// Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
-  const b = document.getElementById('bilanIA'); if (!b) return;
-  b.addEventListener('click', async () => {
-    const out = document.getElementById('bilanIASynth'); b.disabled = true;
-    out.innerHTML = '<div class="note" style="margin-top:8px">Génération en cours (10–30 s)…</div>';
+  const out = () => document.getElementById('bilanIASynth');
+  // Copier le contexte pour Claude.ai — 0 € d'API (repli textarea si presse-papier bloqué)
+  const cp = document.getElementById('bilanCopy');
+  if (cp) cp.addEventListener('click', async () => {
+    const o = out(); cp.disabled = true;
+    o.innerHTML = '<div class="note" style="margin-top:8px">Préparation du contexte…</div>';
+    try {
+      const r = await fetch('/api/reco/context?' + reportQuery());
+      const j = await r.json();
+      if (!r.ok) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+      const link = '<a href="https://claude.ai/new" target="_blank" rel="noopener">Claude.ai</a>';
+      let copied = false;
+      try { await navigator.clipboard.writeText(j.prompt); copied = true; } catch (e) { /* presse-papier indisponible (http, permissions) */ }
+      o.innerHTML = copied
+        ? `<div class="insight" style="margin-top:10px">✓ Contexte copié (${fInt(j.chars)} caractères). Colle-le dans ${link} (couvert par ton abonnement) — 0 € d'API.</div>`
+        : `<div class="note" style="margin-top:8px">Copie automatique indisponible — sélectionne tout le texte ci-dessous (Ctrl/Cmd+A puis C) et colle-le dans ${link} :</div><textarea readonly onclick="this.select()" style="width:100%;height:160px;margin-top:6px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:8px;padding:8px;font-size:11px;font-family:monospace">${esc(j.prompt)}</textarea>`;
+    } catch (e) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
+    finally { cp.disabled = false; }
+  });
+  // Synthèse IA (API payante) — réutilise /api/reco, n'affiche que la synthèse.
+  const b = document.getElementById('bilanIA');
+  if (b) b.addEventListener('click', async () => {
+    const o = out(); b.disabled = true;
+    o.innerHTML = '<div class="note" style="margin-top:8px">Génération en cours (10–30 s)…</div>';
     try {
       const r = await fetch('/api/reco?' + reportQuery());
       const j = await r.json();
-      if (!r.ok) { out.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+      if (!r.ok) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
       const syn = j.reco && j.reco.synthese;
-      out.innerHTML = syn ? `<div class="insight" style="margin-top:10px">💡 <b>Synthèse IA.</b> ${esc(syn)}</div>` : '<div class="note" style="margin-top:8px">Réponse vide.</div>';
-    } catch (e) { out.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
+      o.innerHTML = syn ? `<div class="insight" style="margin-top:10px">💡 <b>Synthèse IA.</b> ${esc(syn)}</div>` : '<div class="note" style="margin-top:8px">Réponse vide.</div>';
+    } catch (e) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
     finally { b.disabled = false; }
   });
 }
