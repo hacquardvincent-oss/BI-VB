@@ -326,99 +326,48 @@ async function syncIncremental(cb = {}) {
 // Anonyme : prix & quantités uniquement (aucun champ client).
 function newCAAudit() {
   const num = x => Number(x) || 0;
-  const sums = Object.create(null);       // label -> total
-  const addK = (k, v) => { sums[k] = (sums[k] || 0) + v; };
-  // Champs prix au niveau ligne (valeur unitaire) : on testera × commandé/livré/payé.
-  const LINE_FIELDS = [
-    ['unitPrice', it => num(it.unitPrice)],
-    ['origUnit', it => num(it.originalUnitPrice)],
-    ['origUnitNet', it => num(it.originalUnitPriceNet)],
-    ['discUnit', it => num(it.originalDiscountedUnitPrice) || num(it.unitPrice)],
-    ['discUnitNet', it => num(it.originalDiscountedUnitPriceNet) || num(it.originalUnitPriceNet)],
-    ['compareAt', it => num(it.compareAtPrice)],
-  ];
   // « PVP » = prix de vente payé de l'export OMS = unitPrice × quantité commandée (champ confirmé).
   const pvpOf = it => num(it.unitPrice) * (parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0);
-  // Périmètre EShop = règle d'origine : on exclut GL.com et Printemps du TYPE DE PAIEMENT
-  // (on ne touche pas aux magasins). isExclPay calque calc.js isMkt sur le moyen de paiement.
+  // Périmètre EShop : on exclut GL.com et Printemps du TYPE DE PAIEMENT (on ne touche pas aux
+  // magasins = ship-from-store gardé). isExclPay calque calc.js isMkt sur le moyen de paiement.
   const isExclPay = p => { const t = (p || '').toLowerCase(); return t.includes('gl.com') || t.includes('printemps') || t.includes('la redoute') || t.includes('24s'); };
-  let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
-  let pvpEShop = 0; // PVP hors marketplaces (par type de paiement)
-  const cbDetail = []; // détail des commandes Carte Bancaire (réconciliation API↔OMS)
-  let dateMin = '', dateMax = '', splits = 0;
+  let orders = 0, lines = 0, refunds = 0, pvpTotal = 0, pvpEShop = 0, orderTotalSum = 0, shipSum = 0;
+  let dateMin = '', dateMax = '';
   const byStore = Object.create(null), byPayment = Object.create(null);
-  const byOrderStatus = Object.create(null), byStoreStatus = Object.create(null), byCustomerStatus = Object.create(null);
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
       orders++;
-      const oTot = num(o.orderTotal), oShip = num(o.orderShippingFees), oVat = num(o.orderVat);
+      const oTot = num(o.orderTotal), oShip = num(o.orderShippingFees);
+      orderTotalSum += oTot; shipSum += oShip;
       (o.orderRefund || []).forEach(rf => { refunds += num(rf.amount); });
-      // Répartition pour diagnostiquer un éventuel manque de volume (scope/statut/date).
       const dt = String(o.orderDate || '');
       if (dt) { if (!dateMin || dt < dateMin) dateMin = dt; if (!dateMax || dt > dateMax) dateMax = dt; }
-      const oid = o.orderId || '', mid = o.mainOrderId || '';
-      if (mid && oid && mid !== oid) splits++;
       const store = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
       const pay = (o.payment_method && o.payment_method.label) || '';
-      // PVP de la commande (= Σ lignes unitPrice × commandé) → réparti par type de paiement.
-      const itemsArr = Array.isArray(o.orderItems) ? o.orderItems : [];
-      const pvpOrder = itemsArr.reduce((s2, it) => s2 + pvpOf(it), 0);
-      // Les 3 champs de statut détaillés (PVP) : pour repérer le statut « précoce » que l'OMS
-      // n'exporte pas (l'OMS ne contient que Expédiée/Retournée/Annulée…).
-      bump(byOrderStatus, o.orderStatus || '', pvpOrder);
-      bump(byStoreStatus, o.orderStoreStatus || '', pvpOrder);
-      bump(byCustomerStatus, o.orderCustomerStatus || '', pvpOrder);
-      bump(byStore, store, oTot);
-      bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Printemps, Global…)
-      if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
-      // Détail des commandes Carte Bancaire (où se loge l'écart API↔OMS) pour réconciliation nominative.
-      if (/carte bancaire/i.test(pay)) cbDetail.push({
-        num: oid || mid, pvp: pvpOrder,
-        ss: o.orderStoreStatus || '', cs: o.orderCustomerStatus || '',
-        split: !!(mid && oid && mid !== oid),
-        refund: (o.orderRefund || []).reduce((s2, rf) => s2 + num(rf.amount), 0),
-      });
-      // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
-      addK('commande:orderTotal', oTot);
-      addK('commande:orderTotal − port', oTot - oShip);
-      addK('commande:orderTotal − TVA', oTot - oVat);
-      addK('commande:orderTotal − port − TVA', oTot - oShip - oVat);
-      addK('commande:orderShippingFees', oShip);
-      addK('commande:orderVat', oVat);
       const items = Array.isArray(o.orderItems) ? o.orderItems : [];
-      for (const it of items) {
-        lines++;
-        const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
-        const qShip = parseInt(it.quantityShipped != null ? it.quantityShipped : qOrd) || 0;
-        const qOff = parseInt(it.quantityOffered != null ? it.quantityOffered : 0) || 0;
-        const qPaid = Math.max(0, qShip - qOff);
-        if (qShip < qOrd) linesPartial++;
-        if (qOff > 0) linesOffered++;
-        for (const [name, get] of LINE_FIELDS) {
-          const u = get(it);
-          addK(`ligne:${name} × commandé`, u * qOrd);
-          addK(`ligne:${name} × livré`, u * qShip);
-          addK(`ligne:${name} × payé`, u * qPaid);
-        }
-      }
+      lines += items.length;
+      const pvpOrder = items.reduce((s2, it) => s2 + pvpOf(it), 0);
+      pvpTotal += pvpOrder;
+      bump(byStore, store, pvpOrder);
+      bump(byPayment, pay, pvpOrder);
+      if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
-      // Candidat « périmètre EShop » = PVP hors GL.com/Printemps par TYPE DE PAIEMENT (règle d'origine).
-      sums['périmètre: PVP hors GL.com/Printemps (type de paiement)'] = pvpEShop;
-      const candidates = Object.keys(sums)
-        .map(label => ({ label, value: r2(sums[label]) }))
-        .sort((a, b) => b.value - a.value);
+      // Candidats : le périmètre EShop (= la règle du dashboard) + recoupements de contrôle.
+      const candidates = [
+        { label: 'CA EShop : PVP hors GL.com/Printemps (type de paiement)', value: r2(pvpEShop) },
+        { label: 'PVP total (tous types de paiement)', value: r2(pvpTotal) },
+        { label: 'Σ orderTotal (avec port)', value: r2(orderTotalSum) },
+        { label: 'Σ orderTotal − port', value: r2(orderTotalSum - shipSum) },
+      ];
       const breakdown = map => Object.keys(map)
         .map(k => ({ key: k, count: map[k].count, total: r2(map[k].total) }))
         .sort((a, b) => b.total - a.total);
       return {
-        candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered,
-        dateMin, dateMax, splits, byStore: breakdown(byStore), byPayment: breakdown(byPayment),
-        byOrderStatus: breakdown(byOrderStatus), byStoreStatus: breakdown(byStoreStatus),
-        byCustomerStatus: breakdown(byCustomerStatus),
-        cbDetail: cbDetail.map(o => ({ ...o, pvp: r2(o.pvp), refund: r2(o.refund) })).sort((a, b) => String(a.num).localeCompare(String(b.num))),
+        candidates, refunds: r2(refunds), orders, lines,
+        dateMin, dateMax, byStore: breakdown(byStore), byPayment: breakdown(byPayment),
       };
     },
   };
