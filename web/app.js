@@ -4,7 +4,8 @@
 // ============================================================================
 let CURRENT = 'all';
 let CURRENT_DIM = 'global';
-let CURRENT_MODULE = 'full';
+let USER_DIM = 'global';   // prisme géo choisi par l'utilisateur (Global/FR/Inter), conservé entre les vues
+let CURRENT_MODULE = 'direction';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
@@ -12,55 +13,51 @@ let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
-// ── Modules : 1 moteur, 6 vues. Chaque module = layout de cartes + fichiers requis ──
+// ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
+// Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
+const MODULE_ORDER = ['direction', 'estore', 'acquisition', 'saisonprod', 'onsite', 'international', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
-    intro: 'Synthèse 360 pour la direction — les KPI clés en un écran.',
+    intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['kpi', 'ca', 'funnel', 'produits'],
+  },
+  estore: {
+    icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
+    intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
+    files: { required: ['oms'], optional: ['ga', 'ret'] },
+    layout: ['kpi', 'ca', 'funnel', 'daily', 'gafunnel', 'channels', 'device', 'pays', 'retours', 'annulations'],
+  },
+  acquisition: {
+    icon: '📈', label: 'Acquisition (GA)', preset: 'all',
+    intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
+  },
+  saisonprod: {
+    icon: '🧵', label: 'Saison & produits', preset: 'all',
+    intro: 'Offre & produits : comparaison de saison (E26 vs E25), familles, top/reconquête, rentabilité, funnel produit et cross-canal.',
+    files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
+    layout: ['kpi', 'saisoncompare', 'saison', 'famille', 'produits', 'renta', 'itemfunnel', 'marketplace', 'crosschannel'],
+  },
+  onsite: {
+    icon: '🧭', label: 'Comportement on-site', preset: 'all',
+    intro: 'Parcours sur le site : funnel e-commerce, funnel produit (vues→panier→achat), pages, pages disparues/nouvelles et device.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['gafunnel', 'itemfunnel', 'landing', 'pages', 'lostpages', 'pagesrc', 'device'],
+  },
+  international: {
+    icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
+    intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'produits'],
-  },
-  hebdo: {
-    icon: '📊', label: 'Hebdo', preset: 'week',
-    intro: 'Analyse hebdomadaire détaillée, scope par scope.',
-    files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'itemfunnel', 'pages', 'landing', 'pays', 'ttpays', 'retours'],
-  },
-  saison: {
-    icon: '🧵', label: 'Saison', preset: 'all',
-    intro: 'Collection E26 vs E25 : largeur d’offre, nouveautés/permanents/manquants, bests/slowers (Implantation).',
-    files: { required: ['oms', 'impl'], optional: ['ref', 'ret'] },
-    layout: ['kpi', 'ca', 'saisoncompare', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
-  },
-  omnicanal: {
-    icon: '🏬', label: 'Omnicanal', preset: 'all',
-    intro: 'EShop vs Marketplace : performance produit/famille par canal vs N-1 et entre canaux.',
-    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
-    layout: ['kpi', 'marketplace', 'crosschannel', 'ca', 'famille', 'produits'],
-  },
-  international: {
-    icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
-    intro: 'Performance export vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays (hors France).',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
-  },
-  annexe: {
-    icon: '🗂️', label: 'Annexe', preset: 'all',
-    intro: 'Exploration : tableaux détaillés (marketplace, pays, device…).',
-    files: { required: ['oms'], optional: ['ga', 'y2'] },
-    layout: ['marketplace', 'pays', 'ttpays', 'device', 'channels', 'pagesrc', 'annulations'],
-  },
-  ga: {
-    icon: '🔎', label: 'GA dédié', preset: 'all',
-    intro: 'Analyse GA + objectifs : funnel, campagnes, landing×conv, pages disparues, cohérence campagne→landing.',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['gafunnel', 'channels', 'campaigns', 'campaignland', 'device', 'landing', 'pages', 'lostpages', 'pagesrc', 'itemfunnel'],
   },
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
@@ -218,17 +215,18 @@ function updateApiHint() {
 // Barre de modules
 function initModules() {
   const bar = document.getElementById('moduleBar');
-  const entries = Object.entries(MODULES).sort((a, b) => (a[0] === 'full' ? -1 : b[0] === 'full' ? 1 : 0));
+  const order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
   bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
-    + entries.map(([k, m]) => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${m.icon} ${m.label}</button>`).join('');
+    + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('');
   bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
     bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     CURRENT_MODULE = b.dataset.mod;
     const m = MODULES[CURRENT_MODULE];
     // La période est pilotée par le sélecteur de dates (indépendant de la vue).
-    // Dimension : vue qui l'impose (International → hors France), sinon retour au global.
-    CURRENT_DIM = m.dim || 'global';
+    // Prisme géo : la vue qui l'impose (International → hors France) prime ; sinon on
+    // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
+    CURRENT_DIM = m.dim || USER_DIM;
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
     renderModuleHint();
     loadReport();
@@ -264,7 +262,7 @@ function objRow(label, actual, fmt, key, targetRaw, targetEff) {
 }
 async function renderObjectives(rep) {
   const box = document.getElementById('objBox'); if (!box) return;
-  if (CURRENT_MODULE !== 'ga' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  if (CURRENT_MODULE !== 'acquisition' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
   box.classList.remove('hidden');
   const o = await fetchObjectives();
   const sess = rep.ga ? rep.ga.totalSessions : null;
@@ -344,6 +342,7 @@ async function loadReport() {
   renderObjectives(rep);
   renderDailyChart(rep);
   renderCharts(rep);
+  wireBilan();
 }
 
 function renderReport(rep) {
@@ -496,9 +495,10 @@ function renderReport(rep) {
   let returnsCard = '';
   if (rep.returns) {
     const rt = rep.returns.n, rt1 = rep.returns.n1 || {};
+    const tauxRetN1 = (rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) ? rep.returns.n1.caRetourne / rep.ca.n1.caEShop : null;
     const tiles = [
       ['CA retourné', fEur(rt.caRetourne), rt.caRetourne, rt1.caRetourne],
-      ['Taux de retour', fPct(rep.returns.tauxRetour), null, null],
+      ['Taux de retour', fPct(rep.returns.tauxRetour), rep.returns.tauxRetour, tauxRetN1],
       ['Pièces retournées', fInt(rt.qte), rt.qte, rt1.qte],
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
@@ -567,8 +567,11 @@ function renderReport(rep) {
       <div class="note">${empty ? '⚠ Checkout/achats GA absents → relance « Rafraîchir GA4 » pour le funnel détaillé. ' : ''}« Passage » = conversion depuis l’étape précédente. Écart Achats GA vs Commandes OMS = périmètre de tracking.</div></div>`;
   }
   // TT par pays
-  const ttRows = (rep.ttPays || []).map(p => `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${fEur(p.ca)}</td></tr>`).join('');
-  const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT</th><th>CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources.</div></div>` : '';
+  const ttRows = (rep.ttPays || []).map(p => {
+    const dTT = pc(p.tt, p.ttN1);
+    return `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${p.ttN1 != null ? fPct(p.ttN1) : '—'}</td><td class="${dTT != null && dTT < 0 ? 'dn' : (dTT > 0 ? 'up' : '')}">${dTT != null ? sgn(dTT) : '—'}</td><td>${fEur(p.ca)}</td><td>${p.caN1 != null ? delta(p.ca, p.caN1) : '<span class="na">—</span>'}</td></tr>`;
+  }).join('');
+  const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays — N vs N-1</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT N</th><th>TT N-1</th><th>Δ TT</th><th>CA</th><th>Δ CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources. Δ TT en rouge = le marché convertit moins bien que l'an dernier.</div></div>` : '';
   // Pages d'atterrissage × conversion (N vs N-1)
   const landRows = (rep.landingPages || []).map(p => {
     const dc = pc(p.convRate, p.convRateN1);
@@ -706,11 +709,107 @@ function renderReport(rep) {
   };
   const sections = sectionize(layout);
   const showBanners = sections.length >= 2;
-  return sections.map(s => {
+  const body = sections.map(s => {
     const cards = s.blocks.map(card).filter(Boolean).join('\n');
     if (!cards) return '';
     return (showBanners ? `<div class="section-head">${s.label}</div>` : '') + cards;
   }).join('\n');
+  return buildBilan(rep) + body; // Bilan épinglé en tête (scorecard N/N-1 + signaux auto + synthèse IA)
+}
+
+// ── Bilan en tête : scorecard N vs N-1 + signaux automatiques (règles) ──────────
+let RECO_OK = false; // moteur de reco IA configuré côté serveur ?
+function bilanTile(label, disp, n, n1, invert) {
+  const p = pc(n, n1);
+  const good = p == null ? null : ((invert ? -p : p) >= 0);
+  const cls = p == null ? 'na' : (good ? 'up' : 'dn');
+  const arrow = p == null ? '' : (p >= 0 ? '▲ ' : '▼ ');
+  return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>
+    <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1'}</div></div>`;
+}
+// Détecte 3-4 signaux forts à partir du rapport (sans IA, 100% client)
+function bilanSignals(rep) {
+  const out = [];
+  if (rep.famille && rep.famille.length) {
+    const up = rep.famille.filter(f => f.n1 > 0 && f.n > 500).map(f => ({ fam: f.fam, p: pc(f.n, f.n1), ca: f.n })).filter(x => x.p != null).sort((a, b) => b.p - a.p)[0];
+    if (up && up.p > 8) out.push({ tone: 'up', icon: '📈', txt: `Famille en plus forte progression : <b>${esc(up.fam)}</b> (${sgn(up.p)} vs N-1, ${fEur(up.ca)}).` });
+    const dn = rep.famille.filter(f => f.n1 > 1000).map(f => ({ fam: f.fam, p: pc(f.n, f.n1) })).filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
+    if (dn && dn.p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Famille en repli : <b>${esc(dn.fam)}</b> (${sgn(dn.p)} vs N-1) → à relancer.` });
+  }
+  const m = rep.produits && rep.produits.manquants;
+  if (m && m.length) { const tot = m.reduce((s, x) => s + x.perte, 0); out.push({ tone: 'dn', icon: '🎯', txt: `${m.length} produits forts en N-1 en retrait (<b>${fEur(tot)}</b> de CA à reconquérir), à commencer par <b>${esc(m[0].produit)}</b>.` }); }
+  if (rep.channels && rep.channels.n && rep.channels.n1) {
+    const m1 = {}; rep.channels.n1.forEach(x => { m1[x.canal] = x; });
+    const drop = rep.channels.n.map(c => { const p = m1[c.canal]; return (p && p.revenue > 1000) ? { canal: c.canal, p: pc(c.revenue, p.revenue) } : null; }).filter(x => x && x.p != null).sort((a, b) => a.p - b.p)[0];
+    if (drop && drop.p < -10) out.push({ tone: 'dn', icon: '🔻', txt: `Canal d'acquisition en décrochage : <b>${esc(drop.canal)}</b> (revenu ${sgn(drop.p)} vs N-1).` });
+  }
+  if (rep.returns && rep.returns.tauxRetour != null && rep.returns.tauxRetour > 0.25) out.push({ tone: 'dn', icon: '⚠️', txt: `Taux de retour élevé : <b>${fPct(rep.returns.tauxRetour)}</b> du CA EShop → fiches produit / guide des tailles.` });
+  const cx = rep.cancellations && rep.cancellations.n;
+  if (cx && cx.tauxPieces != null && cx.tauxPieces > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `<b>${fPct(cx.tauxPieces)}</b> de pièces non expédiées (${fInt(cx.qteAnnulee)}) → fiabiliser stock/préparation.` });
+  return out;
+}
+function buildBilan(rep) {
+  const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
+  const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
+  const tauxRet = rep.returns ? rep.returns.tauxRetour : null;
+  let tauxRetN1 = null;
+  if (rep.returns && rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) tauxRetN1 = rep.returns.n1.caRetourne / rep.ca.n1.caEShop;
+  const tiles = [
+    bilanTile('CA EShop', fEur(k.ca), k.ca, k1 && k1.ca),
+    bilanTile('Commandes', fInt(k.commandes), k.commandes, k1 && k1.commandes),
+    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1 && k1.pm),
+    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1 && k1.tt),
+  ];
+  if (tauxRet != null) tiles.push(bilanTile('Taux de retour', fPct(tauxRet), tauxRet, tauxRetN1, true));
+  const sigs = bilanSignals(rep);
+  const sigHtml = sigs.length
+    ? `<div class="bilan-sigs">${sigs.slice(0, 4).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
+    : (rep.meta.hasN1 ? '' : '<div class="note">Renseigne une période N-1 pour activer les signaux comparés.</div>');
+  const copyBtn = `<button class="btn" id="bilanCopy">📋 Copier le contexte pour Claude.ai</button>`;
+  const iaBtn = RECO_OK ? `<button class="btn blue" id="bilanIA">🧠 Synthèse IA</button>` : '';
+  const iaNote = RECO_OK
+    ? 'Colle le contexte dans Claude.ai (abonnement, 0 €) ou génère la synthèse via l\'API.'
+    : 'Colle le contexte dans Claude.ai (couvert par ton abonnement Pro/Max) — 0 € d\'API.';
+  const ia = `<div class="toolbar" style="margin-top:12px">${copyBtn}${iaBtn}<span class="note" style="margin:0">${iaNote}</span></div><div id="bilanIASynth"></div>`;
+  return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
+    <div class="kgrid">${tiles.join('')}</div>
+    ${sigHtml}${ia}</div>`;
+}
+// Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
+function wireBilan() {
+  const out = () => document.getElementById('bilanIASynth');
+  // Copier le contexte pour Claude.ai — 0 € d'API (repli textarea si presse-papier bloqué)
+  const cp = document.getElementById('bilanCopy');
+  if (cp) cp.addEventListener('click', async () => {
+    const o = out(); cp.disabled = true;
+    o.innerHTML = '<div class="note" style="margin-top:8px">Préparation du contexte…</div>';
+    try {
+      const r = await fetch('/api/reco/context?' + reportQuery());
+      const j = await r.json();
+      if (!r.ok) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+      const link = '<a href="https://claude.ai/new" target="_blank" rel="noopener">Claude.ai</a>';
+      let copied = false;
+      try { await navigator.clipboard.writeText(j.prompt); copied = true; } catch (e) { /* presse-papier indisponible (http, permissions) */ }
+      o.innerHTML = copied
+        ? `<div class="insight" style="margin-top:10px">✓ Contexte copié (${fInt(j.chars)} caractères). Colle-le dans ${link} (couvert par ton abonnement) — 0 € d'API.</div>`
+        : `<div class="note" style="margin-top:8px">Copie automatique indisponible — sélectionne tout le texte ci-dessous (Ctrl/Cmd+A puis C) et colle-le dans ${link} :</div><textarea readonly onclick="this.select()" style="width:100%;height:160px;margin-top:6px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:8px;padding:8px;font-size:11px;font-family:monospace">${esc(j.prompt)}</textarea>`;
+    } catch (e) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
+    finally { cp.disabled = false; }
+  });
+  // Synthèse IA (API payante) — réutilise /api/reco, n'affiche que la synthèse.
+  const b = document.getElementById('bilanIA');
+  if (b) b.addEventListener('click', async () => {
+    const o = out(); b.disabled = true;
+    o.innerHTML = '<div class="note" style="margin-top:8px">Génération en cours (10–30 s)…</div>';
+    try {
+      const r = await fetch('/api/reco?' + reportQuery());
+      const j = await r.json();
+      if (!r.ok) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+      const syn = j.reco && j.reco.synthese;
+      o.innerHTML = syn ? `<div class="insight" style="margin-top:10px">💡 <b>Synthèse IA.</b> ${esc(syn)}</div>` : '<div class="note" style="margin-top:8px">Réponse vide.</div>';
+    } catch (e) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
+    finally { b.disabled = false; }
+  });
 }
 
 // ── Analyse / recommandation auto par tableau ───────────────────────────────
@@ -781,16 +880,27 @@ function ana(key, rep) {
       return '';
     }
     if (key === 'ca') {
-      const c = rep.ca.n; const omni = (c.caEnt + c.caSFS) || 1; const esh = (c.caFR + c.caInt) || 1;
-      return `Entrepôt ${fPct(c.caEnt / omni)} vs SFS ${fPct(c.caSFS / omni)} ; France ${fPct(c.caFR / esh)} du CA EShop.`;
+      const c = rep.ca.n, c1 = rep.ca.n1 || {}; const omni = (c.caEnt + c.caSFS) || 1; const esh = (c.caFR + c.caInt) || 1;
+      const pG = pc(c.caGlob, c1.caGlob), pInt = pc(c.caInt, c1.caInt);
+      let s = pG != null ? `CA Global ${sgn(pG)} vs N-1. ` : '';
+      s += `Entrepôt ${fPct(c.caEnt / omni)} vs SFS ${fPct(c.caSFS / omni)} ; France ${fPct(c.caFR / esh)} du CA EShop.`;
+      if (pInt != null) s += ` International ${sgn(pInt)} vs N-1${pG != null && pInt > pG ? ' (croît plus vite que le global → levier export)' : ''}.`;
+      return s;
     }
     if (key === 'pays') {
       const p = rep.pays; if (!p || !p.length) return '';
       const tot = p.reduce((s, x) => s + x.n.ca, 0) || 1;
       const exp = p.filter(x => !/france/i.test(x.pays)).slice(0, 3).map(x => x.pays).join(', ');
-      return `${p[0].pays} = ${fPct(p[0].n.ca / tot)} du CA.` + (exp ? ` Top export : ${exp}.` : '');
+      let s = `${p[0].pays} = ${fPct(p[0].n.ca / tot)} du CA.` + (exp ? ` Top export : ${exp}.` : '');
+      const grow = p.filter(x => x.n1 && x.n1.ca > 2000).map(x => ({ pays: x.pays, d: pc(x.n.ca, x.n1.ca) })).filter(x => x.d != null).sort((a, b) => b.d - a.d)[0];
+      if (grow && grow.d > 10) s += ` ${grow.pays} en plus forte progression (${sgn(grow.d)} vs N-1).`;
+      return s;
     }
-    if (key === 'saison') { const s = rep.saison; return (s && s.length) ? `Collection ${s[0].saison} en tête (${fEur(s[0].n)}).` : ''; }
+    if (key === 'saison') {
+      const s = rep.saison; if (!s || !s.length) return '';
+      const top = s[0]; const d = pc(top.n, top.n1);
+      return `Collection ${top.saison} en tête (${fEur(top.n)}${d != null ? ', ' + sgn(d) + ' vs N-1' : ''}).`;
+    }
     if (key === 'produits') {
       const m = rep.produits && rep.produits.manquants; if (!rep.produits) return '';
       if (!m || !m.length) return 'Aucun produit majeur en retrait vs N-1.';
@@ -847,8 +957,10 @@ function ana(key, rep) {
       return s;
     }
     if (key === 'marketplace') {
-      const mk = rep.marketplace.n; const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);
-      return `Marketplace ${fEur(mk.total)} ; 1er canal : ${arr[0][0]} (${fEur(arr[0][1])}).`;
+      const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
+      const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);
+      const d = pc(mk.total, mk1.total);
+      return `Marketplace ${fEur(mk.total)}${d != null ? ' (' + sgn(d) + ' vs N-1)' : ''} ; 1er canal : ${arr[0][0]} (${fEur(arr[0][1])}).`;
     }
     return '';
   } catch (e) { return ''; }
@@ -1028,7 +1140,7 @@ async function recoStatus() {
   try {
     const r = await fetch('/api/reco/status');
     if (!r.ok) return;
-    if ((await r.json()).configured) document.getElementById('recoCard').classList.remove('hidden');
+    if ((await r.json()).configured) { RECO_OK = true; document.getElementById('recoCard').classList.remove('hidden'); }
   } catch (e) { /* ignore */ }
 }
 function renderReco(d) {
@@ -1064,28 +1176,44 @@ async function wshopStatus() {
     if (s.configured) document.getElementById('wshopbox').classList.remove('hidden');
   } catch (e) { /* ignore */ }
 }
-document.getElementById('wshoprefresh').addEventListener('click', async () => {
-  const note = document.getElementById('wshopnote');
-  const btn = document.getElementById('wshoprefresh');
-  btn.disabled = true; note.textContent = 'Lancement de l\'import WSHOP…';
-  try {
-    const q = new URLSearchParams(currentPeriod()).toString();
-    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
-  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btn.disabled = false; return; }
-  // Suivi en tâche de fond (pas de requête longue → pas de 502)
+// Suivi partagé de la tâche de fond WSHOP (import complet ou synchro delta) → pas de requête longue → pas de 502.
+function pollWshopJob(btns, note, onSuccess, running) {
   const poll = async () => {
     try {
       const j = await (await fetch('/api/wshop/job')).json();
-      if (j.running) { note.textContent = `Import WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd N${j.ordersN1 ? ` · ${fInt(j.ordersN1)} N-1` : ''}…`; return setTimeout(poll, 2000); }
-      btn.disabled = false;
+      if (j.running) { note.textContent = running(j); return setTimeout(poll, 2000); }
+      btns.forEach(b => { b.disabled = false; });
       if (j.error) { note.textContent = '⚠ ' + j.error; return; }
-      const res = j.result || {};
-      note.textContent = `✓ OMS WSHOP : ${fInt(res.rows)} lignes N (${res.from} → ${res.to})${res.n1 ? ` · ${fInt(res.n1.rows)} lignes N-1` : ''}`;
+      note.textContent = onSuccess(j.result || {});
       applyCurrentPeriod(); await loadStatus(); loadReport();
-    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btn.disabled = false; }
+    } catch (e) { note.textContent = '⚠ Suivi interrompu : ' + (e.message || ''); btns.forEach(b => { b.disabled = false; }); }
   };
   setTimeout(poll, 1500);
+}
+document.getElementById('wshoprefresh').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync')];
+  btns.forEach(b => { b.disabled = true; }); note.textContent = 'Lancement de l\'import WSHOP…';
+  try {
+    const q = new URLSearchParams(currentPeriod()).toString();
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  pollWshopJob(btns, note,
+    res => `✓ OMS WSHOP : ${fInt(res.rows)} lignes N (${res.from} → ${res.to})${res.n1 ? ` · ${fInt(res.n1.rows)} lignes N-1` : ''}`,
+    j => `Import WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd N${j.ordersN1 ? ` · ${fInt(j.ordersN1)} N-1` : ''}…`);
+});
+document.getElementById('wshopsync').addEventListener('click', async () => {
+  const note = document.getElementById('wshopnote');
+  const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync')];
+  btns.forEach(b => { b.disabled = true; }); note.textContent = 'Synchronisation du delta…';
+  try {
+    const r = await fetch('/api/wshop/sync', { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  pollWshopJob(btns, note,
+    res => `✓ Delta synchronisé : ${fInt(res.updated)} commande(s) mise(s) à jour → ${fInt(res.rows)} lignes N (${res.from} → ${res.to})`,
+    j => `Synchro WSHOP : ${j.phase} — ${fInt(j.ordersN)} cmd…`);
 });
 document.getElementById('wshopping').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
@@ -1094,7 +1222,15 @@ document.getElementById('wshopping').addEventListener('click', async () => {
     const r = await fetch('/api/wshop/ping');
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
-    note.innerHTML = `base <b>${esc(j.base || '?')}</b> · auth <b>${esc(j.auth || '?')}</b>${j.authMs != null ? ' (' + j.authMs + 'ms)' : ''} · commandes <b>${esc(j.orders || '—')}</b>${j.ordersMs != null ? ' (' + j.ordersMs + 'ms)' : ''}${j.sampleKeys ? ' · champs: ' + esc(Array.isArray(j.sampleKeys) ? j.sampleKeys.join(', ') : j.sampleKeys) : ''}`;
+    let html = `base <b>${esc(j.base || '?')}</b> · auth <b>${esc(j.auth || '?')}</b>${j.authMs != null ? ' (' + j.authMs + 'ms)' : ''} · commandes <b>${esc(j.orders || '—')}</b>${j.ordersMs != null ? ' (' + j.ordersMs + 'ms)' : ''}${j.sampleKeys ? ' · champs: ' + esc(Array.isArray(j.sampleKeys) ? j.sampleKeys.join(', ') : j.sampleKeys) : ''}`;
+    if (j.itemPriceFields || j.orderPriceFields) {
+      html += `<div style="margin-top:8px"><b>Diagnostic règle CA</b> (champs montant, anonymes) :</div>`
+        + `<pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:4px;overflow-x:auto">`
+        + `orderItems[0] champs : ${esc(Array.isArray(j.itemKeys) ? j.itemKeys.join(', ') : (j.itemKeys || '—'))}\n\n`
+        + `Montants ligne (item) : ${esc(JSON.stringify(j.itemPriceFields || {}, null, 2))}\n\n`
+        + `Montants commande : ${esc(JSON.stringify(j.orderPriceFields || {}, null, 2))}</pre>`;
+    }
+    note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
@@ -1144,7 +1280,7 @@ document.getElementById('datesAll').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; loadReport();
+  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; USER_DIM = b.dataset.dim; loadReport();
 }));
 document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-scope]').forEach(x => x.classList.remove('on'));

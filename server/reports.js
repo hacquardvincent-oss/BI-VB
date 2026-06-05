@@ -141,8 +141,13 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   };
   const gaFunnel = gaCalcN ? { n: mkFunnel(gaCalcN, kpiEShopN), n1: (gaCalcN1 && kpiEShopN1) ? mkFunnel(gaCalcN1, kpiEShopN1) : null } : null;
 
-  // TT par pays (commandes OMS × sessions GA)
+  // TT par pays (commandes OMS × sessions GA) — enrichi du N-1 (TT/CA) par pays
   const ttPays = calc.ttByCountry(paysNarr, gaNf, 10);
+  if (ttPays && paysN1arr) {
+    const tt1 = calc.ttByCountry(paysN1arr, gaN1f, 50) || [];
+    const m1 = {}; tt1.forEach(x => { m1[x.pays] = x; });
+    ttPays.forEach(p => { const q = m1[p.pays]; if (q) { p.ttN1 = q.tt; p.caN1 = q.ca; p.commandesN1 = q.commandes; p.sessionsN1 = q.sessions; } });
+  }
 
   // Filtre géographique des données GA selon la dimension (pays présent depuis P5 ;
   // repli « pass-through » si données anciennes sans colonne pays → comportement global).

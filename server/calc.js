@@ -225,7 +225,9 @@ function calcOMS(rows, map) {
     const mag = (r[mi] || '').trim().toLowerCase();
     const type = (r[ti] || '').trim();
     total += p;
-    if (!isExcl(type)) caGlob += p;
+    // CA Global = périmètre EShop (FR + International), hors TOUS les marketplaces
+    // (gl.com, printemps, la redoute, 24s). Auparavant n'excluait que gl.com + printemps.
+    if (!isMkt(type)) caGlob += p;
     if (isMkt(type)) { caMkt += p; }
     else {
       if (pays === 'france') caFR += p; else caInt += p;

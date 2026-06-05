@@ -206,13 +206,16 @@ function buildReturnsDataset(orders, from, to) {
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
 const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe'];
-const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses'];
+// 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
+const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
+const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"
 function orderRetRowObjs(o) {
   const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
+  const num = o.orderId || o.mainOrderId || '';
   return (o.orderRefund || []).map(rf => {
     const m = String(rf.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
     const raison = rf.refundType === 'manual' ? 'Remboursement manuel' : (rf.refundType === 'return' ? 'Retour client' : (rf.refundType || ''));
-    return { 'Date creation': m ? `${m[3]}/${m[2]}/${m[1]}` : '', 'Montant rembourse': Number(rf.amount) || 0, 'Numero de retour': rf.returnId || '', 'Raison': raison, 'Pays livraison': pays, 'Nb colisages rembourses': 1 };
+    return { 'Date creation': m ? `${m[3]}/${m[2]}/${m[1]}` : '', 'Montant rembourse': Number(rf.amount) || 0, 'Numero de retour': rf.returnId || '', 'Raison': raison, 'Pays livraison': pays, 'Nb colisages rembourses': 1, 'Numeros': num };
   });
 }
 function datasetFromRows(hdrs, rows, source, from, to) {
@@ -222,15 +225,26 @@ function datasetFromRows(hdrs, rows, source, from, to) {
   return { hdrs, rows, map, filename: `WSHOP ${source} (${from} → ${to})`, row_count: rows.length, date_min: min, date_max: max, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
 // Récupère une plage par pages, convertit chaque page en lignes légères et JETTE la page brute.
-async function collectRange(fromISO, toISO, onCount) {
-  const oms = [], ret = []; let page = 1, n = 0;
+// extra : filtres additionnels (begin/end = date de modification, pour le delta).
+// guard : ne garde que les commandes dont la date de CRÉATION est dans [from,to] (sécurité delta).
+async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) {
+  const oms = [], ret = [], ids = new Set(); let page = 1, n = 0;
   const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
   const MAX_PAGES = 2000;
+  const inPeriod = o => {
+    if (!guard) return true;
+    const m = String(o.orderDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return true;
+    const d = `${m[1]}-${m[2]}-${m[3]}`;
+    return d >= fromISO && d <= toISO;
+  };
   while (page <= MAX_PAGES) {
-    const resp = await apiPost('/api/v1/orders/get', { created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit });
+    const resp = await apiPost('/api/v1/orders/get', Object.assign({ created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit }, extra));
     const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     for (const o of batch) {
+      if (!inPeriod(o)) continue;
       n++;
+      const oid = o.orderId || o.mainOrderId || ''; if (oid) ids.add(oid);
       for (const ro of orderToRows(o)) oms.push(OMS_HDRS.map(h => (ro[h] == null ? '' : String(ro[h]))));
       for (const rr of orderRetRowObjs(o)) ret.push(RET_HDRS.map(h => (rr[h] == null ? '' : String(rr[h]))));
     }
@@ -238,7 +252,7 @@ async function collectRange(fromISO, toISO, onCount) {
     if (batch.length < limit) break;
     page += 1;
   }
-  return { oms, ret, count: n };
+  return { oms, ret, count: n, ids };
 }
 
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
@@ -259,6 +273,8 @@ async function refresh(opts = {}, cb = {}) {
   if (cb.phase) cb.phase('Construction des jeux de données…');
   const dsN = datasetFromRows(OMS_HDRS, N.oms, 'oms', from, to);
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
+  // Point de reprise pour la synchro incrémentale : la fenêtre importée + l'instant de l'import.
+  dsN.sync = { from, to, since: nowDT() };
   store.setDataset('oms', 'N', dsN);
   store.setDataset('ret', 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
   let n1 = null;
@@ -268,6 +284,35 @@ async function refresh(opts = {}, cb = {}) {
     store.setDataset('ret', 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', opts.cfrom, opts.cto));
   }
   return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
+}
+
+// Fusionne un delta dans un dataset existant : retire les lignes des commandes ré-importées
+// (clé = colonne 'Numeros'), ajoute les lignes fraîches, reconstruit le dataset.
+function mergeDelta(base, source, deltaRows, ids, from, to) {
+  const idx = base.hdrs.indexOf('Numeros');
+  const kept = idx >= 0 ? base.rows.filter(r => !ids.has(r[idx])) : base.rows.slice();
+  return datasetFromRows(base.hdrs, kept.concat(deltaRows), source, from, to);
+}
+
+// Synchro incrémentale : ne récupère que les commandes créées/modifiées depuis le dernier import
+// (begin/end = date de modification), puis fusionne dans les jeux N existants. Analyse 1 an
+// maintenue à jour en quelques secondes plutôt qu'en un import complet.
+async function syncIncremental(cb = {}) {
+  if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
+  const baseOms = store.getDataset('oms', 'N');
+  if (!baseOms || !baseOms.sync) throw new Error('Aucun import initial à synchroniser : lancez d\'abord « Importer OMS depuis WSHOP ».');
+  const { from, to, since } = baseOms.sync;
+  const baseRet = store.getDataset('ret', 'N') || datasetFromRows(RET_HDRS, [], 'ret', from, to);
+  const end = nowDT();
+  if (cb.phase) cb.phase(`Delta depuis ${since}…`);
+  // begin/end filtrent sur la date de MODIFICATION ; guard=true conserve la fenêtre d'analyse [from,to].
+  const delta = await collectRange(from, to, n => cb.count && cb.count('N', n), { begin: since, end }, true);
+  if (cb.phase) cb.phase('Fusion des jeux de données…');
+  const dsN = mergeDelta(baseOms, 'oms', delta.oms, delta.ids, from, to);
+  dsN.sync = { from, to, since: end };
+  store.setDataset('oms', 'N', dsN);
+  store.setDataset('ret', 'N', mergeDelta(baseRet, 'ret', delta.ret, delta.ids, from, to));
+  return { updated: delta.ids.size, deltaOrders: delta.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, returns: dsN.row_count };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -289,18 +334,30 @@ router.get('/ping', requireAuth, async (req, res) => {
     const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
     out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
+    // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
+    // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
+    const o0 = arr[0];
+    if (o0) {
+      const items = Array.isArray(o0.orderItems) ? o0.orderItems : [];
+      const PR = /(price|amount|total|discount|tax|montant|remise|prix|unit|qty|quantit|paid|net)/i;
+      const pick = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { const v = obj[k]; if (PR.test(k) && (typeof v === 'number' || typeof v === 'string')) r[k] = v; }); return r; };
+      out.itemKeys = items[0] ? Object.keys(items[0]) : '(aucun orderItem)';
+      out.orderPriceFields = pick(o0);
+      out.itemPriceFields = items[0] ? pick(items[0]) : {};
+      out.itemCount = items.length;
+    }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
   res.json(out);
 });
 
-// Import en TÂCHE DE FOND (évite le timeout 502 du proxy sur les grandes fenêtres).
+// Tâche de fond générique (évite le timeout 502 du proxy sur les grandes fenêtres).
 // La requête de lancement répond tout de suite ; le client suit via GET /job.
-let JOB = { running: false, phase: '', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: 0 };
-const jobSnapshot = () => ({ running: JOB.running, phase: JOB.phase, ordersN: JOB.ordersN, ordersN1: JOB.ordersN1, done: JOB.done, error: JOB.error, result: JOB.result });
-function startRefresh(opts) {
+let JOB = { running: false, label: '', phase: '', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: 0 };
+const jobSnapshot = () => ({ running: JOB.running, label: JOB.label, phase: JOB.phase, ordersN: JOB.ordersN, ordersN1: JOB.ordersN1, done: JOB.done, error: JOB.error, result: JOB.result });
+function runJob(label, worker) {
   if (JOB.running) return jobSnapshot();
-  JOB = { running: true, phase: 'Authentification…', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: Date.now() };
-  refresh(opts, { phase: t => { JOB.phase = t; }, count: (w, n) => { if (w === 'N') JOB.ordersN = n; else JOB.ordersN1 = n; } })
+  JOB = { running: true, label, phase: 'Authentification…', ordersN: 0, ordersN1: 0, done: false, error: null, result: null, startedAt: Date.now() };
+  Promise.resolve(worker({ phase: t => { JOB.phase = t; }, count: (w, n) => { if (w === 'N') JOB.ordersN = n; else JOB.ordersN1 = n; } }))
     .then(r => { JOB.result = r; JOB.phase = 'Terminé'; })
     .catch(e => { JOB.error = e.message; JOB.phase = 'Erreur'; })
     .finally(() => { JOB.running = false; JOB.done = true; });
@@ -309,8 +366,14 @@ function startRefresh(opts) {
 
 router.post('/refresh', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
-  res.status(202).json({ started: true, ...startRefresh(req.query) });
+  res.status(202).json({ started: true, ...runJob('refresh', cb => refresh(req.query, cb)) });
+});
+router.post('/sync', requireAuth, (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
+  const base = store.getDataset('oms', 'N');
+  if (!base || !base.sync) return res.status(400).json({ error: 'Aucun import initial à synchroniser : lancez d\'abord « Importer OMS depuis WSHOP ».' });
+  res.status(202).json({ started: true, ...runJob('sync', cb => syncIncremental(cb)) });
 });
 router.get('/job', requireAuth, (req, res) => res.json(jobSnapshot()));
 
-module.exports = { router, isConfigured, refresh, orderToRows, buildOmsDataset, frDateTime, countryName };
+module.exports = { router, isConfigured, refresh, syncIncremental, orderToRows, buildOmsDataset, frDateTime, countryName };

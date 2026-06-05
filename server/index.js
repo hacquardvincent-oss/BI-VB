@@ -48,7 +48,15 @@ app.use('/api/wshop', wshop.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 
-app.use(express.static(path.join(__dirname, '..', 'web')));
+// Statique : on force la revalidation du HTML/JS/CSS (Cache-Control: no-cache) pour que
+// chaque déploiement soit pris en compte immédiatement, sans vidage de cache manuel.
+// (no-cache = revalidation via ETag → réponse 304 rapide si le fichier n'a pas changé.)
+app.use(express.static(path.join(__dirname, '..', 'web'), {
+  etag: true,
+  setHeaders(res, p) {
+    if (/\.(html|js|css)$/i.test(p)) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 app.get('/', (req, res) => res.redirect('/app.html'));
 
 if (!process.env.ADMIN_PASSWORD) {

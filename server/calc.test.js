@@ -20,7 +20,7 @@ assert.strictEqual(map.pv_remise, 9, 'colonne Prix Vente Remisé mal détectée'
 
 const k = calc.calcOMS(rows, map);
 assert.strictEqual(k.total, 300, 'total');
-assert.strictEqual(k.caGlob, 220, 'CA Global (exclut GL.com + Printemps)');
+assert.strictEqual(k.caGlob, 180, 'CA Global = EShop seul (hors TOUS marketplaces : GL.com, Printemps, La Redoute, 24S)');
 assert.strictEqual(k.caMkt, 120, 'CA Marketplace OMS');
 assert.strictEqual(k.caFR, 100, 'CA France');
 assert.strictEqual(k.caInt, 80, 'CA International');
