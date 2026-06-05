@@ -315,6 +315,68 @@ async function syncIncremental(cb = {}) {
   return { updated: delta.ids.size, deltaOrders: delta.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, returns: dsN.row_count };
 }
 
+// ── Audit « règle CA » ─────────────────────────────────────────────────────────
+// Rejoue les commandes d'une période et calcule plusieurs totaux candidats pour
+// « Prix de vente payé », afin d'identifier la combinaison (TTC/HT × commandé/livré/
+// payé) qui correspond au CA de référence. Anonyme : prix & quantités uniquement.
+function newCAAudit() {
+  const num = x => Number(x) || 0;
+  const s = {
+    ttcOrd: 0, ttcShip: 0, ttcPaid: 0, htOrd: 0, htShip: 0, htPaid: 0,
+    orderTotal: 0, refunds: 0, orders: 0, lines: 0, linesPartial: 0, linesOffered: 0,
+  };
+  return {
+    add(o) {
+      s.orders++;
+      s.orderTotal += num(o.orderTotal);
+      (o.orderRefund || []).forEach(rf => { s.refunds += num(rf.amount); });
+      const items = Array.isArray(o.orderItems) ? o.orderItems : [];
+      for (const it of items) {
+        s.lines++;
+        const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
+        const qShip = parseInt(it.quantityShipped != null ? it.quantityShipped : qOrd) || 0;
+        const qOff = parseInt(it.quantityOffered != null ? it.quantityOffered : 0) || 0;
+        const qPaid = Math.max(0, qShip - qOff);
+        if (qShip < qOrd) s.linesPartial++;
+        if (qOff > 0) s.linesOffered++;
+        // TTC payé : unitPrice (déjà net de remise) ; replis remise/original.
+        const ttc = num(it.unitPrice) || num(it.originalDiscountedUnitPrice) || num(it.originalUnitPrice);
+        // HT dérivé du payé via le taux de TVA de la ligne (respecte les remises) ; repli champ net.
+        const vr0 = num(it.vatRate); const vr = vr0 > 1 ? vr0 / 100 : vr0;
+        const ht = vr > 0 ? ttc / (1 + vr)
+          : (num(it.originalDiscountedUnitPriceNet) || num(it.originalUnitPriceNet) || ttc);
+        s.ttcOrd += ttc * qOrd; s.ttcShip += ttc * qShip; s.ttcPaid += ttc * qPaid;
+        s.htOrd += ht * qOrd; s.htShip += ht * qShip; s.htPaid += ht * qPaid;
+      }
+    },
+    result() {
+      const r2 = x => Math.round(x * 100) / 100;
+      return {
+        ttcOrd: r2(s.ttcOrd), ttcShip: r2(s.ttcShip), ttcPaid: r2(s.ttcPaid),
+        htOrd: r2(s.htOrd), htShip: r2(s.htShip), htPaid: r2(s.htPaid),
+        orderTotal: r2(s.orderTotal), refunds: r2(s.refunds),
+        ttcPaidNetRefunds: r2(s.ttcPaid - s.refunds),
+        orders: s.orders, lines: s.lines, linesPartial: s.linesPartial, linesOffered: s.linesOffered,
+      };
+    },
+  };
+}
+// Pagine la période et accumule l'audit (jette les pages brutes — mémoire maîtrisée).
+async function auditCARange(fromISO, toISO, onCount) {
+  const audit = newCAAudit();
+  const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
+  const MAX_PAGES = 2000; let page = 1, n = 0;
+  while (page <= MAX_PAGES) {
+    const resp = await apiPost('/api/v1/orders/get', { created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit });
+    const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+    for (const o of batch) { n++; audit.add(o); }
+    if (onCount) onCount(n);
+    if (batch.length < limit) break;
+    page += 1;
+  }
+  return { period: { from: fromISO, to: toISO }, count: n, audit: audit.result() };
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfigured() }));
 
@@ -373,6 +435,14 @@ router.post('/sync', requireAuth, (req, res) => {
   const base = store.getDataset('oms', 'N');
   if (!base || !base.sync) return res.status(400).json({ error: 'Aucun import initial à synchroniser : lancez d\'abord « Importer OMS depuis WSHOP ».' });
   res.status(202).json({ started: true, ...runJob('sync', cb => syncIncremental(cb)) });
+});
+// Audit « règle CA » : rejoue N-1 (cfrom/cto) — sinon N (from/to) — et renvoie les totaux candidats.
+router.post('/ca-audit', requireAuth, (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
+  const q = req.query || {};
+  const from = q.cfrom || q.from, to = q.cto || q.to;
+  if (!from || !to) return res.status(400).json({ error: 'Période manquante : renseignez N-1 (ou N) dans le sélecteur de dates.' });
+  res.status(202).json({ started: true, ...runJob('ca-audit', cb => auditCARange(from, to, n => cb.count && cb.count('N1', n))) });
 });
 router.get('/job', requireAuth, (req, res) => res.json(jobSnapshot()));
 
