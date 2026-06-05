@@ -345,8 +345,8 @@ function newCAAudit() {
   let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
   let pvpEShop = 0; // PVP hors marketplaces (par type de paiement)
   let dateMin = '', dateMax = '', splits = 0;
-  const byStatus = Object.create(null), byStore = Object.create(null), byPayment = Object.create(null);
-  const byOrigin = Object.create(null), byWebsite = Object.create(null), byType = Object.create(null);
+  const byStore = Object.create(null), byPayment = Object.create(null);
+  const byOrderStatus = Object.create(null), byStoreStatus = Object.create(null), byCustomerStatus = Object.create(null);
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
@@ -358,17 +358,16 @@ function newCAAudit() {
       if (dt) { if (!dateMin || dt < dateMin) dateMin = dt; if (!dateMax || dt > dateMax) dateMax = dt; }
       const oid = o.orderId || '', mid = o.mainOrderId || '';
       if (mid && oid && mid !== oid) splits++;
-      const status = o.orderStatus || o.orderStoreStatus || o.orderCustomerStatus || '';
       const store = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
       const pay = (o.payment_method && o.payment_method.label) || '';
       // PVP de la commande (= Σ lignes unitPrice × commandé) → réparti par type de paiement.
       const itemsArr = Array.isArray(o.orderItems) ? o.orderItems : [];
       const pvpOrder = itemsArr.reduce((s2, it) => s2 + pvpOf(it), 0);
-      // Dimensions « canal » candidates pour localiser le marketplace Printemps (PVP, pas orderTotal).
-      bump(byOrigin, o.orderOrigin || '', pvpOrder);
-      bump(byWebsite, (o.website && o.website.name) || '', pvpOrder);
-      bump(byType, o.orderType || '', pvpOrder);
-      bump(byStatus, status, oTot);
+      // Les 3 champs de statut détaillés (PVP) : pour repérer le statut « précoce » que l'OMS
+      // n'exporte pas (l'OMS ne contient que Expédiée/Retournée/Annulée…).
+      bump(byOrderStatus, o.orderStatus || '', pvpOrder);
+      bump(byStoreStatus, o.orderStoreStatus || '', pvpOrder);
+      bump(byCustomerStatus, o.orderCustomerStatus || '', pvpOrder);
       bump(byStore, store, oTot);
       bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Printemps, Global…)
       if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
@@ -408,9 +407,9 @@ function newCAAudit() {
         .sort((a, b) => b.total - a.total);
       return {
         candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered,
-        dateMin, dateMax, splits, byStatus: breakdown(byStatus), byStore: breakdown(byStore),
-        byPayment: breakdown(byPayment), byOrigin: breakdown(byOrigin),
-        byWebsite: breakdown(byWebsite), byType: breakdown(byType),
+        dateMin, dateMax, splits, byStore: breakdown(byStore), byPayment: breakdown(byPayment),
+        byOrderStatus: breakdown(byOrderStatus), byStoreStatus: breakdown(byStoreStatus),
+        byCustomerStatus: breakdown(byCustomerStatus),
       };
     },
   };
