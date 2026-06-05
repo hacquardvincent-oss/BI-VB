@@ -1298,7 +1298,9 @@ function renderCAAudit(res) {
     + cands.map(row).join('')
     + `</tbody></table>`
     + `<div style="margin-top:4px;color:var(--mut);font-size:11px">${fInt(a.linesPartial || 0)} ligne(s) partiellement livrées · ${fInt(a.linesOffered || 0)} avec articles offerts · ${fInt(a.splits || 0)} commande(s) scindées.</div>`
-    + brk('Par type de paiement (PVP)', a.byPayment) + brk('Par statut', a.byStatus) + brk('Par magasin / canal', a.byStore)
+    + brk('Par type de paiement (PVP)', a.byPayment) + brk('Par orderOrigin (PVP)', a.byOrigin)
+    + brk('Par website (PVP)', a.byWebsite) + brk('Par orderType (PVP)', a.byType)
+    + brk('Par statut', a.byStatus) + brk('Par magasin / canal', a.byStore)
     + `<div style="margin-top:4px;color:var(--mut);font-size:11px">Plage des commandes récupérées : <b>${esc(a.dateMin || '—')}</b> → <b>${esc(a.dateMax || '—')}</b>. Si le volume est trop faible vs ton CA réel, c'est un manque de commandes (journée incomplète, scope magasin, ou champ de date), pas un mauvais champ prix.</div>`;
   function brk(title, arr) {
     if (!arr || !arr.length) return '';
