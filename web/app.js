@@ -305,6 +305,21 @@ function currentPeriod() {
   const v = id => document.getElementById(id).value;
   return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
 }
+// Comparable retail N-1 = N − 364 jours (52 semaines pile) → même jour de semaine
+// (jeudi vs jeudi). Préféré au « même date l'an dernier » qui décale d'un jour.
+function comparable364(ymd) {
+  if (!ymd) return '';
+  const p = ymd.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1));
+  d.setUTCDate(d.getUTCDate() - 364);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+// Recalcule les champs N-1 à partir des champs N (déclenché quand l'utilisateur saisit N).
+function syncComparable() {
+  const nf = document.getElementById('dNfrom').value, nt = document.getElementById('dNto').value;
+  if (nf) document.getElementById('dCfrom').value = comparable364(nf);
+  if (nt) document.getElementById('dCto').value = comparable364(nt);
+}
 // Applique la période saisie au rapport (après un refresh API ciblé)
 function applyCurrentPeriod() {
   const p = currentPeriod();
@@ -1317,10 +1332,9 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
-// Raccourcis de période : remplissent N (et N-1 = même plage l'an dernier) puis appliquent
+// Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const shiftY = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
   const today = new Date(); let from = new Date(), to = new Date();
   const kind = b.dataset.range;
   if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
@@ -1329,9 +1343,14 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; }
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
-  document.getElementById('dCfrom').value = shiftY(nf); document.getElementById('dCto').value = shiftY(nt);
+  document.getElementById('dCfrom').value = comparable364(nf); document.getElementById('dCto').value = comparable364(nt);
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
   applyCurrentPeriod(); loadReport();
+}));
+// Saisie manuelle de N → N-1 se recale automatiquement sur le comparable −364 j (jour pour jour).
+['dNfrom', 'dNto'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+  syncComparable();
+  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
 }));
 document.getElementById('datesAll').addEventListener('click', () => {
   DATES = null;
@@ -1348,10 +1367,9 @@ document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click
   document.querySelectorAll('[data-scope]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); SCOPE = b.dataset.scope; loadReport();
 }));
-// Présélections de saison : remplissent la fenêtre longue N (et N-1 = même saison l'an dernier), éditable
+// Présélections de saison : remplissent la fenêtre longue N (et N-1 = comparable −364 j), éditable
 document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const shiftY = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
   const today = new Date(), Y = today.getFullYear(), m = today.getMonth() + 1;
   let from, to;
   if (b.dataset.season === 'ete') { // Été : 1er sept → 31 août
@@ -1361,7 +1379,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   }
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
-  document.getElementById('dCfrom').value = shiftY(nf); document.getElementById('dCto').value = shiftY(nt);
+  document.getElementById('dCfrom').value = comparable364(nf); document.getElementById('dCto').value = comparable364(nt);
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
   document.getElementById('datesAll').classList.remove('on');
   document.getElementById('metaNote').textContent = 'Fenêtre de saison pré-remplie (ajuste les dates exactes si besoin) — clique « Appliquer » puis lance les imports API.';
