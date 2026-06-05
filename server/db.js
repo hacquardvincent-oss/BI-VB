@@ -50,6 +50,8 @@ async function init() {
     active     boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // RBAC par vue : liste des vues autorisées (NULL = toutes). Ajout idempotent.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_views jsonb`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }
