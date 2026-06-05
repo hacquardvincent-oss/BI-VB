@@ -497,9 +497,10 @@ function renderReport(rep) {
   let returnsCard = '';
   if (rep.returns) {
     const rt = rep.returns.n, rt1 = rep.returns.n1 || {};
+    const tauxRetN1 = (rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) ? rep.returns.n1.caRetourne / rep.ca.n1.caEShop : null;
     const tiles = [
       ['CA retourné', fEur(rt.caRetourne), rt.caRetourne, rt1.caRetourne],
-      ['Taux de retour', fPct(rep.returns.tauxRetour), null, null],
+      ['Taux de retour', fPct(rep.returns.tauxRetour), rep.returns.tauxRetour, tauxRetN1],
       ['Pièces retournées', fInt(rt.qte), rt.qte, rt1.qte],
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
@@ -568,8 +569,11 @@ function renderReport(rep) {
       <div class="note">${empty ? '⚠ Checkout/achats GA absents → relance « Rafraîchir GA4 » pour le funnel détaillé. ' : ''}« Passage » = conversion depuis l’étape précédente. Écart Achats GA vs Commandes OMS = périmètre de tracking.</div></div>`;
   }
   // TT par pays
-  const ttRows = (rep.ttPays || []).map(p => `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${fEur(p.ca)}</td></tr>`).join('');
-  const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT</th><th>CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources.</div></div>` : '';
+  const ttRows = (rep.ttPays || []).map(p => {
+    const dTT = pc(p.tt, p.ttN1);
+    return `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${p.ttN1 != null ? fPct(p.ttN1) : '—'}</td><td class="${dTT != null && dTT < 0 ? 'dn' : (dTT > 0 ? 'up' : '')}">${dTT != null ? sgn(dTT) : '—'}</td><td>${fEur(p.ca)}</td><td>${p.caN1 != null ? delta(p.ca, p.caN1) : '<span class="na">—</span>'}</td></tr>`;
+  }).join('');
+  const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays — N vs N-1</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT N</th><th>TT N-1</th><th>Δ TT</th><th>CA</th><th>Δ CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources. Δ TT en rouge = le marché convertit moins bien que l'an dernier.</div></div>` : '';
   // Pages d'atterrissage × conversion (N vs N-1)
   const landRows = (rep.landingPages || []).map(p => {
     const dc = pc(p.convRate, p.convRateN1);
@@ -853,16 +857,27 @@ function ana(key, rep) {
       return '';
     }
     if (key === 'ca') {
-      const c = rep.ca.n; const omni = (c.caEnt + c.caSFS) || 1; const esh = (c.caFR + c.caInt) || 1;
-      return `Entrepôt ${fPct(c.caEnt / omni)} vs SFS ${fPct(c.caSFS / omni)} ; France ${fPct(c.caFR / esh)} du CA EShop.`;
+      const c = rep.ca.n, c1 = rep.ca.n1 || {}; const omni = (c.caEnt + c.caSFS) || 1; const esh = (c.caFR + c.caInt) || 1;
+      const pG = pc(c.caGlob, c1.caGlob), pInt = pc(c.caInt, c1.caInt);
+      let s = pG != null ? `CA Global ${sgn(pG)} vs N-1. ` : '';
+      s += `Entrepôt ${fPct(c.caEnt / omni)} vs SFS ${fPct(c.caSFS / omni)} ; France ${fPct(c.caFR / esh)} du CA EShop.`;
+      if (pInt != null) s += ` International ${sgn(pInt)} vs N-1${pG != null && pInt > pG ? ' (croît plus vite que le global → levier export)' : ''}.`;
+      return s;
     }
     if (key === 'pays') {
       const p = rep.pays; if (!p || !p.length) return '';
       const tot = p.reduce((s, x) => s + x.n.ca, 0) || 1;
       const exp = p.filter(x => !/france/i.test(x.pays)).slice(0, 3).map(x => x.pays).join(', ');
-      return `${p[0].pays} = ${fPct(p[0].n.ca / tot)} du CA.` + (exp ? ` Top export : ${exp}.` : '');
+      let s = `${p[0].pays} = ${fPct(p[0].n.ca / tot)} du CA.` + (exp ? ` Top export : ${exp}.` : '');
+      const grow = p.filter(x => x.n1 && x.n1.ca > 2000).map(x => ({ pays: x.pays, d: pc(x.n.ca, x.n1.ca) })).filter(x => x.d != null).sort((a, b) => b.d - a.d)[0];
+      if (grow && grow.d > 10) s += ` ${grow.pays} en plus forte progression (${sgn(grow.d)} vs N-1).`;
+      return s;
     }
-    if (key === 'saison') { const s = rep.saison; return (s && s.length) ? `Collection ${s[0].saison} en tête (${fEur(s[0].n)}).` : ''; }
+    if (key === 'saison') {
+      const s = rep.saison; if (!s || !s.length) return '';
+      const top = s[0]; const d = pc(top.n, top.n1);
+      return `Collection ${top.saison} en tête (${fEur(top.n)}${d != null ? ', ' + sgn(d) + ' vs N-1' : ''}).`;
+    }
     if (key === 'produits') {
       const m = rep.produits && rep.produits.manquants; if (!rep.produits) return '';
       if (!m || !m.length) return 'Aucun produit majeur en retrait vs N-1.';
@@ -919,8 +934,10 @@ function ana(key, rep) {
       return s;
     }
     if (key === 'marketplace') {
-      const mk = rep.marketplace.n; const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);
-      return `Marketplace ${fEur(mk.total)} ; 1er canal : ${arr[0][0]} (${fEur(arr[0][1])}).`;
+      const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
+      const arr = [['Galeries Lafayette', mk.glTotal], ['Printemps', mk.printemps], ['Place des Tendances', mk.pdt], ['Lulli', mk.lulli]].sort((a, b) => b[1] - a[1]);
+      const d = pc(mk.total, mk1.total);
+      return `Marketplace ${fEur(mk.total)}${d != null ? ' (' + sgn(d) + ' vs N-1)' : ''} ; 1er canal : ${arr[0][0]} (${fEur(arr[0][1])}).`;
     }
     return '';
   } catch (e) { return ''; }
