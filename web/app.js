@@ -4,7 +4,8 @@
 // ============================================================================
 let CURRENT = 'all';
 let CURRENT_DIM = 'global';
-let CURRENT_MODULE = 'full';
+let USER_DIM = 'global';   // prisme géo choisi par l'utilisateur (Global/FR/Inter), conservé entre les vues
+let CURRENT_MODULE = 'direction';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
@@ -12,55 +13,51 @@ let PERSIST = false;       // base de données active (persistance) ?
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'Global', fr: 'France', inter: 'International' };
 
-// ── Modules : 1 moteur, 6 vues. Chaque module = layout de cartes + fichiers requis ──
+// ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
+// Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
+const MODULE_ORDER = ['direction', 'estore', 'acquisition', 'saisonprod', 'onsite', 'international', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
-    intro: 'Synthèse 360 pour la direction — les KPI clés en un écran.',
+    intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['kpi', 'ca', 'funnel', 'produits'],
+  },
+  estore: {
+    icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
+    intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
+    files: { required: ['oms'], optional: ['ga', 'ret'] },
+    layout: ['kpi', 'ca', 'funnel', 'daily', 'gafunnel', 'channels', 'device', 'pays', 'retours', 'annulations'],
+  },
+  acquisition: {
+    icon: '📈', label: 'Acquisition (GA)', preset: 'all',
+    intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
+  },
+  saisonprod: {
+    icon: '🧵', label: 'Saison & produits', preset: 'all',
+    intro: 'Offre & produits : comparaison de saison (E26 vs E25), familles, top/reconquête, rentabilité, funnel produit et cross-canal.',
+    files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
+    layout: ['kpi', 'saisoncompare', 'saison', 'famille', 'produits', 'renta', 'itemfunnel', 'marketplace', 'crosschannel'],
+  },
+  onsite: {
+    icon: '🧭', label: 'Comportement on-site', preset: 'all',
+    intro: 'Parcours sur le site : funnel e-commerce, funnel produit (vues→panier→achat), pages, pages disparues/nouvelles et device.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['gafunnel', 'itemfunnel', 'landing', 'pages', 'lostpages', 'pagesrc', 'device'],
+  },
+  international: {
+    icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
+    intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
     layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'produits'],
-  },
-  hebdo: {
-    icon: '📊', label: 'Hebdo', preset: 'week',
-    intro: 'Analyse hebdomadaire détaillée, scope par scope.',
-    files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'device', 'ca', 'produits', 'itemfunnel', 'pages', 'landing', 'pays', 'ttpays', 'retours'],
-  },
-  saison: {
-    icon: '🧵', label: 'Saison', preset: 'all',
-    intro: 'Collection E26 vs E25 : largeur d’offre, nouveautés/permanents/manquants, bests/slowers (Implantation).',
-    files: { required: ['oms', 'impl'], optional: ['ref', 'ret'] },
-    layout: ['kpi', 'ca', 'saisoncompare', 'saison', 'famille', 'produits', 'itemfunnel', 'renta', 'retours', 'annulations'],
-  },
-  omnicanal: {
-    icon: '🏬', label: 'Omnicanal', preset: 'all',
-    intro: 'EShop vs Marketplace : performance produit/famille par canal vs N-1 et entre canaux.',
-    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
-    layout: ['kpi', 'marketplace', 'crosschannel', 'ca', 'famille', 'produits'],
-  },
-  international: {
-    icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
-    intro: 'Performance export vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays (hors France).',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
-  },
-  annexe: {
-    icon: '🗂️', label: 'Annexe', preset: 'all',
-    intro: 'Exploration : tableaux détaillés (marketplace, pays, device…).',
-    files: { required: ['oms'], optional: ['ga', 'y2'] },
-    layout: ['marketplace', 'pays', 'ttpays', 'device', 'channels', 'pagesrc', 'annulations'],
-  },
-  ga: {
-    icon: '🔎', label: 'GA dédié', preset: 'all',
-    intro: 'Analyse GA + objectifs : funnel, campagnes, landing×conv, pages disparues, cohérence campagne→landing.',
-    files: { required: ['oms'], optional: ['ga'] },
-    layout: ['gafunnel', 'channels', 'campaigns', 'campaignland', 'device', 'landing', 'pages', 'lostpages', 'pagesrc', 'itemfunnel'],
   },
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
@@ -218,17 +215,18 @@ function updateApiHint() {
 // Barre de modules
 function initModules() {
   const bar = document.getElementById('moduleBar');
-  const entries = Object.entries(MODULES).sort((a, b) => (a[0] === 'full' ? -1 : b[0] === 'full' ? 1 : 0));
+  const order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
   bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
-    + entries.map(([k, m]) => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${m.icon} ${m.label}</button>`).join('');
+    + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('');
   bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
     bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     CURRENT_MODULE = b.dataset.mod;
     const m = MODULES[CURRENT_MODULE];
     // La période est pilotée par le sélecteur de dates (indépendant de la vue).
-    // Dimension : vue qui l'impose (International → hors France), sinon retour au global.
-    CURRENT_DIM = m.dim || 'global';
+    // Prisme géo : la vue qui l'impose (International → hors France) prime ; sinon on
+    // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
+    CURRENT_DIM = m.dim || USER_DIM;
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
     renderModuleHint();
     loadReport();
@@ -264,7 +262,7 @@ function objRow(label, actual, fmt, key, targetRaw, targetEff) {
 }
 async function renderObjectives(rep) {
   const box = document.getElementById('objBox'); if (!box) return;
-  if (CURRENT_MODULE !== 'ga' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  if (CURRENT_MODULE !== 'acquisition' || !rep) { box.classList.add('hidden'); box.innerHTML = ''; return; }
   box.classList.remove('hidden');
   const o = await fetchObjectives();
   const sess = rep.ga ? rep.ga.totalSessions : null;
@@ -1249,7 +1247,7 @@ document.getElementById('datesAll').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; loadReport();
+  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; USER_DIM = b.dataset.dim; loadReport();
 }));
 document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-scope]').forEach(x => x.classList.remove('on'));

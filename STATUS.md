@@ -5,7 +5,7 @@ _Mis à jour : 04/06/2026_
 Objectif : capitaliser sur le socle (collecte multi-sources + analyse N/N-1 matures) en
 fiabilisant la lecture comparée et en restructurant l'outil en briques métier lisibles.
 
-### Brique 0 — Bilan en tête de dashboard ⬜
+### Brique 0 — Bilan en tête de dashboard ✅ (livré 04/06)
 - ⬜ **Scorecard N vs N-1** épinglée en haut de `#report` : CA, commandes, panier moyen,
   taux de transfo, taux de retour — chaque tuile avec son Δ coloré (vert/rouge).
 - ⬜ **Signaux auto** (règles, sans IA) : meilleure famille en croissance, produit en chute,
@@ -15,7 +15,9 @@ fiabilisant la lecture comparée et en restructurant l'outil en briques métier 
 - ℹ️ Toute la donnée existe (`buildReport` renvoie tout) → coût faible. Limite assumée : bilan
   CA+trafic tant que marge / coût média / stock ne sont pas branchés.
 
-### Brique 1 — Fiabiliser la lecture comparée (transverse) ⬜
+### Brique 1 — Fiabiliser la lecture comparée (transverse) ✅ (livré 04/06)
+_Fait : TT par pays N-1 (Δ TT + Δ CA), taux de retour vs N-1, insights auto enrichis N-1
+(CA, pays, marketplace, saison). Lecture saison approfondie → brique « Saison & produits »._
 - ⬜ **Deltas manquants** : auditer chaque carte/KPI et compléter les Δ N-1 absents
   (objectif : N-1 systématique partout où c'est calculable).
 - ⬜ **Recommandations vs N-1** : étendre les insights auto (`ana()`) à une lecture
@@ -23,7 +25,11 @@ fiabilisant la lecture comparée et en restructurant l'outil en briques métier 
 - ⬜ **Analyses par saison** : généraliser le prisme saison au-delà de la comparaison
   implantation E26/E25 (CA, familles, produits, trafic lus à l'échelle d'une saison).
 
-### Brique 2 — Restructuration en briques métier (navigation) ⬜
+### Brique 2 — Restructuration en briques métier (navigation) ✅ (livré 04/06)
+_Modules refondus : 🎯 Direction · 📊 Suivi e-store & trafic · 📈 Acquisition (GA) ·
+🧵 Saison & produits · 🧭 Comportement on-site · 🌍 International · ☀️ Quotidien · 🔬 Full.
+Prisme Global/FR/Inter rendu persistant entre les vues (USER_DIM). Modules hebdo/omnicanal/annexe
+fondus dans les nouvelles briques + Full._
 Clarifier les modules actuels en parcours dédiés :
 - ⬜ **📊 Suivi e-store & trafic** : pilotage (KPI, CA, funnel conversion, suivi quotidien/temporel).
 - ⬜ **📈 Analyse GA / acquisition** : canaux, campagnes UTM, landing, pages par source.
