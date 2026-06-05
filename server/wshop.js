@@ -131,26 +131,17 @@ const COUNTRY = {
 };
 const countryName = code => COUNTRY[(code || '').toUpperCase()] || code || '';
 
-// « Type de paiement » à la sauce export OMS : pour les concessions grands magasins,
-// l'OMS met le CANAL (GL / Printemps) à la place du moyen de paiement. Or l'API expose
-// le vrai moyen (GL.com existe, mais PAS Printemps : ces ventes ne se voient que dans le
-// NOM MAGASIN). On reconstitue donc le canal via paiement GL.com OU nom de magasin, afin
-// que la règle de périmètre EShop (calc.js : isMkt) exclue correctement GL et Printemps.
-function channelPayLabel(payLabel, storeLabel) {
-  const p = (payLabel || '').toLowerCase().trim(), s = (storeLabel || '').toLowerCase();
-  if (p === 'gl' || p.includes('gl.com') || s.includes('galeries lafayette') || s.startsWith('gl ')) return 'GL.com';
-  if (p.includes('printemps') || s.includes('printemps')) return 'Printemps';
-  return payLabel || '';
-}
-
 // (3) ✅ MAPPING Order → lignes OMS (une ligne par orderItems). Anonymisé : on n'utilise
 //     AUCUN champ client (nom, email, adresse, téléphone). Colonnes = en-têtes OMS reconnus.
+//     « Type Paiement » = vrai moyen de paiement de l'API (GL.com, Printemps, CB, Paypal…).
+//     La règle de périmètre (calc.js : isMkt) exclut GL.com/Printemps de ce champ — on ne
+//     touche PAS aux magasins (les corners physiques = ship-from-store, à garder dans le CA).
 function orderToRows(order) {
   const o = order || {};
   const { date, time } = frDateTime(o.orderDate);
   const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
   const mag = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
-  const pay = channelPayLabel((o.payment_method && o.payment_method.label) || '', mag);
+  const pay = (o.payment_method && o.payment_method.label) || '';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   return items.map(it => {
@@ -348,16 +339,14 @@ function newCAAudit() {
   ];
   // « PVP » = prix de vente payé de l'export OMS = unitPrice × quantité commandée (champ confirmé).
   const pvpOf = it => num(it.unitPrice) * (parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0);
-  // Détections de périmètre, testées en 4 variantes (le filtre OMS « type de paiement » de
-  // l'utilisateur ne se reconstitue pas pareil côté API : GL.com est un paiement, Printemps non).
-  const isGLpay = p => { const t = (p || '').toLowerCase().trim(); return t === 'gl' || t.includes('gl.com'); };
-  const isGLstore = s => { const t = (s || '').toLowerCase(); return t.includes('galeries lafayette') || t.startsWith('gl '); };
-  const isPrintStore = s => (s || '').toLowerCase().includes('printemps');
-  const isPrintPay = p => (p || '').toLowerCase().includes('printemps');
+  // Périmètre EShop = règle d'origine : on exclut GL.com et Printemps du TYPE DE PAIEMENT
+  // (on ne touche pas aux magasins). isExclPay calque calc.js isMkt sur le moyen de paiement.
+  const isExclPay = p => { const t = (p || '').toLowerCase(); return t.includes('gl.com') || t.includes('printemps') || t.includes('la redoute') || t.includes('24s'); };
   let orders = 0, lines = 0, linesPartial = 0, linesOffered = 0, refunds = 0;
-  const peri = { glPayOnly: 0, storeOnly: 0, glPayPrintStore: 0, both: 0 }; // variantes de PVP périmètre
+  let pvpEShop = 0; // PVP hors marketplaces (par type de paiement)
   let dateMin = '', dateMax = '', splits = 0;
   const byStatus = Object.create(null), byStore = Object.create(null), byPayment = Object.create(null);
+  const byOrigin = Object.create(null), byWebsite = Object.create(null), byType = Object.create(null);
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
@@ -375,15 +364,14 @@ function newCAAudit() {
       // PVP de la commande (= Σ lignes unitPrice × commandé) → réparti par type de paiement.
       const itemsArr = Array.isArray(o.orderItems) ? o.orderItems : [];
       const pvpOrder = itemsArr.reduce((s2, it) => s2 + pvpOf(it), 0);
+      // Dimensions « canal » candidates pour localiser le marketplace Printemps (PVP, pas orderTotal).
+      bump(byOrigin, o.orderOrigin || '', pvpOrder);
+      bump(byWebsite, (o.website && o.website.name) || '', pvpOrder);
+      bump(byType, o.orderType || '', pvpOrder);
       bump(byStatus, status, oTot);
       bump(byStore, store, oTot);
-      bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Global…)
-      // 4 variantes de périmètre EShop (chacune ajoute le PVP de la commande si NON exclue) :
-      const gp = isGLpay(pay), gs = isGLstore(store), ps = isPrintStore(store), pp = isPrintPay(pay);
-      if (!(gp)) peri.glPayOnly += pvpOrder;                         // hors GL.com (paiement seul)
-      if (!(gs || ps)) peri.storeOnly += pvpOrder;                   // hors GL/Printemps (magasin seul)
-      if (!(gp || ps)) peri.glPayPrintStore += pvpOrder;            // hors GL.com(paiement) + Printemps(magasin)
-      if (!(gp || gs || ps || pp)) peri.both += pvpOrder;          // hors GL/Printemps (paiement + magasin)
+      bump(byPayment, pay, pvpOrder); // libellé de paiement BRUT (pour voir GL.com, Printemps, Global…)
+      if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
       // Niveau commande (compté 1× par commande) — intègre toute démarque/promo posée sur la commande.
       addK('commande:orderTotal', oTot);
       addK('commande:orderTotal − port', oTot - oShip);
@@ -410,11 +398,8 @@ function newCAAudit() {
     },
     result() {
       const r2 = x => Math.round(x * 100) / 100;
-      // Candidats « périmètre EShop » : 4 variantes d'exclusion GL/Printemps (repère celle = 24 372 €).
-      sums['périmètre A: hors GL.com (paiement seul)'] = peri.glPayOnly;
-      sums['périmètre B: hors GL/Printemps (magasin seul)'] = peri.storeOnly;
-      sums['périmètre C: hors GL.com(paiement) + Printemps(magasin)'] = peri.glPayPrintStore;
-      sums['périmètre D: hors GL/Printemps (paiement + magasin)'] = peri.both;
+      // Candidat « périmètre EShop » = PVP hors GL.com/Printemps par TYPE DE PAIEMENT (règle d'origine).
+      sums['périmètre: PVP hors GL.com/Printemps (type de paiement)'] = pvpEShop;
       const candidates = Object.keys(sums)
         .map(label => ({ label, value: r2(sums[label]) }))
         .sort((a, b) => b.value - a.value);
@@ -424,7 +409,8 @@ function newCAAudit() {
       return {
         candidates, refunds: r2(refunds), orders, lines, linesPartial, linesOffered,
         dateMin, dateMax, splits, byStatus: breakdown(byStatus), byStore: breakdown(byStore),
-        byPayment: breakdown(byPayment),
+        byPayment: breakdown(byPayment), byOrigin: breakdown(byOrigin),
+        byWebsite: breakdown(byWebsite), byType: breakdown(byType),
       };
     },
   };
@@ -508,8 +494,9 @@ router.post('/sync', requireAuth, (req, res) => {
 router.post('/ca-audit', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   const q = req.query || {};
-  // Priorité à un jour précis (q.day) ; sinon plage N-1 (cfrom/cto) ; sinon N (from/to).
-  const from = q.day || q.cfrom || q.from, to = q.day || q.cto || q.to;
+  // Priorité à un jour précis (q.day) ; sinon la période N du sélecteur (from/to) — qui peut
+  // être large (30 j, saison) pour voir apparaître les paiements Printemps ; sinon N-1 (cfrom/cto).
+  const from = q.day || q.from || q.cfrom, to = q.day || q.to || q.cto;
   if (!from || !to) return res.status(400).json({ error: 'Période manquante : renseignez un jour (ou la plage) dans le sélecteur.' });
   res.status(202).json({ started: true, ...runJob('ca-audit', cb => auditCARange(from, to, n => cb.count && cb.count('N1', n))) });
 });
