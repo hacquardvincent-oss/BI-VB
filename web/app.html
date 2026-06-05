@@ -71,7 +71,12 @@
       <button class="btn" id="wshopcaaudit" title="Rejoue les commandes du jour choisi et somme tous les champs prix pour retrouver le « prix de vente payé »">🧮 Auditer le CA (jour)</button>
       <span class="note" id="wshopnote">Récupère les commandes OMS via l'API WSHOP sur la période sélectionnée</span>
     </div>
-    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
+    <div id="adsbox" class="toolbar hidden" style="margin-top:8px">
+      <button class="btn blue" id="adsrefresh">🔄 Rafraîchir Google Ads (API)</button>
+      <button class="btn" id="adsping">🩺 Tester la connexion</button>
+      <span class="note" id="adsnote">Importe coût/clics/conversions par campagne depuis Google Ads sur la période N et N-1</span>
+    </div>
+    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
   </div>
 
   <!-- COMPTES ÉQUIPE (admin + base active) -->

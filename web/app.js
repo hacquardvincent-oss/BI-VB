@@ -207,9 +207,10 @@ function setFilesOpen(open) {
 }
 // Affiche un message si aucun connecteur API n'est configuré
 function updateApiHint() {
-  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), no = document.getElementById('noApiNote');
+  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), ad = document.getElementById('adsbox'), no = document.getElementById('noApiNote');
   if (!no) return;
-  const anyApi = (ga && !ga.classList.contains('hidden')) || (ws && !ws.classList.contains('hidden'));
+  const vis = el => el && !el.classList.contains('hidden');
+  const anyApi = vis(ga) || vis(ws) || vis(ad);
   no.classList.toggle('hidden', anyApi);
 }
 
@@ -1173,6 +1174,39 @@ document.getElementById('ga4refresh').addEventListener('click', async () => {
   loadReport();
 });
 
+// Google Ads API
+async function googleAdsStatus() {
+  try {
+    const r = await fetch('/api/googleads/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) document.getElementById('adsbox').classList.remove('hidden');
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('adsrefresh').addEventListener('click', async () => {
+  const note = document.getElementById('adsnote');
+  note.textContent = 'Récupération Google Ads sur la période sélectionnée…';
+  const q = new URLSearchParams(currentPeriod()).toString();
+  const r = await fetch('/api/googleads/refresh?' + q, { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur Google Ads'); return; }
+  const warn = (j.warnings && j.warnings.length) ? ` · ⚠ ${esc(j.warnings.join(' ; '))}` : '';
+  note.textContent = `✓ Google Ads importé : ${fInt(j.rowsN)} lignes N${j.rowsN1 != null ? ` · ${fInt(j.rowsN1)} lignes N-1` : ''} (${j.period.start} → ${j.period.end})${warn}`;
+  applyCurrentPeriod();
+  await loadStatus();
+  loadReport();
+});
+document.getElementById('adsping').addEventListener('click', async () => {
+  const note = document.getElementById('adsnote');
+  note.textContent = 'Test de connexion Google Ads…';
+  try {
+    const r = await fetch('/api/googleads/ping');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    note.textContent = `compte ${esc(j.customerId || '?')}${j.loginCustomerId ? ' (MCC ' + esc(j.loginCustomerId) + ')' : ''} · ${esc(j.apiVersion || '')} · auth ${esc(j.auth || '?')}${j.authMs != null ? ' (' + j.authMs + 'ms)' : ''} · requête ${esc(j.query || '—')}${j.sample != null ? ` (${j.sample} ligne échantillon)` : ''}`;
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
+});
+
 // Moteur de recommandations stratégiques (API Claude)
 async function recoStatus() {
   try {
@@ -1418,6 +1452,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await loadStatus();
   await ga4Status();
   await wshopStatus();
+  await googleAdsStatus();
   await recoStatus();
   updateApiHint();
   await loadReport();
