@@ -44,7 +44,7 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1 }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -266,23 +266,38 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   if (ads && adsCalcN && adsCalcN.byCampaign) {
     const nrm = s => (s || '').toString().trim().toLowerCase();
     const gaIdx = m => { const o = {}; Object.entries(m || {}).forEach(([k, v]) => { o[nrm(k)] = v; }); return o; };
-    const gN = gaIdx(gaCampAggN), adsN1Map = {};
+    const gN = gaIdx(gaCampAggN), gN1 = gaIdx(gaCampAggN1), adsN1Map = {};
     (adsCalcN1 && adsCalcN1.byCampaign || []).forEach(c => { adsN1Map[nrm(c.campaign)] = c; });
+    const target = (() => { const t = parseFloat((cosTarget || '').toString().replace(',', '.')); if (!t || t <= 0) return 0.30; return t > 1 ? t / 100 : t; })();
+    const totalSpend = adsCalcN.cost || 0;
+    let sumCA = 0;
     const rows = adsCalcN.byCampaign.filter(c => c.cost > 0).map(c => {
-      const g = gN[nrm(c.campaign)] || {}, a1 = adsN1Map[nrm(c.campaign)] || {};
+      const g = gN[nrm(c.campaign)] || {}, a1 = adsN1Map[nrm(c.campaign)] || {}, g1 = gN1[nrm(c.campaign)] || {};
       const caGA = g.revenue || 0, sessions = g.sessions || 0, purchases = g.purchases || 0;
+      const spendN1 = a1.cost || 0, caGAN1 = g1.revenue || 0;
+      const roas = caGA > 0 ? caGA / c.cost : null;
+      const roasN1 = (spendN1 > 0 && caGAN1 > 0) ? caGAN1 / spendN1 : null;
+      sumCA += caGA;
       return {
-        campaign: c.campaign, spend: c.cost, spendN1: a1.cost || 0, clicks: c.clicks,
+        campaign: c.campaign, spend: c.cost, spendN1, clicks: c.clicks,
         sessions, purchases, convRate: sessions > 0 ? purchases / sessions : null,
-        caGA, roas: caGA > 0 ? caGA / c.cost : null, cos: caGA > 0 ? c.cost / caGA : null,
+        caGA, roas, cos: caGA > 0 ? c.cost / caGA : null,
         cpa: purchases > 0 ? c.cost / purchases : (c.conversions > 0 ? c.cost / c.conversions : null),
+        roasN1, aboveTarget: caGA > 0 ? (c.cost / caGA) > target : true, // sans CA = au-dessus de la cible
+        saturated: (roas != null && roasN1 != null && c.cost > spendN1 * 1.1 && roas < roasN1 * 0.95),
       };
     }).sort((a, b) => b.spend - a.spend);
+    // Parts de dépense / de CA (Pareto)
+    rows.forEach(r => { r.shareSpend = totalSpend > 0 ? r.spend / totalSpend : 0; r.shareCA = sumCA > 0 ? r.caGA / sumCA : 0; });
     const sig = rows.filter(r => r.spend >= 1);
     const flopScore = r => r.caGA > 0 ? r.cos : Infinity; // pas de CA → pire COS
+    ads.cosTarget = target;
     ads.campaigns = rows;
     ads.top = sig.filter(r => r.roas != null).sort((a, b) => b.roas - a.roas).slice(0, 5);
     ads.flop = [...sig].sort((a, b) => flopScore(b) - flopScore(a)).slice(0, 5);
+    ads.saturated = sig.filter(r => r.saturated).sort((a, b) => b.spend - a.spend).slice(0, 5);
+    // Déséquilibre Pareto : grosse part de dépense, faible part de CA
+    ads.imbalanced = sig.filter(r => r.shareSpend > 0.1 && r.shareCA < r.shareSpend * 0.6).sort((a, b) => (b.shareSpend - b.shareCA) - (a.shareSpend - a.shareCA)).slice(0, 5);
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
@@ -462,9 +477,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1 } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1 });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
