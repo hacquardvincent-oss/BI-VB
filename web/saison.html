@@ -114,23 +114,6 @@
   <div id="report"></div>
 </div>
 
-<!-- Volet latéral : détail produits d'une famille -->
-<div id="drawerBackdrop" class="hidden"></div>
-<aside id="drawer" class="hidden" aria-label="Détail famille">
-  <div id="drawerHead">
-    <div id="drawerTitle"></div>
-    <button class="btn" id="drawerClose" title="Fermer">✕</button>
-  </div>
-  <div id="drawerBody"></div>
-</aside>
-<style>
-#drawerBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
-#drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,92vw);background:var(--s);border-left:1px solid var(--br);z-index:41;display:flex;flex-direction:column;box-shadow:-8px 0 28px rgba(0,0,0,.4);transform:translateX(0);transition:transform .18s ease}
-#drawer.hidden,#drawerBackdrop.hidden{display:none}
-#drawerHead{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--br)}
-#drawerTitle{font-weight:800;font-size:15px;flex:1}
-#drawerBody{padding:14px 16px;overflow:auto}
-</style>
 <script src="/saison.js"></script>
 </body>
 </html>
