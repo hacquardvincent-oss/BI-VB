@@ -552,6 +552,56 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// ── Démarque : détection automatique des opérations à partir des données ────
+// Série quotidienne de CA off-price (démarque PRIX uniquement : Prix Vente Remisé ≠ Prix
+// Vente — les codes promo ne sont pas dans ce champ). Une « opération » = une suite de
+// jours « chauds » (part off ≥ seuil), petits trous tolérés ; on borne le 1er/dernier jour.
+function dailyOff(rows, map) {
+  const isFP = calc.fullOffSplit(map); if (!isFP) return null;
+  const pi = map.prix, ti = map.type, di = map.date;
+  const by = {};
+  rows.forEach(r => {
+    if (calc.isMkt((r[ti] || '').trim())) return;
+    const d = calc.parseFrD(r[di]); if (!d) return;
+    const iso = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+    const p = calc.fN(r[pi]);
+    const e = by[iso] || (by[iso] = { off: 0, total: 0 });
+    e.total += p; if (!isFP(r)) e.off += p;
+  });
+  return by;
+}
+const isoShiftDays = (iso, days) => new Date(Date.parse(iso + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10);
+const OP_LABEL = m => ({ 12: 'Pré-soldes / déstockage', 1: "Soldes d'hiver", 2: 'Last chance / 2e démarque', 3: 'Archives (anciennes collections)', 4: 'Ventes privées', 5: 'Ventes privées', 6: "Soldes d'été", 7: "Soldes d'été" }[m] || 'Démarque');
+function detectDemarque(byDayN, byDayN1, threshold) {
+  if (!byDayN) return null;
+  const T = (threshold > 0 && threshold < 1) ? threshold : 0.15;
+  const maxGap = 2;
+  const dnum = iso => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000);
+  const days = Object.keys(byDayN).sort();
+  const hot = days.filter(d => byDayN[d].off > 0 && byDayN[d].total > 0 && (byDayN[d].off / byDayN[d].total) >= T);
+  const ops = []; let cur = null;
+  hot.forEach(d => {
+    if (cur && dnum(d) - cur._last <= maxGap + 1) { cur.end = d; cur._last = dnum(d); }
+    else { if (cur) ops.push(cur); cur = { start: d, end: d, _last: dnum(d) }; }
+  });
+  if (cur) ops.push(cur);
+  const sumWin = (by, a, b) => { let off = 0, total = 0; if (by) for (const d in by) { if (d >= a && d <= b) { off += by[d].off; total += by[d].total; } } return { off, total }; };
+  let offTotal = 0; days.forEach(d => { offTotal += byDayN[d].off; });
+  const list = ops.map(op => {
+    const w = sumWin(byDayN, op.start, op.end);
+    const a1 = isoShiftDays(op.start, -364), b1 = isoShiftDays(op.end, -364);
+    const w1 = sumWin(byDayN1, a1, b1);
+    return {
+      label: OP_LABEL(+op.start.slice(5, 7)), start: op.start, end: op.end,
+      days: dnum(op.end) - dnum(op.start) + 1,
+      off: w.off, total: w.total, share: w.total > 0 ? w.off / w.total : 0,
+      offN1: w1.off, n1Start: a1, n1End: b1,
+    };
+  }).sort((a, b) => (a.start < b.start ? -1 : 1));
+  const offInOps = list.reduce((s, o) => s + o.off, 0);
+  return { ops: list, offTotal, offInOps, offSubie: Math.max(0, offTotal - offInOps), threshold: T };
+}
+
 // ── Analyse de saison (page à part, période longue) ────────────────────────
 // OMS uniquement, jeux dédiés ('saisonoms'). Saison = fenêtre de dates (E26 pour N,
 // E25 pour N-1). Le détail famille / top produits couvre TOUT l'EShop de la fenêtre
@@ -559,7 +609,7 @@ router.get('/', requireAuth, async (req, res) => {
 // un indicateur secondaire (part collection par famille, refs perdues vs N-1).
 // Produits agrégés par désignation (modèle), pour ne pas éclater le CA d'un produit
 // sur ses variantes couleur.
-async function buildSaison({ from, to, cfrom, cto, dim }) {
+async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
   dim = dim || 'global';
   const omsN = await loadDataset('saisonoms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
@@ -682,6 +732,10 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   const caFP = kN.caFP != null ? kN.caFP : null;
   const caFPN1 = (kN1 && kN1.caFP != null) ? kN1.caFP : null;
 
+  // Démarque : détection auto des opérations à partir de la série quotidienne off-price
+  const seuil = parseFloat((demSeuil || '').toString().replace(',', '.'));
+  const demarque = detectDemarque(dailyOff(rowsN, omsN.map), hasN1 ? dailyOff(rowsN1, mapN1) : null, seuil > 1 ? seuil / 100 : seuil);
+
   return {
     meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax },
     global: {
@@ -698,14 +752,15 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
       ordersEshop: recoN.ordersEshop, ordersInstore: recoN.ordersInstore, ordersMkt: recoN.ordersMkt,
     },
     kpiGlobal,
+    demarque,
     familles,
   };
 }
 
 router.get('/saison', requireAuth, async (req, res) => {
   try {
-    const { from, to, cfrom, cto, dim } = req.query;
-    res.json(await buildSaison({ from, to, cfrom, cto, dim }));
+    const { from, to, cfrom, cto, dim, demSeuil } = req.query;
+    res.json(await buildSaison({ from, to, cfrom, cto, dim, demSeuil }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
