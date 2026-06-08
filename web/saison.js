@@ -89,6 +89,29 @@ function render(rep) {
     <div class="note">Poids EShop = CA famille ÷ CA EShop saison (somme ≈ 100%). Part coll. E26 = part de la famille issue de la collection (implantation) ; le reste = reports / hors collection.</div>
   </div>`;
 
+  // 2bis · CA full price (hors démarque) par famille
+  let fpCard = '';
+  if (g.caFP != null) {
+    const fpShareGlobal = g.ca > 0 ? g.caFP / g.ca : null;
+    const fpR = rep.familles.filter(f => f.caFP > 0).sort((a, b) => b.caFP - a.caFP).map(f => `<tr>
+      <td>${esc(f.fam)}</td>
+      <td>${fEur(f.caFP)}</td>
+      <td>${f.caFPN1 ? delta(f.caFP, f.caFPN1) : '<span class="na">—</span>'}</td>
+      <td>${g.caFP > 0 ? fPct(f.caFP / g.caFP) : '—'}</td>
+      <td>${fPct(f.fpShare)}</td>
+    </tr>`).join('');
+    fpCard = `<div class="card">
+      <h3>💎 CA full price (hors démarque) par famille — vs E25</h3>
+      <div class="kgrid">
+        ${tile('CA full price saison', fEur(g.caFP), g.caFPN1 != null ? `${delta(g.caFP, g.caFPN1)} vs ${fEur(g.caFPN1)}` : '')}
+        ${tile('Part full price', fpShareGlobal != null ? fPct(fpShareGlobal) : '—', `du CA EShop saison (${fEur(g.ca)})`)}
+        ${tile('CA en démarque', fEur(g.ca - g.caFP), fpShareGlobal != null ? `${fPct(1 - fpShareGlobal)} du CA EShop` : '')}
+      </div>
+      <table><thead><tr><th>Famille</th><th>CA full price</th><th>Δ N-1</th><th>Poids FP</th><th>% full price</th></tr></thead><tbody>${fpR}</tbody></table>
+      <div class="note">Full price = vendu sans démarque (Prix Vente Remisé = 0 ou = Prix Vente). Poids FP = CA full price famille ÷ CA full price total. % full price = part de la famille vendue au prix plein.</div>
+    </div>`;
+  }
+
   // 3 · Détail par famille : top 10 produits + références perdues vs N-1
   const famBlocks = rep.familles.map(f => {
     const topR = f.top.map(p => `<tr>
@@ -116,7 +139,7 @@ function render(rep) {
     </details>`;
   }).join('');
 
-  box.innerHTML = head + recoCard + famCard + famBlocks;
+  box.innerHTML = head + recoCard + famCard + fpCard + famBlocks;
 }
 
 async function loadReport() {
