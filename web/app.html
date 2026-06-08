@@ -35,6 +35,13 @@
       <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
     </div>
     <div class="toolbar" style="margin-top:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase" title="Fenêtre large (ex. cumul saison) : affiche un scorecard cumulé en plus de la période. Laisse vide pour ne pas l'afficher.">📅 Cumul de saison</span>
+      <span style="font-size:11px;color:var(--t3)">N</span>
+      <input type="date" id="cumFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="cumTo" class="dt">
+      <span style="font-size:11px;color:var(--t3);margin-left:8px">N-1</span>
+      <input type="date" id="cumCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="cumCto" class="dt">
+    </div>
+    <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Presets</span>
       <button class="pb" data-range="yesterday" title="Hier · comparable J-364 (même jour de semaine N-1)">Hier</button>
       <button class="pb" data-range="week" title="Semaine en cours (lun→dim) · comparable même semaine N-1">Semaine</button>
