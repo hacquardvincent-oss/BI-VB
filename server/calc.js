@@ -860,8 +860,9 @@ function omsChannelOf(mag, type) {
   const m = (mag || '').toString().toLowerCase(), t = (type || '').toString().toLowerCase();
   if (t.includes('gl.com') || m.includes('galeries lafayette')) return 'GL';
   if (t.includes('printemps') || m.includes('printemps')) return 'Printemps';
-  if (m.includes('vanessa bruno -') || m.includes('annul')) return 'Boutiques';
-  return 'EShop'; // WEBSTORE + paiements en ligne par défaut
+  // EShop = entrepôt (WEBSTORE) + ship-from-store (boutiques) : la distinction entrepôt/SFS
+  // est une méthode d'expédition, pas un canal → tout regroupé dans EShop.
+  return 'EShop';
 }
 function y2ChannelOf(etab) {
   const e = (etab || '').toString().toLowerCase();
@@ -870,7 +871,7 @@ function y2ChannelOf(etab) {
   if (e.includes('haussmann') || e.includes('galeries') || e.startsWith('gl ')) return 'GL';
   return etab ? etab.toString() : 'Marketplace';
 }
-const CHANNEL_ORDER = ['EShop', 'Boutiques', 'GL', 'Printemps', 'PDT', 'Lulli'];
+const CHANNEL_ORDER = ['EShop', 'GL', 'Printemps', 'PDT', 'Lulli'];
 function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
   const byRef = {}, byChannel = {};
   const add = (ref, name, ch, ca, qte) => {
@@ -928,13 +929,13 @@ function calcCrossChannel(omsN, omsMapN, y2N, y2MapN, famByRef, omsN1, omsMapN1,
   const familles = [...new Set([...Object.keys(famN), ...Object.keys(famN1)])]
     .map(f => ({ famille: f, total: (famN[f] || {}).total || 0, byChannel: (famN[f] || {}).byChannel || {}, totalN1: (famN1[f] || {}).total || 0, byChannelN1: (famN1[f] || {}).byChannel || {} }))
     .sort((a, b) => b.total - a.total).slice(0, 20);
-  // « Qui vendait quoi le mieux en N-1 » : top produits par canal sur N-1
-  const bestPerChannelN1 = channels.map(ch => {
-    const arr = Object.entries(B.byRef).map(([ref, v]) => ({ ref, name: nameOf[ref] || ref, famille: fam(ref), ca: v.byChannel[ch] || 0 }))
-      .filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca).slice(0, 3);
+  // Top 5 produits par marketplace (GL / Printemps / PDT / Lulli) — remplace le zoom produit.
+  const topByMarketplace = channels.filter(ch => ch !== 'EShop').map(ch => {
+    const arr = Object.entries(A.byRef).map(([ref, v]) => ({ name: v.name || nameOf[ref] || ref, famille: fam(ref), ca: v.byChannel[ch] || 0 }))
+      .filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca).slice(0, 5);
     return { channel: ch, top: arr };
   }).filter(x => x.top.length);
-  return { channels, totals, products, familles, bestPerChannelN1, recos: buildCrossRecos(products, channels) };
+  return { channels, totals, familles, topByMarketplace, recos: buildCrossRecos(products, channels) };
 }
 
 // ── Top produits ────────────────────────────────────────────────────────────
