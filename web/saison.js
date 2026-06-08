@@ -178,12 +178,13 @@ function render(rep) {
     const fams = rep.familles.filter(f => val(f) > 0).sort((a, b) => val(b) - val(a));
     const total = fams.reduce((s, f) => s + val(f), 0);
     const rows = fams.map(f => `<tr class="fam-row" data-fam="${esc(f.fam)}" style="cursor:pointer">
-      <td>${esc(f.fam)} <span class="na" style="font-size:10px">› détail</span></td>
+      <td><span class="fam-caret na" style="font-size:10px">▸</span> ${esc(f.fam)}</td>
       <td>${fEur(val(f))}</td>
       <td>${valN1(f) ? delta(val(f), valN1(f)) : '<span class="na">nouveau</span>'}</td>
       <td>${total > 0 ? fPct(val(f) / total) : '—'}</td>
       <td>${fInt(f.qte)}</td>
-    </tr>`).join('') || '<tr><td colspan="5" class="na">—</td></tr>';
+    </tr>
+    <tr class="fam-detail hidden"><td colspan="5" style="background:var(--s2);padding:12px"></td></tr>`).join('') || '<tr><td colspan="5" class="na">—</td></tr>';
     return `<table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids</th><th>Qté</th></tr></thead><tbody>${rows}</tbody></table>`;
   };
   const famTablesCard = `<div class="card">
@@ -253,8 +254,14 @@ function render(rep) {
     document.querySelectorAll('#famTabs [data-fam-tab]').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('[data-fam-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.famPane !== t));
   }));
-  // Clic sur une famille → volet latéral détail produits
-  document.querySelectorAll('.fam-row').forEach(r => r.addEventListener('click', () => openDrawer(r.dataset.fam)));
+  // Clic sur une famille → déroule le détail produits juste sous la ligne (accordéon)
+  document.querySelectorAll('.fam-row').forEach(r => r.addEventListener('click', () => {
+    const det = r.nextElementSibling;
+    if (!det || !det.classList.contains('fam-detail')) return;
+    const open = det.classList.toggle('hidden') === false;
+    const caret = r.querySelector('.fam-caret'); if (caret) caret.textContent = open ? '▾' : '▸';
+    if (open && !det.dataset.filled) { det.querySelector('td').innerHTML = familleDetailHTML(r.dataset.fam); det.dataset.filled = '1'; }
+  }));
 }
 
 async function loadReport() {
@@ -303,16 +310,11 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
 
 document.getElementById('loadBtn').addEventListener('click', loadReport);
 
-// ── Volet latéral : détail produits d'une famille ──────────────────────────
-function closeDrawer() {
-  document.getElementById('drawer').classList.add('hidden');
-  document.getElementById('drawerBackdrop').classList.add('hidden');
-}
-function openDrawer(fam) {
-  if (!LAST_REP) return;
+// ── Détail produits d'une famille (déroulé en ligne, sous la famille) ───────
+function familleDetailHTML(fam) {
+  if (!LAST_REP) return '';
   const f = (LAST_REP.familles || []).find(x => x.fam === fam);
-  if (!f) return;
-  document.getElementById('drawerTitle').textContent = f.fam;
+  if (!f) return '<div class="na">Aucun détail.</div>';
   const off = f.caOff != null ? f.caOff : (f.ca - (f.caFP || 0));
   const offN1 = f.caOffN1 != null ? f.caOffN1 : ((f.caN1 || 0) - (f.caFPN1 || 0));
   const tile = (label, val, d) => `<div class="kc"><div class="l">${label}</div><div class="v">${val}</div>${d ? `<div class="note" style="margin-top:2px">${d}</div>` : ''}</div>`;
@@ -337,7 +339,7 @@ function openDrawer(fam) {
     <h3 style="margin-top:16px;font-size:13px">⚠️ Cartonnaient en E25, manquent en E26</h3>
     <table><thead><tr><th>Produit (E25)</th><th>CA E25</th><th>CA E26</th><th>Perte</th></tr></thead><tbody>${perdusR}</tbody></table>
     <div class="note">Pistes de réassort / réédition.</div>` : '';
-  document.getElementById('drawerBody').innerHTML = `
+  return `
     <div class="kgrid" style="margin-bottom:12px">
       ${tile('CA global', fEur(f.ca), f.caN1 ? `${delta(f.ca, f.caN1)} vs N-1` : '')}
       ${tile('Full price', fEur(f.caFP || 0), f.caFPN1 ? delta(f.caFP, f.caFPN1) : '')}
@@ -346,12 +348,7 @@ function openDrawer(fam) {
     <h3 style="font-size:13px">Produits de la famille (${fInt((f.produits || []).length)})</h3>
     <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>Qté</th></tr></thead><tbody>${prodR}</tbody></table>
     ${perdusBlock}`;
-  document.getElementById('drawer').classList.remove('hidden');
-  document.getElementById('drawerBackdrop').classList.remove('hidden');
 }
-document.getElementById('drawerClose').addEventListener('click', closeDrawer);
-document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
 // Import par fichier → slots dédiés saison (saisonoms / saisony2 / saisonref), N = E26, N1 = E25.
 function wireUpload(inputId, source, period, pillId, label) {
