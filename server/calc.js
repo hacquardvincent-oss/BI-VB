@@ -912,6 +912,25 @@ function filterToRefs(rows, map, refSet) {
   return rows.filter(r => refSet.has(baseRef((r[ri] || '').toString().trim())));
 }
 
+// Ventes OMS agrégées par référence (RC = Ref. externe), avec famille (référentiel),
+// désignation, CA & quantité. Lignes déjà filtrées (période + Outstore + dimension).
+// Hors marketplaces. Sert l'analyse de saison (poids famille, top produits, refs perdues).
+function salesByRefFam(rows, omsMap, refMap) {
+  const pi = omsMap.prix, ti = omsMap.type, qi = omsMap.qte, di = omsMap.des;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  const out = {};
+  if (refIdx === undefined) return out;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const rc = (r[refIdx] || '').toString().trim(); if (!rc) return;
+    const e = out[rc] || (out[rc] = { ref: rc, model: baseRef(rc), fam: (refMap && refMap[rc]) || '(non référencé)', des: '', ca: 0, qte: 0 });
+    if (!e.des && di !== undefined && r[di]) e.des = (r[di] || '').toString().trim();
+    e.ca += fN(r[pi]);
+    e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  return out;
+}
+
 // ── Analyse cross-canal (EShop / Boutiques / Marketplaces) ──────────────────
 // Référence unifiée Y2 : 13 premiers car. du code article + "-" + code couleur (1er token LIBDIM2)
 const y2Ref = (code, libdim2) => {
@@ -1057,6 +1076,6 @@ module.exports = {
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
-  baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs,
+  baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,
   y2Ref, calcCrossChannel,
 };
