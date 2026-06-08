@@ -16,7 +16,7 @@ const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' }
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'demarque', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
@@ -41,6 +41,13 @@ const MODULES = {
     intro: 'Analyse d\'offre (figée, suivie dans le temps) : CA par famille vs N-1, top produits, comparaison de saison (E26 vs E25), rentabilité, et analyse des campagnes/communications vs N-1 (a-t-on raté une mise en avant ?).',
     files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ga', 'ret'] },
     layout: ['famille', 'produits', 'saisoncompare', 'saison', 'renta', 'campaigns'],
+  },
+  demarque: {
+    icon: '🏷️', label: 'Démarque E26/E25', preset: 'all',
+    dates: { from: '2025-12-01', to: '2026-06-07', cfrom: '2024-12-01', cto: '2025-06-07' },
+    intro: 'Full price vs Off price — saison E26 (1 déc 2025 → 7 juin 2026) vs E25 (1 déc 2024 → 7 juin 2025) : familles et top produits vs N-1. ⚠️ Importer l\'OMS sur cette plage.',
+    files: { required: ['oms'], optional: ['ref', 'impl'] },
+    layout: ['fulloff', 'saisoncompare'],
   },
   croisees: {
     icon: '🔀', label: 'Analyses croisées', preset: 'all',
@@ -115,7 +122,7 @@ const THEME_OF = {
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP',
   campaignland: 'CR',
-  saisoncompare: 'OF', saison: 'OF', renta: 'OF',
+  fulloff: 'OF', saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
 };
 // Regroupe les blocs d'un module par thème, dans l'ordre du récit analytique
@@ -303,6 +310,13 @@ function initModules() {
     // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
     CURRENT_DIM = m.dim || USER_DIM;
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
+    // Vue à période fixe (ex. Démarque E26/E25) : applique ses dates au sélecteur.
+    if (m.dates) {
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('dNfrom', m.dates.from); set('dNto', m.dates.to); set('dCfrom', m.dates.cfrom); set('dCto', m.dates.cto);
+      DATES = { from: m.dates.from, to: m.dates.to, cfrom: m.dates.cfrom, cto: m.dates.cto };
+      const da = document.getElementById('datesAll'); if (da) da.classList.remove('on');
+    }
     renderModuleHint();
     loadReport();
   }));
@@ -910,7 +924,21 @@ function renderReport(rep) {
   }
 
   // Cartes nommées + layout adapté à la cadence
+  // Full price vs Off price — familles & top produits vs N-1 (analyse démarque saison)
+  let fullOffCard = '';
+  if (rep.fullOffFamille && rep.fullOffFamille.length) {
+    const offCls = v => v > 0.3 ? 'dn' : '';
+    const famR = rep.fullOffFamille.map(f => { const off = f.ca > 0 ? f.caOP / f.ca : 0; return `<tr><td>${esc(f.fam)}</td><td>${fEur(f.ca)}</td><td>${f.caN1 != null ? delta(f.ca, f.caN1) : '—'}</td><td>${fEur(f.caFP)}</td><td>${fEur(f.caOP)}</td><td class="${offCls(off)}">${fPct(off)}</td></tr>`; }).join('');
+    const prodR = (rep.fullOffProduits || []).map(p => { const off = p.ca > 0 ? p.caOP / p.ca : 0; return `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fEur(p.ca)}</td><td>${p.caN1 != null ? delta(p.ca, p.caN1) : '—'}</td><td>${fEur(p.caFP)}</td><td>${fEur(p.caOP)}</td><td class="${offCls(off)}">${fPct(off)}</td><td>${fInt(p.qte)}</td></tr>`; }).join('');
+    fullOffCard = `<div class="card"><h3>🏷️ Full price vs Off price — vs N-1</h3>
+      <h3 style="margin-top:8px;font-size:14px">Par famille</h3>
+      <table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Full price</th><th>Off price</th><th>% Off</th></tr></thead><tbody>${famR}</tbody></table>
+      <h3 style="margin-top:14px;font-size:14px">Top produits</h3>
+      <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>% Off</th><th>Qté</th></tr></thead><tbody>${prodR}</tbody></table>
+      <div class="note">Off price = toute remise (Prix Vente Remisé ≠ Prix Vente). % Off &gt; 30 % en rouge. Période = celle du sélecteur (vue « Démarque E26/E25 » = 1 déc → 7 juin vs N-1).</div></div>`;
+  }
   const C = {
+    fulloff: fullOffCard,
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,

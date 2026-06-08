@@ -533,6 +533,17 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     topProduitsQte: { n: topListQte(topNobj), n1: topN1obj ? topListQte(topN1obj) : null },
     familleDetail,
     familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
+    fullOffFamille: (() => {
+      const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
+      const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;
+      const keys = new Set([...Object.keys(a), ...(b ? Object.keys(b) : [])]);
+      return [...keys].filter(k => k !== '(non référencé)').map(f => ({ fam: f, ca: (a[f] || {}).ca || 0, caFP: (a[f] || {}).caFP || 0, caOP: (a[f] || {}).caOP || 0, qte: (a[f] || {}).qte || 0, caN1: b ? ((b[f] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca);
+    })(),
+    fullOffProduits: (() => {
+      const a = calc.calcFullOffByProduct(rowsN, omsN.map); if (!a) return null;
+      const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByProduct(rowsN1, mapN1) : null;
+      return Object.entries(a).map(([des, v]) => ({ des, ca: v.ca, caFP: v.caFP, caOP: v.caOP, qte: v.qte, caN1: b ? ((b[des] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca).slice(0, 15);
+    })(),
     produits,
     funnel,
     channels,
