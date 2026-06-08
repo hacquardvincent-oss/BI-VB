@@ -16,7 +16,7 @@ const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' }
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'acquisition', 'saisonprod', 'produit', 'onsite', 'international', 'marketplace', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
@@ -37,10 +37,16 @@ const MODULES = {
     layout: ['ads', 'channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
   },
   saisonprod: {
-    icon: '🧵', label: 'Saison & produits', preset: 'all',
-    intro: 'Offre & produits : comparaison de saison (E26 vs E25), familles, top/reconquête, rentabilité, funnel produit et cross-canal.',
+    icon: '👗', label: 'Offre & Merchandising', preset: 'all',
+    intro: 'Récap offre : analyse par famille, top produits (N et N-1), comparaison de saison (E26 vs E25), rentabilité et funnel produit.',
     files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
-    layout: ['kpi', 'saisoncompare', 'saison', 'famille', 'produits', 'renta', 'itemfunnel', 'marketplace', 'crosschannel'],
+    layout: ['famille', 'produits', 'saisoncompare', 'saison', 'renta', 'itemfunnel'],
+  },
+  croisees: {
+    icon: '🔀', label: 'Analyses croisées', preset: 'all',
+    intro: 'Croisements : Top Campagnes × Pages d\'atterrissage × Conversion, et acquisition payante par campagne.',
+    files: { required: ['oms'], optional: ['ga', 'ads'] },
+    layout: ['campaignland', 'ads'],
   },
   onsite: {
     icon: '🧭', label: 'Comportement on-site', preset: 'all',
