@@ -44,7 +44,7 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -162,34 +162,6 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     });
     return sum;
   };
-  const sidePack = (rows, map, sessions, spend) => {
-    const k = calc.calcKPIEShop(rows, map, sessions);
-    return { kpi: k, ca: calc.calcOMS(rows, map), mkt: calc.calcMarketplace(rows, map, [], {}), cancel: calc.calcCancellations(rows, map), cos: (spend > 0 && k.ca > 0) ? spend / k.ca : null };
-  };
-  // Calcule un scorecard N + N-1 sur une fenêtre de dates donnée (réutilise tout le moteur OMS).
-  const scorecard = (f, t, cf2, ct2) => {
-    if (!f || !t) return null;
-    const rN = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, f, t, false), omsN.map, dim), omsN.map);
-    const nPack = sidePack(rN, omsN.map, sessWin(gaNf, f, t, rateN), adsSpendWin(adsN, f, t));
-    let n1Pack = null;
-    if (cf2 && ct2) {
-      const baseN1 = omsN1 || omsN, mp1 = omsN1 ? (calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map), omsN1.map) : omsN.map;
-      const rN1 = calc.filterOutstore(calc.filterDim(calc.filterRows(baseN1.rows, mp1, cf2, ct2, false), mp1, dim), mp1);
-      n1Pack = sidePack(rN1, mp1, sessWin(gaN1f, cf2, ct2, rateN1), adsSpendWin(adsN1 || adsN, cf2, ct2));
-    }
-    return { n: nPack, n1: n1Pack, period: { from: f, to: t, cfrom: cf2 || '', cto: ct2 || '' } };
-  };
-  // Cumul mensuel : du 1er du mois (de la dernière date OMS) au dernier jour de données, vs même fenêtre N-1.
-  let cumulMensuel = null;
-  // « Mois en cours » = mois de la fin de période analysée (to), du 1er à cette date. Repli : dernière donnée OMS.
-  const refDate = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
-  if (refDate && /^\d{4}-\d{2}-\d{2}$/.test(refDate)) {
-    const mf = refDate.slice(0, 7) + '-01';
-    cumulMensuel = scorecard(mf, refDate, shiftYear(mf, -1), shiftYear(refDate, -1));
-  }
-  // Cumul saison : 4 dates saisies manuellement (N et N-1).
-  const cumulSaison = (cumFrom && cumTo) ? scorecard(cumFrom, cumTo, cumCfrom, cumCto) : null;
-
   // Funnel e-commerce GA détaillé : Sessions → Panier → Checkout → Achat (taux + déperdition)
   const mkFunnel = (g, kpi) => {
     if (!g) return null;
@@ -520,8 +492,6 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     marketplace: { n: mktN, n1: mktN1 },
-    cumulMensuel,
-    cumulSaison,
     pays,
     saison,
     seasonCompare,
@@ -573,13 +543,65 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-module.exports = { router, buildReport };
+// ── Analyse de saison (page à part, période longue) ────────────────────────
+// OMS uniquement, jeux dédiés ('saisonoms'). Full vs Off price par famille et top
+// produits, N (E26) vs N-1 (E25). Indépendant de l'app centrale (période courte).
+async function buildSaison({ from, to, cfrom, cto, dim }) {
+  dim = dim || 'global';
+  const omsN = await loadDataset('saisonoms', 'N');
+  if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
+  const omsN1 = await loadDataset('saisonoms', 'N1');
+  const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+
+  if (!from || !to) { from = omsN.dateMin; to = omsN.dateMax; }
+  const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
+
+  calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
+  const refMap = ref ? calc.buildRefMap(ref) : {};
+
+  let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, false), omsN.map, dim);
+  rowsN = calc.filterOutstore(rowsN, omsN.map);
+
+  let rowsN1 = null, mapN1 = omsN.map;
+  if (omsN1) {
+    calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map); mapN1 = omsN1.map;
+    rowsN1 = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN1.rows, mapN1, cf, ct, false), mapN1, dim), mapN1);
+  }
+
+  const fullOffFamille = (() => {
+    const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
+    const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;
+    const keys = new Set([...Object.keys(a), ...(b ? Object.keys(b) : [])]);
+    return [...keys].filter(k => k !== '(non référencé)').map(f => ({ fam: f, ca: (a[f] || {}).ca || 0, caFP: (a[f] || {}).caFP || 0, caOP: (a[f] || {}).caOP || 0, qte: (a[f] || {}).qte || 0, caN1: b ? ((b[f] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca);
+  })();
+  const fullOffProduits = (() => {
+    const a = calc.calcFullOffByProduct(rowsN, omsN.map); if (!a) return null;
+    const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByProduct(rowsN1, mapN1) : null;
+    return Object.entries(a).map(([des, v]) => ({ des, ca: v.ca, caFP: v.caFP, caOP: v.caOP, qte: v.qte, caN1: b ? ((b[des] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca).slice(0, 30);
+  })();
+
+  return {
+    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1: !!(rowsN1 && rowsN1.length), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0 },
+    fullOffFamille, fullOffProduits,
+  };
+}
+
+router.get('/saison', requireAuth, async (req, res) => {
+  try {
+    const { from, to, cfrom, cto, dim } = req.query;
+    res.json(await buildSaison({ from, to, cfrom, cto, dim }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = { router, buildReport, buildSaison };

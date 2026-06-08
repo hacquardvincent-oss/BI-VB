@@ -280,12 +280,7 @@ async function refresh(opts = {}, cb = {}) {
   const isoD = d => d.toISOString().slice(0, 10);
   let from = opts.from, to = opts.to;
   if (!from || !to) { const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months); from = isoD(f); to = isoD(t); }
-  // Étend la plage importée pour couvrir le « cumul saison » (sinon les fenêtres cumul manquent de données).
-  if (opts.cumFrom && opts.cumFrom < from) from = opts.cumFrom;
-  if (opts.cumTo && opts.cumTo > to) to = opts.cumTo;
-  let cfrom = opts.cfrom, cto = opts.cto;
-  if (opts.cumCfrom && (!cfrom || opts.cumCfrom < cfrom)) cfrom = opts.cumCfrom;
-  if (opts.cumCto && (!cto || opts.cumCto > cto)) cto = opts.cumCto;
+  const cfrom = opts.cfrom, cto = opts.cto;
   const hasN1 = !!(cfrom && cto);
   if (cb.phase) cb.phase(hasN1 ? `Commandes N (${from}→${to}) et N-1 en parallèle…` : `Commandes N (${from}→${to})…`);
   // N et N-1 récupérées EN PARALLÈLE (≈ 2×), conversion au fil de l'eau (mémoire maîtrisée)
@@ -294,17 +289,21 @@ async function refresh(opts = {}, cb = {}) {
     hasN1 ? collectRange(cfrom, cto, n => cb.count && cb.count('N1', n)) : Promise.resolve(null),
   ]);
   if (cb.phase) cb.phase('Construction des jeux de données…');
+  // Slot optionnel : l'analyse de saison (page à part, période longue) importe dans des
+  // jeux dédiés ('saisonoms'/'saisonret') pour ne pas écraser l'OMS courte de l'app centrale.
+  const omsSrc = opts.slot ? `${opts.slot}oms` : 'oms';
+  const retSrc = opts.slot ? `${opts.slot}ret` : 'ret';
   const dsN = datasetFromRows(OMS_HDRS, N.oms, 'oms', from, to);
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
   // Point de reprise pour la synchro incrémentale : la fenêtre importée + l'instant de l'import.
   dsN.sync = { from, to, since: nowDT() };
-  store.setDataset('oms', 'N', dsN);
-  store.setDataset('ret', 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
+  store.setDataset(omsSrc, 'N', dsN);
+  store.setDataset(retSrc, 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
   let n1 = null;
   if (N1) {
     const dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', cfrom, cto);
-    if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
-    store.setDataset('ret', 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
+    if (dsN1.rows.length) { store.setDataset(omsSrc, 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
+    store.setDataset(retSrc, 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
   }
   return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
 }
