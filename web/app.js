@@ -858,8 +858,15 @@ function renderReport(rep) {
     (A.budgetLimited || []).slice(0, 2).forEach(c => recos.push(`<div class="sig up"><span>💰</span><div><b>${esc(c.campaign)}</b> : rentable (COS ${cos(c.cos)} ≤ cible) mais <b>${pct0(c.lostBudget)} d'IS perdu faute de budget</b> → augmenter le budget pour capter ce CA.</div></div>`));
     (A.lowNew || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🧲</span><div><b>${esc(c.campaign)}</b> : seulement ${pct0(c.newShare)} de CA nouveaux clients pour ${fEur(c.spend)} → majoritairement du réachat, pas de l'acquisition (revoir ciblage/exclusions).</div></div>`));
     const recosHtml = recos.length ? `<div class="bilan-sigs" style="margin-top:10px">${recos.join('')}</div>` : '';
+    // Campagne → famille produit (GA4) : top familles tirées par le payant + campagne principale
+    let catPanel = '';
+    if (A.categories && A.categories.length) {
+      const cr = A.categories.map(c => `<tr><td>${esc(c.category)}</td><td>${fEur(c.revenue)}</td><td title="${esc(c.topCampaign)}">${esc((c.topCampaign || '').slice(0, 30))}</td></tr>`).join('');
+      catPanel = `<div class="note" style="margin:12px 0 6px"><b>Top familles tirées par le payant (GA4)</b> — quelle campagne génère quelle famille</div>
+        <table style="font-size:12px"><thead><tr><th>Famille / catégorie</th><th>CA payant</th><th>Campagne principale</th></tr></thead><tbody>${cr}</tbody></table>`;
+    }
     adsCard = `<div class="card"><h3>📣 Google Ads — Acquisition payante (COS / ROAS)${A.n1 ? ' · N vs N-1' : ''}</h3>
-      <div class="kgrid">${tiles}</div>${crossTable}${recosHtml}
+      <div class="kgrid">${tiles}</div>${crossTable}${recosHtml}${catPanel}
       <div class="note">${legend}</div></div>`;
   }
 
