@@ -609,14 +609,28 @@ function detectDemarque(byDayN, byDayN1, threshold) {
 // un indicateur secondaire (part collection par famille, refs perdues vs N-1).
 // Produits agrégés par désignation (modèle), pour ne pas éclater le CA d'un produit
 // sur ses variantes couleur.
-async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
+async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   dim = dim || 'global';
   const omsN = await loadDataset('saisonoms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
   const omsN1 = await loadDataset('saisonoms', 'N1');
-  // Référentiel : priorité au référentiel de saison déposé (N / N-1), sinon le référentiel global
-  const refN = (await loadDataset('saisonref', 'N')) || (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
-  const refN1 = (await loadDataset('saisonref', 'N1')) || refN;
+  // Référentiel : on croise avec le référentiel du repo (specs) ou le référentiel de saison déposé.
+  // Pour les FAMILLES, on retient la 1re source qui produit un mapping non vide (robustesse :
+  // un saisonref sans colonne « Regroupement » ne casse plus le tableau famille).
+  const saisonRefN = await loadDataset('saisonref', 'N'), saisonRefN1 = await loadDataset('saisonref', 'N1');
+  const repoRef = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  const famMap = ds => { const m = ds ? calc.buildRefMap(ds) : {}; return Object.keys(m).length ? m : null; };
+  const refMap = famMap(saisonRefN) || famMap(repoRef) || {};
+  const refMapN1 = famMap(saisonRefN1) || famMap(repoRef) || refMap;
+  // Mapping Réf. externe → Saison (colonne « Saison » du référentiel) pour le filtre saison
+  const refSaisonMap = ds => {
+    if (!ds || !ds.rows || !ds.hdrs) return {};
+    const mp = (ds.map && Object.keys(ds.map).length) ? ds.map : calc.autoMap(ds.hdrs, calc.REF_ALIASES);
+    const ri = mp.ref_ext, si = mp.saison; if (ri === undefined || si === undefined) return {};
+    const o = {}; ds.rows.forEach(r => { const k = (r[ri] || '').toString().trim(); const v = (r[si] || '').toString().trim().toUpperCase(); if (k && v) o[k] = v; }); return o;
+  };
+  const saisonMap = [saisonRefN, saisonRefN1, repoRef].map(refSaisonMap).find(m => Object.keys(m).length) || {};
+  const saisonsDispo = [...new Set(Object.values(saisonMap))].sort();
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
   const y2N = await loadDataset('saisony2', 'N'), y2N1 = await loadDataset('saisony2', 'N1');
 
@@ -624,17 +638,25 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
   const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
-  const refMap = refN ? calc.buildRefMap(refN) : {};
-  const refMapN1 = refN1 ? calc.buildRefMap(refN1) : refMap;
 
   // Lignes de la fenêtre avant filtre Outstore (pour la réconciliation Instore/Mkt)
   const rawN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, false), omsN.map, dim);
-  const rowsN = calc.filterOutstore(rawN, omsN.map);
+  let rowsN = calc.filterOutstore(rawN, omsN.map);
   let rawN1 = null, rowsN1 = null, mapN1 = omsN.map;
   if (omsN1) {
     calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map); mapN1 = omsN1.map;
     rawN1 = calc.filterDim(calc.filterRows(omsN1.rows, mapN1, cf, ct, false), mapN1, dim);
     rowsN1 = calc.filterOutstore(rawN1, mapN1);
+  }
+  // Filtre « saison pure » : isole les ventes des références de la saison choisie (via le
+  // référentiel). N = saison sélectionnée ; N-1 = saison équivalente an dernier (E26 → E25).
+  const selSaison = (saison || '').toString().trim().toUpperCase();
+  const prevSaison = s => { const mm = s.match(/^(\D*)(\d{2})$/); return mm ? `${mm[1]}${String((parseInt(mm[2], 10) - 1 + 100) % 100).padStart(2, '0')}` : null; };
+  if (selSaison && Object.keys(saisonMap).length) {
+    const keepBy = (rows, map, codes) => { const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt; if (ri === undefined) return rows; return rows.filter(r => codes.has(saisonMap[(r[ri] || '').toString().trim()])); };
+    rowsN = keepBy(rowsN, omsN.map, new Set([selSaison]));
+    const prev = prevSaison(selSaison);
+    if (rowsN1) rowsN1 = keepBy(rowsN1, mapN1, new Set(prev ? [prev] : ['__none__']));
   }
   const hasN1 = !!(rowsN1 && rowsN1.length);
 
@@ -750,7 +772,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
   const demarque = detectDemarque(dailyOff(rowsN, omsN.map), hasN1 ? dailyOff(rowsN1, mapN1) : null, seuil > 1 ? seuil / 100 : seuil);
 
   return {
-    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax },
+    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '' },
     global: {
       ca: kN.ca, caN1: kN1 ? kN1.ca : null,
       commandes: kN.commandes, commandesN1: kN1 ? kN1.commandes : null,
@@ -773,8 +795,8 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
 
 router.get('/saison', requireAuth, async (req, res) => {
   try {
-    const { from, to, cfrom, cto, dim, demSeuil } = req.query;
-    res.json(await buildSaison({ from, to, cfrom, cto, dim, demSeuil }));
+    const { from, to, cfrom, cto, dim, demSeuil, saison } = req.query;
+    res.json(await buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
