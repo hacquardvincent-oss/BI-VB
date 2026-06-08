@@ -172,20 +172,26 @@ function render(rep) {
   </div>` : '';
 
   // 2 · Tableaux famille (Global / Full / Off) — clic sur une famille = volet détail produits
+  const hasStock = !!m.hasStock, hasRet = !!m.hasRet;
+  const stCls = v => v == null ? '' : (v >= 0.7 ? 'up' : v < 0.3 ? 'dn' : '');
   const famMetric = metric => {
     const val = f => metric === 'full' ? f.caFP : metric === 'off' ? (f.caOff || 0) : f.ca;
     const valN1 = f => metric === 'full' ? f.caFPN1 : metric === 'off' ? (f.caOffN1 || 0) : f.caN1;
     const fams = rep.familles.filter(f => val(f) > 0).sort((a, b) => val(b) - val(a));
     const total = fams.reduce((s, f) => s + val(f), 0);
+    const extraH = (hasStock ? '<th title="Sell-through = vendu ÷ (vendu + stock)">Sell-through</th>' : '') + (hasRet ? '<th>Taux retour</th>' : '');
+    const ncol = 5 + (hasStock ? 1 : 0) + (hasRet ? 1 : 0);
     const rows = fams.map(f => `<tr class="fam-row" data-fam="${esc(f.fam)}" style="cursor:pointer">
       <td><span class="fam-caret na" style="font-size:10px">▸</span> ${esc(f.fam)}</td>
       <td>${fEur(val(f))}</td>
       <td>${valN1(f) ? delta(val(f), valN1(f)) : '<span class="na">nouveau</span>'}</td>
       <td>${total > 0 ? fPct(val(f) / total) : '—'}</td>
       <td>${fInt(f.qte)}</td>
+      ${hasStock ? `<td class="${stCls(f.sellThrough)}">${f.sellThrough != null ? fPct(f.sellThrough) : '—'}</td>` : ''}
+      ${hasRet ? `<td class="${f.tauxRetour > 0.25 ? 'dn' : ''}">${f.tauxRetour != null ? fPct(f.tauxRetour) : '—'}</td>` : ''}
     </tr>
-    <tr class="fam-detail hidden"><td colspan="5" style="background:var(--s2);padding:12px"></td></tr>`).join('') || '<tr><td colspan="5" class="na">—</td></tr>';
-    return `<table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids</th><th>Qté</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <tr class="fam-detail hidden"><td colspan="${ncol}" style="background:var(--s2);padding:12px"></td></tr>`).join('') || `<tr><td colspan="${ncol}" class="na">—</td></tr>`;
+    return `<table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids</th><th>Qté</th>${extraH}</tr></thead><tbody>${rows}</tbody></table>`;
   };
   const famTablesCard = `<div class="card">
     <h3>👗 CA par famille — clique une famille pour le détail produits</h3>
@@ -318,6 +324,11 @@ function familleDetailHTML(fam) {
   const off = f.caOff != null ? f.caOff : (f.ca - (f.caFP || 0));
   const offN1 = f.caOffN1 != null ? f.caOffN1 : ((f.caN1 || 0) - (f.caFPN1 || 0));
   const tile = (label, val, d) => `<div class="kc"><div class="l">${label}</div><div class="v">${val}</div>${d ? `<div class="note" style="margin-top:2px">${d}</div>` : ''}</div>`;
+  const m = LAST_REP.meta || {};
+  const hasStock = !!m.hasStock, hasRet = !!m.hasRet;
+  const stCls = v => v == null ? '' : (v >= 0.7 ? 'up' : v < 0.3 ? 'dn' : '');
+  const extraH = (hasStock ? '<th>Stock</th><th>Sell-thr.</th>' : '') + (hasRet ? '<th>Retour</th>' : '');
+  const ncol = 6 + (hasStock ? 2 : 0) + (hasRet ? 1 : 0);
   const prodR = (f.produits || []).map(p => {
     const pOff = p.ca - (p.caFP || 0);
     return `<tr>
@@ -327,8 +338,10 @@ function familleDetailHTML(fam) {
       <td>${fEur(p.caFP || 0)}</td>
       <td>${pOff > 0 ? fEur(pOff) : '—'}</td>
       <td>${fInt(p.qte)}</td>
+      ${hasStock ? `<td>${fInt(p.stock)}</td><td class="${stCls(p.sellThrough)}">${p.sellThrough != null ? fPct(p.sellThrough) : '—'}</td>` : ''}
+      ${hasRet ? `<td class="${p.tauxRetour > 0.25 ? 'dn' : ''}">${p.tauxRetour != null ? fPct(p.tauxRetour) : '—'}</td>` : ''}
     </tr>`;
-  }).join('') || '<tr><td colspan="6" class="na">Aucun produit.</td></tr>';
+  }).join('') || `<tr><td colspan="${ncol}" class="na">Aucun produit.</td></tr>`;
   const perdusR = (f.perdus || []).map(p => `<tr>
     <td title="${esc(p.des)}">${esc((p.des || '').slice(0, 44))}</td>
     <td>${fEur(p.caN1)}</td>
@@ -344,9 +357,11 @@ function familleDetailHTML(fam) {
       ${tile('CA global', fEur(f.ca), f.caN1 ? `${delta(f.ca, f.caN1)} vs N-1` : '')}
       ${tile('Full price', fEur(f.caFP || 0), f.caFPN1 ? delta(f.caFP, f.caFPN1) : '')}
       ${tile('Off price', fEur(off), offN1 ? delta(off, offN1) : '')}
+      ${hasStock ? tile('Sell-through', f.sellThrough != null ? fPct(f.sellThrough) : '—', `stock ${fInt(f.stock)} · couv. ${f.couvSem != null ? f.couvSem.toFixed(0) + ' sem' : '—'}`) : ''}
+      ${hasRet ? tile('CA net (− retours)', fEur(f.caNet), f.tauxRetour != null ? `taux retour ${fPct(f.tauxRetour)}` : '') : ''}
     </div>
     <h3 style="font-size:13px">Produits de la famille (${fInt((f.produits || []).length)})</h3>
-    <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>Qté</th></tr></thead><tbody>${prodR}</tbody></table>
+    <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>Qté</th>${extraH}</tr></thead><tbody>${prodR}</tbody></table>
     ${perdusBlock}`;
 }
 
@@ -379,6 +394,10 @@ wireUpload('fileY2N', 'saisony2', 'N', 'pillY2N', 'Y2 E26 (N)');
 wireUpload('fileY2N1', 'saisony2', 'N1', 'pillY2N1', 'Y2 E25 (N-1)');
 wireUpload('fileRefN', 'saisonref', 'N', 'pillRefN', 'Référentiel E26 (N)');
 wireUpload('fileRefN1', 'saisonref', 'N1', 'pillRefN1', 'Référentiel E25 (N-1)');
+wireUpload('fileStockN', 'saisonstock', 'N', 'pillStockN', 'Stock E26 (N)');
+wireUpload('fileStockN1', 'saisonstock', 'N1', 'pillStockN1', 'Stock E25 (N-1)');
+wireUpload('fileRetN', 'saisonret', 'N', 'pillRetN', 'Retours E26 (N)');
+wireUpload('fileRetN1', 'saisonret', 'N1', 'pillRetN1', 'Retours E25 (N-1)');
 
 // Repli/dépli de la section import API
 document.getElementById('apiToggle').addEventListener('click', () => {
