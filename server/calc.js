@@ -672,6 +672,37 @@ function calcCancellations(rows, map) {
   };
 }
 
+// Détail des annulations : entrepôt (WEBSTORE) vs magasin (ship-from-store),
+// + top magasins qui annulent + top produits annulés (qté & CA estimé).
+function calcCancellationsDetail(rows, map) {
+  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type;
+  if (qni === undefined) return null;
+  const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
+  const byStore = {}, byProd = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
+    if (nonLivre <= 0) return;
+    const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
+    const caAnn = unit * nonLivre;
+    const mag = (r[mi] || '').trim();
+    const isEnt = mag.toLowerCase().includes('webstore');
+    const bucket = isEnt ? entrepot : magasin;
+    bucket.qte += nonLivre; bucket.ca += caAnn;
+    if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
+    const des = (di !== undefined ? (r[di] || '').trim() : '') || '(sans désignation)';
+    const ep = byProd[des] || (byProd[des] = { des, qte: 0, ca: 0 }); ep.qte += nonLivre; ep.ca += caAnn;
+  });
+  const r2 = x => Math.round(x * 100) / 100;
+  return {
+    entrepot: { qte: entrepot.qte, ca: r2(entrepot.ca) },
+    magasin: { qte: magasin.qte, ca: r2(magasin.ca) },
+    topStores: Object.values(byStore).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 8),
+    topProduits: Object.values(byProd).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 10),
+  };
+}
+
 // ── Retours (export retours wshop) ──────────────────────────────────────────
 function calcReturns(rows, map) {
   const mi = map.montant, qi = map.qte, ri = map.raison, pi = map.pays, di = map.dest, nri = map.numret;
@@ -956,7 +987,7 @@ module.exports = {
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
-  filterRows, calcOMS, calcKPIEShop, calcMarketplace,
+  filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, buildTopProdMap, calcByCountry, dateBounds,

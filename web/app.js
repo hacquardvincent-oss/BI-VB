@@ -589,7 +589,18 @@ function renderReport(rep) {
       ['Taux annulation (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
       ['CA annulé (estimé)', fEur(cx.caAnnuleEstime), cx.caAnnuleEstime, cx1.caAnnuleEstime],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div><div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (rupture, annulation, contrôle). Source OMS (commandé − expédié). CA annulé = estimation au prorata du prix payé. ⚠️ Couleur inversée : une <b>hausse</b> des annulations est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
+    // Détail : entrepôt vs magasin + top magasins qui annulent + top produits annulés
+    const d = rep.cancellations && rep.cancellations.detail;
+    let detailHtml = '';
+    if (d) {
+      const split = `<div class="kgrid" style="margin-top:8px">
+        <div class="kc"><div class="l">🏭 Entrepôt (WEBSTORE)</div><div class="v">${fInt(d.entrepot.qte)} pièces</div><div style="font-size:11px">${fEur(d.entrepot.ca)} CA annulé</div></div>
+        <div class="kc"><div class="l">🏬 Magasin (ship-from-store)</div><div class="v">${fInt(d.magasin.qte)} pièces</div><div style="font-size:11px">${fEur(d.magasin.ca)} CA annulé</div></div></div>`;
+      const stores = (d.topStores || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top magasins qui annulent</b></div><table style="font-size:11px"><thead><tr><th>Magasin</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topStores.map(s => `<tr><td>${esc(s.mag)}</td><td>${fInt(s.qte)}</td><td>${fEur(s.ca)}</td></tr>`).join('')}</tbody></table>` : '';
+      const prods = (d.topProduits || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top produits annulés</b></div><table style="font-size:11px"><thead><tr><th>Produit</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topProduits.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('')}</tbody></table>` : '';
+      detailHtml = split + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>`;
+    }
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (rupture, annulation, contrôle). Source OMS (commandé − expédié). CA annulé = estimation au prorata du prix payé. ⚠️ Couleur inversée : une <b>hausse</b> des annulations est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
 
   // Retours
