@@ -11,13 +11,33 @@ const { requireAuth } = require('./auth');
 const calc = require('./calc');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const UPLOAD_MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '300', 10) || 300;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_MB * 1024 * 1024 } });
+// Wrapper : transforme les erreurs multer (taille, etc.) en réponse JSON propre
+// (sinon le flux est coupé côté serveur → « Failed to fetch » côté navigateur).
+function uploadSingle(req, res, next) {
+  upload.single('file')(req, res, err => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? `Fichier trop volumineux (max ${UPLOAD_MAX_MB} Mo). Augmente UPLOAD_MAX_MB ou découpe le fichier.` : err.message;
+      return res.status(400).json({ error: msg });
+    }
+    next();
+  });
+}
 
 const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl', 'saisonoms'];
 const PERIODS = ['N', 'N1'];
 const ANONYMIZE = new Set(['oms', 'ret', 'saisonoms']); // sources contenant du PII client
 // Sources de type OMS (mêmes colonnes/alias, index ref. externe, bornes de dates)
 const OMS_LIKE = new Set(['oms', 'saisonoms']);
+// Colonnes OMS canoniques conservées à l'import projeté (clé = alias OMS_ALIASES).
+// Tout le reste (dont les colonnes client/PII) est écarté → mémoire et stockage réduits.
+const OMS_CANON = [
+  ['Date', 'date'], ['Heure', 'heure'], ['Prix de vente paye', 'prix'], ['Pays livraison', 'pays'],
+  ['NOM MAGASIN', 'mag'], ['Type Paiement', 'type'], ['Numeros', 'num'], ['Designation produit', 'des'],
+  ['quantites commandees', 'qte'], ['Quantité non livré', 'qte_non_livre'], ['Ref. externe', 'ref_ext'],
+  ['Lieu de prise de commande', 'lieu'], ['Prix Vente', 'pv'], ['Prix Vente Remise', 'pv_remise'],
+];
 
 // Colonnes PII à NE PAS conserver (privacy by design — cf. ADR-005)
 const PII_DENY = [
@@ -111,13 +131,57 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy) {
   return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
 }
 
-router.post('/:source/:period', requireAuth, upload.single('file'), (req, res) => {
+// Import OMS « projeté » : ne conserve que les colonnes OMS canoniques (OMS_CANON).
+// Conçu pour les gros exports (saison) : projection ligne à ligne → empreinte mémoire
+// réduite (pas de copie pleine largeur ni d'étape anonymize), et PII naturellement écartées.
+function ingestOmsProjected(source, period, buffer, filename, uploadedBy) {
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  const outHdrs = OMS_CANON.map(c => c[0]);
+  let outRows;
+  if (ext === 'xlsx' || ext === 'xls') {
+    const t = parseBuffer(buffer, filename, source); // {hdrs, rows}
+    if (!t.hdrs.length) throw new Error('Fichier vide ou illisible');
+    const srcMap = calc.autoMap(t.hdrs, calc.OMS_ALIASES);
+    const idx = OMS_CANON.map(([, k]) => srcMap[k]);
+    outRows = t.rows.map(r => idx.map(j => (j === undefined || r[j] == null) ? '' : String(r[j])));
+  } else {
+    const text = buffer.toString('latin1').replace(/^﻿/, '');
+    const lines = text.split(/\r?\n/);
+    let hi = -1;
+    for (let i = 0; i < lines.length; i++) { if (lines[i] && lines[i].trim()) { hi = i; break; } }
+    if (hi < 0) throw new Error('Fichier vide ou illisible');
+    let sep = ','; for (const s of ['\t', ';', ',']) { if (lines[hi].includes(s)) { sep = s; break; } }
+    const split = calc.makeSplitLine ? calc.makeSplitLine(sep) : (l => l.split(sep));
+    const srcHdrs = split(lines[hi]).map(h => (h == null ? '' : String(h)).replace(/\s+/g, ' ').trim());
+    const srcMap = calc.autoMap(srcHdrs, calc.OMS_ALIASES);
+    const idx = OMS_CANON.map(([, k]) => srcMap[k]);
+    outRows = [];
+    for (let i = hi + 1; i < lines.length; i++) {
+      if (!lines[i].length) continue;
+      const r = split(lines[i]);
+      outRows.push(idx.map(j => (j === undefined || r[j] == null) ? '' : String(r[j])));
+    }
+  }
+  const map = calc.autoMap(outHdrs, calc.OMS_ALIASES);
+  calc.ensureRefExtIdx(outHdrs, map);
+  const { min, max } = calc.dateBounds(outRows, map);
+  store.setDataset(source, period, {
+    hdrs: outHdrs, rows: outRows, map, filename,
+    row_count: outRows.length, date_min: min, date_max: max,
+    uploaded_by: uploadedBy || 'import', uploaded_at: new Date().toISOString(),
+  });
+  return { rows: outRows.length, columns: outHdrs.length, dateMin: min, dateMax: max, anonymized: ['colonnes non-OMS / client écartées'] };
+}
+
+router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
   const { source, period } = req.params;
   if (!SOURCES.includes(source) || !PERIODS.includes(period))
     return res.status(400).json({ error: 'Source ou période invalide' });
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
   try {
-    const r = ingestBuffer(source, period, req.file.buffer, req.file.originalname, req.session.username);
+    // OMS de saison (gros volumes) : import projeté (mémoire réduite, PII écartées).
+    const fn = source === 'saisonoms' ? ingestOmsProjected : ingestBuffer;
+    const r = fn(source, period, req.file.buffer, req.file.originalname, req.session.username);
     res.json({ source, period, filename: req.file.originalname, ...r });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -131,4 +195,4 @@ router.delete('/:source/:period', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router, ingestBuffer };
+module.exports = { router, ingestBuffer, ingestOmsProjected };
