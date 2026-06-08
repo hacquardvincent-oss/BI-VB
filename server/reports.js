@@ -133,10 +133,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   const adsCalcN = adsN ? calc.calcAds(adsN.rows, adsN.map) : null;
   const adsCalcN1 = adsN1 ? calc.calcAds(adsN1.rows, adsN1.map) : null;
   const roasOf = (cost, ca) => (cost > 0 && ca != null) ? ca / cost : null;
+  const cosOf = (cost, ca) => (ca > 0 && cost != null) ? cost / ca : null; // COS = dépense / CA (%)
   const cacOf = (cost, cmd) => (cost > 0 && cmd > 0) ? cost / cmd : null;
   const ads = adsCalcN ? {
     n: adsCalcN, n1: adsCalcN1,
     roas: { n: roasOf(adsCalcN.cost, kpiEShopN.ca), n1: adsCalcN1 && kpiEShopN1 ? roasOf(adsCalcN1.cost, kpiEShopN1.ca) : null },
+    cos: { n: cosOf(adsCalcN.cost, kpiEShopN.ca), n1: adsCalcN1 && kpiEShopN1 ? cosOf(adsCalcN1.cost, kpiEShopN1.ca) : null },
     cac: { n: cacOf(adsCalcN.cost, kpiEShopN.commandes), n1: adsCalcN1 && kpiEShopN1 ? cacOf(adsCalcN1.cost, kpiEShopN1.commandes) : null },
   } : null;
 
@@ -228,10 +230,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   }
   // Campagnes (UTM) N vs N-1 — agrégées par campagne après filtre pays
   const campN = store.getDataset('gacampaigns', 'N'), campN1 = store.getDataset('gacampaigns', 'N1');
-  let campaigns = null, lostCampaigns = null, campaignsTotals = null;
+  let campaigns = null, lostCampaigns = null, campaignsTotals = null, gaCampAggN = null, gaCampAggN1 = null;
   if (campN && campN.rows) {
     const aggCamp = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const e = m[x.campaign] || (m[x.campaign] = { sessions: 0, purchases: 0, revenue: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; e.revenue += x.revenue || 0; }); return m; };
     const aN = aggCamp(campN.rows), aN1 = aggCamp(campN1 && campN1.rows);
+    gaCampAggN = aN; gaCampAggN1 = aN1;
     campaigns = Object.entries(aN).map(([campaign, v]) => {
       const p = aN1[campaign] || {};
       return {
@@ -251,6 +254,28 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
     lostCampaigns = Object.entries(aN1).filter(([c, v]) => v.sessions >= 100 && (!aN[c] || aN[c].sessions < v.sessions * 0.2))
       .map(([campaign, v]) => ({ campaign, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[campaign] || {}).sessions || 0 }))
       .sort((a, b) => b.revenueN1 - a.revenueN1).slice(0, 10);
+  }
+  // ── Acquisition payante : croisement Ads (dépense) × GA4 (sessions/conv/CA attribué) par campagne ──
+  if (ads && adsCalcN && adsCalcN.byCampaign) {
+    const nrm = s => (s || '').toString().trim().toLowerCase();
+    const gaIdx = m => { const o = {}; Object.entries(m || {}).forEach(([k, v]) => { o[nrm(k)] = v; }); return o; };
+    const gN = gaIdx(gaCampAggN), adsN1Map = {};
+    (adsCalcN1 && adsCalcN1.byCampaign || []).forEach(c => { adsN1Map[nrm(c.campaign)] = c; });
+    const rows = adsCalcN.byCampaign.filter(c => c.cost > 0).map(c => {
+      const g = gN[nrm(c.campaign)] || {}, a1 = adsN1Map[nrm(c.campaign)] || {};
+      const caGA = g.revenue || 0, sessions = g.sessions || 0, purchases = g.purchases || 0;
+      return {
+        campaign: c.campaign, spend: c.cost, spendN1: a1.cost || 0, clicks: c.clicks,
+        sessions, purchases, convRate: sessions > 0 ? purchases / sessions : null,
+        caGA, roas: caGA > 0 ? caGA / c.cost : null, cos: caGA > 0 ? c.cost / caGA : null,
+        cpa: purchases > 0 ? c.cost / purchases : (c.conversions > 0 ? c.cost / c.conversions : null),
+      };
+    }).sort((a, b) => b.spend - a.spend);
+    const sig = rows.filter(r => r.spend >= 1);
+    const flopScore = r => r.caGA > 0 ? r.cos : Infinity; // pas de CA → pire COS
+    ads.campaigns = rows;
+    ads.top = sig.filter(r => r.roas != null).sort((a, b) => b.roas - a.roas).slice(0, 5);
+    ads.flop = [...sig].sort((a, b) => flopScore(b) - flopScore(a)).slice(0, 5);
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');

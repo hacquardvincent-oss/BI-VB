@@ -815,20 +815,41 @@ function renderReport(rep) {
   if (rep.ads && rep.ads.n) {
     const A = rep.ads, a = A.n, a1 = A.n1 || {};
     const roas = v => (v == null ? '—' : v.toFixed(2) + '×');
+    const cos = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
     const kc = (l, v, d) => `<div class="kc"><div class="l">${l}</div><div class="v">${v}</div>${d ? `<div style="font-size:11px">${d}</div>` : ''}</div>`;
     const tiles = [
       kc('Dépense Google Ads', fEur(a.cost), a1.cost ? delta(a.cost, a1.cost) : ''),
       kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
+      kc('COS (dépense ÷ CA EShop)', cos(A.cos && A.cos.n), A.cos && A.cos.n1 != null ? 'N-1 ' + cos(A.cos.n1) : ''),
       kc('Coût / commande', A.cac && A.cac.n != null ? fEur(A.cac.n) : '—', A.cac && A.cac.n1 != null ? 'N-1 ' + fEur(A.cac.n1) : ''),
       kc('Clics', fInt(a.clicks), a1.clicks ? delta(a.clicks, a1.clicks) : ''),
       kc('Conversions Ads', fInt(a.conversions), a1.conversions ? delta(a.conversions, a1.conversions) : ''),
-      kc('CPC moyen', a.cpc != null ? f2(a.cpc) : '—', a.ctr != null ? 'CTR ' + fPct(a.ctr) : ''),
     ].join('');
-    const rows = (a.byCampaign || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
-    adsCard = `<div class="card"><h3>📣 Google Ads — Coût &amp; ROAS${A.n1 ? ' · N vs N-1' : ''}</h3>
-      <div class="kgrid">${tiles}</div>
-      <table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Clics</th><th>CTR</th><th>CPC</th><th>Conv.</th><th>CPA</th><th>ROAS Ads</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="note">ROAS = CA EShop (hors marketplaces) ÷ dépense Google Ads. ROAS Ads (par campagne) = valeur de conversion Google Ads ÷ dépense. Coût/commande = dépense ÷ commandes EShop. Import manuel — pense à charger l'export de la même période que N (et N-1).</div></div>`;
+    // Tableau croisé Ads × GA4 (CA attribué, conv, ROAS, COS par campagne) — Top/Flop surlignés.
+    const cc = A.campaigns || [];
+    const topSet = new Set((A.top || []).map(c => c.campaign)), flopSet = new Set((A.flop || []).map(c => c.campaign));
+    let crossTable, legend;
+    if (cc.length) {
+      const rows = cc.map(c => {
+        const flag = topSet.has(c.campaign) ? '🟢 ' : (flopSet.has(c.campaign) ? '🔴 ' : '');
+        const bg = topSet.has(c.campaign) ? 'background:rgba(80,200,120,.12)' : (flopSet.has(c.campaign) ? 'background:rgba(239,68,68,.12)' : '');
+        return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.caGA <= 0 || (c.cos != null && c.cos > 0.3) ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td></tr>`;
+      }).join('');
+      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Δ N-1</th><th>Sessions</th><th>Conv.</th><th>CA (GA4)</th><th>ROAS</th><th>COS</th><th>CPA</th></tr></thead><tbody>${rows}</tbody></table>`;
+      legend = 'CA & conversions = attribution GA4 (last-click). ROAS/COS par campagne = CA GA4 ÷ dépense. COS global = dépense ÷ CA EShop (WSHOP). 🟢 = top ROAS (scaler) · 🔴 = COS élevé / sans CA (optimiser/couper).';
+    } else {
+      const rows = (a.byCampaign || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
+      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Clics</th><th>CTR</th><th>CPC</th><th>Conv.</th><th>CPA</th><th>ROAS Ads</th></tr></thead><tbody>${rows}</tbody></table>`;
+      legend = 'Charge/actualise GA4 pour croiser dépense × CA attribué × conversions par campagne (ROAS/COS par campagne).';
+    }
+    // Recommandations auto Top/Flop
+    const recos = [];
+    (A.top || []).slice(0, 2).forEach(c => recos.push(`<div class="sig up"><span>🟢</span><div><b>${esc(c.campaign)}</b> : ROAS ${roas(c.roas)} (COS ${cos(c.cos)}) → opportunité de scale.</div></div>`));
+    (A.flop || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🔴</span><div><b>${esc(c.campaign)}</b> : ${c.caGA > 0 ? 'COS ' + cos(c.cos) : 'aucun CA attribué'} pour ${fEur(c.spend)} dépensés → à optimiser/couper.</div></div>`));
+    const recosHtml = recos.length ? `<div class="bilan-sigs" style="margin-top:10px">${recos.join('')}</div>` : '';
+    adsCard = `<div class="card"><h3>📣 Google Ads — Acquisition payante (COS / ROAS)${A.n1 ? ' · N vs N-1' : ''}</h3>
+      <div class="kgrid">${tiles}</div>${crossTable}${recosHtml}
+      <div class="note">${legend}</div></div>`;
   }
 
   // Cartes nommées + layout adapté à la cadence
