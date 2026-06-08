@@ -394,7 +394,8 @@ function reportQuery() {
     ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
     : `preset=all&dim=${CURRENT_DIM}`;
   const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
-  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}`;
+  const cum = `&cumFrom=${cv('cumFrom')}&cumTo=${cv('cumTo')}&cumCfrom=${cv('cumCfrom')}&cumCto=${cv('cumCto')}`;
+  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}${cum}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -961,33 +962,52 @@ function bilanSignals(rep) {
   }
   return out;
 }
+// Scorecard réutilisable (Bilan période / Cumul mensuel / Cumul saison).
+// pack = { n: {kpi, ca, mkt, cancel, cos}, n1: {...} } ; showDetails = sous-blocs détaillés.
+function renderScorecard(title, pack, showDetails) {
+  if (!pack || !pack.n || !pack.n.kpi) return '';
+  const n = pack.n, n1 = pack.n1 || {};
+  const k = n.kpi, k1 = n1.kpi || {};
+  const ann = n.cancel ? n.cancel.tauxPieces : null, ann1 = n1.cancel ? n1.cancel.tauxPieces : null;
+  const cosD = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
+  const tiles = [
+    bilanTile('CA Global EShop', fEur(k.ca), k.ca, k1.ca),
+    bilanTile('Commandes', fInt(k.commandes), k.commandes, k1.commandes),
+    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1.tt),
+    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
+    bilanTile('Taux d\'annulation', ann != null ? fPct(ann) : '—', ann, ann1, true),
+    bilanTile('Sessions', fInt(k.sessions), k.sessions, k1.sessions),
+    bilanTile('COS', cosD(n.cos), n.cos, n1.cos, true),
+  ].join('');
+  let details = '';
+  if (showDetails) {
+    const ca = n.ca || {}, ca1 = n1.ca || {}, mk = n.mkt || {}, mk1 = n1.mkt || {};
+    const t = (l, v, v1) => bilanTile(l, fEur(v), v, v1);
+    const block = (label, rows) => rows ? `<div><div class="note" style="margin:0 0 4px"><b>${label}</b></div><div class="kgrid">${rows}</div></div>` : '';
+    const intl = block('🌍 International', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt));
+    const omni = block('🏬 Omnicanal', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS));
+    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP)) : '';
+    let mp = '';
+    if (mk.total > 0) {
+      const mr = [['CA Marketplace', mk.total, mk1.total], ['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]].filter(([, v]) => v > 0).map(([l, v, v1]) => t(l, v, v1)).join('');
+      mp = block('🛍️ Marketplace', mr);
+    }
+    details = `<div class="grid cols2" style="margin-top:10px">${intl}${omni}${dem}${mp}</div>`;
+  }
+  return `<div class="section-head" style="margin-top:12px">${title}</div><div class="kgrid">${tiles}</div>${details}`;
+}
 function buildBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
   const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
-  const cn = rep.cancellations && rep.cancellations.n, cn1 = rep.cancellations && rep.cancellations.n1;
-  const tauxAnn = cn ? cn.tauxPieces : null, tauxAnnN1 = cn1 ? cn1.tauxPieces : null;
-  // Ordre recette : CA Global (EShop hors MP) · Commandes · TT · Sessions · Panier moyen · Annulations
-  const tiles = [
-    bilanTile('CA Global (hors MP)', fEur(k.ca), k.ca, k1 && k1.ca),
-    bilanTile('Commandes', fInt(k.commandes), k.commandes, k1 && k1.commandes),
-    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1 && k1.tt),
-    bilanTile('Sessions', fInt(k.sessions), k.sessions, k1 && k1.sessions),
-    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1 && k1.pm),
-    bilanTile('Taux d\'annulation', tauxAnn != null ? fPct(tauxAnn) : '—', tauxAnn, tauxAnnN1, true),
-  ];
-  // KPI Marketplace : CA total + détail par enseigne, vs N-1
-  const mk = rep.marketplace && rep.marketplace.n, mk1 = (rep.marketplace && rep.marketplace.n1) || {};
-  let mkHtml = '';
-  if (mk && mk.total > 0) {
-    const mkT = [
-      ['CA Marketplace', mk.total, mk1.total],
-      ['Galeries Lafayette', mk.glTotal, mk1.glTotal],
-      ['Printemps', mk.printemps, mk1.printemps],
-      ['Place des Tendances', mk.pdt, mk1.pdt],
-      ['Lulli', mk.lulli, mk1.lulli],
-    ].filter(([, v]) => v > 0).map(([l, n, n1]) => bilanTile(l, fEur(n), n, n1)).join('');
-    mkHtml = `<div class="section-head" style="margin-top:10px">🏬 Marketplace</div><div class="kgrid">${mkT}</div>`;
-  }
+  const cosPack = rep.ads && rep.ads.cos ? rep.ads.cos : {};
+  const mainPack = {
+    n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null },
+    n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null } : null,
+  };
+  const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
+  const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true);
+  const mensuelCard = rep.cumulMensuel ? renderScorecard(`📅 Cumul mensuel${per(rep.cumulMensuel.period)}`, rep.cumulMensuel, false) : '';
+  const saisonCard = rep.cumulSaison ? renderScorecard(`📅 Cumul saison${per(rep.cumulSaison.period)}`, rep.cumulSaison, false) : '';
   const sigs = bilanSignals(rep);
   const sigHtml = sigs.length
     ? `<div class="bilan-sigs">${sigs.slice(0, 6).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
@@ -1002,9 +1022,8 @@ function buildBilan(rep) {
   const cs = rep.meta && rep.meta.consent;
   let consentNote = '';
   if (cs && cs.n) consentNote = `<div class="note" style="margin-top:6px">🍪 Sessions ajustées du consentement — N : ${Math.round(cs.n * 100)}% d'acceptation (${fInt(cs.sessionsRawN)} GA → <b>${fInt(k.sessions)}</b> réelles)${cs.n1 && cs.sessionsRawN1 != null ? ` · N-1 : ${Math.round(cs.n1 * 100)}% (${fInt(cs.sessionsRawN1)} → ${fInt(k1 && k1.sessions)})` : ''}. Le taux de transfo est recalculé sur cette base.</div>`;
-  return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
-    <div class="kgrid">${tiles.join('')}</div>
-    ${mkHtml}${consentNote}${sigHtml}${ia}</div>`;
+  return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
+    ${mainCard}${mensuelCard}${saisonCard}${consentNote}${sigHtml}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
@@ -1593,8 +1612,8 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
-// Consentement cookies (sessions) + cible COS (acquisition) : recharge le rapport au changement
-['consentN', 'consentN1', 'cosTarget'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
+// Consentement cookies (sessions) + cible COS + cumul saison : recharge le rapport au changement
+['consentN', 'consentN1', 'cosTarget', 'cumFrom', 'cumTo', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

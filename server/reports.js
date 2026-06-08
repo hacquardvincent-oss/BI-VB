@@ -44,7 +44,7 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -148,6 +148,45 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     cos: { n: cosOf(adsCalcN.cost, kpiEShopN.ca), n1: adsCalcN1 && kpiEShopN1 ? cosOf(adsCalcN1.cost, kpiEShopN1.ca) : null },
     cac: { n: cacOf(adsCalcN.cost, kpiEShopN.commandes), n1: adsCalcN1 && kpiEShopN1 ? cacOf(adsCalcN1.cost, kpiEShopN1.commandes) : null },
   } : null;
+
+  // ── Scorecards multi-fenêtres (Bilan période / Cumul mensuel / Cumul saison) ──
+  // Sessions ajustées du consentement + COS via dépense Ads filtrée sur la fenêtre.
+  const sessWin = (ga, f, t, rate) => { let s = calc.getSessionsForPeriod(ga, f, t, false); if (s != null && rate) s = Math.round(s / rate); return s; };
+  const adsSpendWin = (ds, f, t) => {
+    if (!ds || !ds.rows || !ds.map || ds.map.cost === undefined) return 0;
+    const di = ds.map.date, ci = ds.map.cost; let sum = 0;
+    ds.rows.forEach(r => {
+      if (di !== undefined && f && t) { const d = String(r[di] || '').slice(0, 10); if (d && (d < f || d > t)) return; }
+      sum += parseFloat(String(r[ci] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+    });
+    return sum;
+  };
+  const sidePack = (rows, map, sessions, spend) => {
+    const k = calc.calcKPIEShop(rows, map, sessions);
+    return { kpi: k, ca: calc.calcOMS(rows, map), mkt: calc.calcMarketplace(rows, map, [], {}), cancel: calc.calcCancellations(rows, map), cos: (spend > 0 && k.ca > 0) ? spend / k.ca : null };
+  };
+  // Calcule un scorecard N + N-1 sur une fenêtre de dates donnée (réutilise tout le moteur OMS).
+  const scorecard = (f, t, cf2, ct2) => {
+    if (!f || !t) return null;
+    const rN = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, f, t, false), omsN.map, dim), omsN.map);
+    const nPack = sidePack(rN, omsN.map, sessWin(gaNf, f, t, rateN), adsSpendWin(adsN, f, t));
+    let n1Pack = null;
+    if (cf2 && ct2) {
+      const baseN1 = omsN1 || omsN, mp1 = omsN1 ? (calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map), omsN1.map) : omsN.map;
+      const rN1 = calc.filterOutstore(calc.filterDim(calc.filterRows(baseN1.rows, mp1, cf2, ct2, false), mp1, dim), mp1);
+      n1Pack = sidePack(rN1, mp1, sessWin(gaN1f, cf2, ct2, rateN1), adsSpendWin(adsN1 || adsN, cf2, ct2));
+    }
+    return { n: nPack, n1: n1Pack, period: { from: f, to: t, cfrom: cf2 || '', cto: ct2 || '' } };
+  };
+  // Cumul mensuel : du 1er du mois (de la dernière date OMS) au dernier jour de données, vs même fenêtre N-1.
+  let cumulMensuel = null;
+  const refDate = omsN.dateMax;
+  if (refDate && /^\d{4}-\d{2}-\d{2}$/.test(refDate)) {
+    const mf = refDate.slice(0, 7) + '-01';
+    cumulMensuel = scorecard(mf, refDate, shiftYear(mf, -1), shiftYear(refDate, -1));
+  }
+  // Cumul saison : 4 dates saisies manuellement (N et N-1).
+  const cumulSaison = (cumFrom && cumTo) ? scorecard(cumFrom, cumTo, cumCfrom, cumCto) : null;
 
   // Funnel e-commerce GA détaillé : Sessions → Panier → Checkout → Achat (taux + déperdition)
   const mkFunnel = (g, kpi) => {
@@ -478,6 +517,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     marketplace: { n: mktN, n1: mktN1 },
+    cumulMensuel,
+    cumulSaison,
     pays,
     saison,
     seasonCompare,
@@ -516,9 +557,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, cumFrom, cumTo, cumCfrom, cumCto });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
