@@ -60,6 +60,19 @@ function render(rep) {
     ${m.dataMax ? `<div class="note">Données OMS de saison jusqu'au <b>${esc(m.dataMax)}</b>. Si une vente récente manque, relance l'import.</div>` : ''}
   </div>`;
 
+  // 1bis · Réconciliation avec le dashboard WSHOP (total OMS importé, tous canaux)
+  const recoCard = (g.omsTotalCa != null) ? `<div class="card">
+    <h3>🔍 Réconciliation avec WSHOP (tous canaux importés)</h3>
+    <div class="kgrid">
+      ${tile('Total OMS importé', fEur(g.omsTotalCa), `${fInt(g.omsOrders)} commandes`)}
+      ${tile('→ EShop (retenu)', fEur(g.ca), `${fInt(g.ordersEshop)} cmd`)}
+      ${tile('→ Instore (exclu)', fEur(g.instore || 0), `${fInt(g.ordersInstore || 0)} cmd`)}
+      ${tile('→ Marketplaces (exclu)', fEur(g.mkt || 0), `${fInt(g.ordersMkt || 0)} cmd`)}
+    </div>
+    <div class="note">👉 Compare <b>« Total OMS importé »</b> au <b>Montant</b> de ton dashboard WSHOP (et le nb de commandes au <b>Nombre de commande</b>). Proche du dashboard → tout est importé, c'est la répartition EShop/Instore/Marketplace qu'on ajuste. Bien plus bas → l'import n'a pas tout récupéré (à relancer).</div>
+    <div class="note">⚠️ Le <b>ship-from-store</b> (commande passée en ligne, expédiée d'une boutique) est aujourd'hui compté en <b>Instore</b> donc exclu de l'EShop. Si ton « Taux commande SFS » est élevé, ça explique une grosse part de l'écart — dis-le moi et je le rebascule en EShop.</div>
+  </div>` : '';
+
   // 2 · Poids des familles dans le CA global EShop (tout l'EShop)
   const famR = rep.familles.map(f => `<tr>
     <td>${esc(f.fam)}</td>
@@ -103,7 +116,7 @@ function render(rep) {
     </details>`;
   }).join('');
 
-  box.innerHTML = head + famCard + famBlocks;
+  box.innerHTML = head + recoCard + famCard + famBlocks;
 }
 
 async function loadReport() {
