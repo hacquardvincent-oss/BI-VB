@@ -825,25 +825,20 @@ function renderReport(rep) {
     const ch = cc.channels;
     const naC = '<span class="na">—</span>';
     const totRow = cc.totals.map(t => `<div class="kc"><div class="l">${esc(t.channel)}</div><div class="v">${fEur(t.ca)}</div><div style="font-size:10px">${delta(t.ca, t.caN1)} vs N-1</div></div>`).join('');
-    // Familles × canal (d'abord) — avec Δ N-1 sur le total
+    // Familles × canal (EShop / GL / Printemps / PDT / Lulli) — Δ N-1 sur le total
     const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
     const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(f.total)}</b></td><td>${delta(f.total, f.totalN1)}</td></tr>`).join('');
-    // Produits × canal (zoom)
-    const head = `<th>Produit</th><th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
-    const prodRows = cc.products.map(p => `<tr><td title="${esc(p.ref)}">${esc(p.name)}</td><td>${esc(p.famille)}</td>${ch.map(c => `<td>${p.byChannel[c] ? fEur(p.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(p.total)}</b></td><td>${delta(p.total, p.totalN1)}</td></tr>`).join('');
-    // Qui vendait quoi le mieux en N-1 (top produits par canal sur N-1)
-    const bestN1 = (cc.bestPerChannelN1 || []).map(x => `<tr><td><b>${esc(x.channel)}</b></td><td>${x.top.map(t => `${esc(t.name)} <span style="color:var(--t3)">(${fEur(t.ca)})</span>`).join(' · ')}</td></tr>`).join('');
+    // Top 5 produits par marketplace (GL / Printemps / PDT / Lulli)
+    const mpTop = (cc.topByMarketplace || []).map(x => `<div><div class="note" style="margin:0 0 4px"><b>${esc(x.channel)}</b></div><table style="font-size:11px"><tbody>${x.top.map(t => `<tr><td title="${esc(t.name)}">${esc((t.name || '').slice(0, 28))}</td><td style="text-align:right">${fEur(t.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('');
     const recos = (cc.recos && cc.recos.length) ? `<div class="insight">💡 ${cc.recos.map(esc).join('<br>💡 ')}</div>` : '';
-    crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplace</h3>
+    crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplaces</h3>
       <div class="kgrid">${totRow}</div>
       <h3 style="margin-top:14px">Familles par canal (CA) — N vs N-1</h3>
       <div style="height:240px;margin-bottom:8px"><canvas id="crossStack"></canvas></div>
       <div style="overflow-x:auto"><table><thead><tr>${famHead}</tr></thead><tbody>${famRowsCC}</tbody></table></div>
-      <h3 style="margin-top:14px">🔎 Zoom produits par canal (CA)</h3>
-      <div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${prodRows}</tbody></table></div>
-      ${bestN1 ? `<h3 style="margin-top:14px">📅 Ce qui marchait le mieux par canal en N-1</h3><table><thead><tr><th>Canal</th><th>Top produits N-1 (CA)</th></tr></thead><tbody>${bestN1}</tbody></table>` : ''}
+      ${mpTop ? `<h3 style="margin-top:14px">🏆 Top 5 produits par marketplace</h3><div class="grid cols2">${mpTop}</div>` : ''}
       ${recos}
-      <div class="note">Lecture famille → produit. Réf. unifiée sur les 3 canaux (OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2). « N-1 par canal » = meilleurs vendeurs de l'an dernier sur chaque canal (a-t-on gardé/perdu un best ?).</div></div>`;
+      <div class="note">EShop = entrepôt + ship-from-store (boutiques) regroupés (la distinction est une méthode d'expédition, pas un canal). Comparaison EShop / GL / Printemps / PDT / Lulli par famille. Réf. unifiée OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2.</div></div>`;
   }
 
   // Google Ads — coût & ROAS (croisé CA EShop) + efficacité par campagne
