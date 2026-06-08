@@ -280,12 +280,18 @@ async function refresh(opts = {}, cb = {}) {
   const isoD = d => d.toISOString().slice(0, 10);
   let from = opts.from, to = opts.to;
   if (!from || !to) { const t = new Date(); const f = new Date(); f.setMonth(f.getMonth() - c.months); from = isoD(f); to = isoD(t); }
-  const hasN1 = !!(opts.cfrom && opts.cto);
+  // Étend la plage importée pour couvrir le « cumul saison » (sinon les fenêtres cumul manquent de données).
+  if (opts.cumFrom && opts.cumFrom < from) from = opts.cumFrom;
+  if (opts.cumTo && opts.cumTo > to) to = opts.cumTo;
+  let cfrom = opts.cfrom, cto = opts.cto;
+  if (opts.cumCfrom && (!cfrom || opts.cumCfrom < cfrom)) cfrom = opts.cumCfrom;
+  if (opts.cumCto && (!cto || opts.cumCto > cto)) cto = opts.cumCto;
+  const hasN1 = !!(cfrom && cto);
   if (cb.phase) cb.phase(hasN1 ? `Commandes N (${from}→${to}) et N-1 en parallèle…` : `Commandes N (${from}→${to})…`);
   // N et N-1 récupérées EN PARALLÈLE (≈ 2×), conversion au fil de l'eau (mémoire maîtrisée)
   const [N, N1] = await Promise.all([
     collectRange(from, to, n => cb.count && cb.count('N', n)),
-    hasN1 ? collectRange(opts.cfrom, opts.cto, n => cb.count && cb.count('N1', n)) : Promise.resolve(null),
+    hasN1 ? collectRange(cfrom, cto, n => cb.count && cb.count('N1', n)) : Promise.resolve(null),
   ]);
   if (cb.phase) cb.phase('Construction des jeux de données…');
   const dsN = datasetFromRows(OMS_HDRS, N.oms, 'oms', from, to);
@@ -296,9 +302,9 @@ async function refresh(opts = {}, cb = {}) {
   store.setDataset('ret', 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
   let n1 = null;
   if (N1) {
-    const dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', opts.cfrom, opts.cto);
+    const dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', cfrom, cto);
     if (dsN1.rows.length) { store.setDataset('oms', 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
-    store.setDataset('ret', 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', opts.cfrom, opts.cto));
+    store.setDataset('ret', 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
   }
   return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
 }
