@@ -154,6 +154,11 @@ function orderToRows(order) {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
     const qShip = parseInt(it.quantityShipped != null ? it.quantityShipped : qOrd) || 0;
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
+    // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
+    // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price
+    // si remisé == 0 ou == prix vente, sinon off price.
+    const pvUnit = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
+    const pvrUnit = Number(it.originalDiscountedUnitPrice || 0) || 0;
     return {
       'Date': date, 'Heure': time,
       'Prix de vente paye': unit * qOrd,
@@ -166,6 +171,8 @@ function orderToRows(order) {
       'Quantité non livré': Math.max(0, qOrd - qShip),
       'Ref. externe': it.reference || it.ean || '',
       'Lieu de prise de commande': lieu,
+      'Prix Vente': pvUnit * qOrd,
+      'Prix Vente Remise': pvrUnit * qOrd,
     };
   });
 }
@@ -175,7 +182,7 @@ function buildOmsDataset(orders, fromISO, toISO) {
   const objRows = orders.flatMap(orderToRows);
   const hdrs = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN',
     'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees',
-    'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande'];
+    'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise'];
   const rows = objRows.map(o => hdrs.map(h => (o[h] == null ? '' : String(o[h]))));
   const map = calc.autoMap(hdrs, calc.OMS_ALIASES);
   calc.ensureRefExtIdx(hdrs, map);
@@ -215,7 +222,7 @@ function buildReturnsDataset(orders, from, to) {
 }
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
-const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande'];
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise'];
 // 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
 const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
 const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"
