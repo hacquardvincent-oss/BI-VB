@@ -248,10 +248,18 @@ async function refresh(opts = {}) {
     if (oms && oms.date_min && oms.date_max) { nStart = oms.date_min; nEnd = oms.date_max; }
     else { nStart = '30daysAgo'; nEnd = 'yesterday'; }
   }
+  // Étend la plage pour couvrir le « cumul saison » (sessions cumul) si dates ISO.
+  const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (opts.cumFrom && isoRe.test(nStart) && opts.cumFrom < nStart) nStart = opts.cumFrom;
+  if (opts.cumTo && isoRe.test(nEnd) && opts.cumTo > nEnd) nEnd = opts.cumTo;
   // Période N-1 : dates explicites > décalage d'un an (si dates ISO)
   let n1 = null;
   if (opts.cfrom && opts.cto) n1 = { start: opts.cfrom, end: opts.cto };
-  else if (/^\d{4}-\d{2}-\d{2}$/.test(nStart)) n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
+  else if (isoRe.test(nStart)) n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
+  if (n1) {
+    if (opts.cumCfrom && opts.cumCfrom < n1.start) n1.start = opts.cumCfrom;
+    if (opts.cumCto && opts.cumCto > n1.end) n1.end = opts.cumCto;
+  }
   const warnings = [];
   const safe = async (label, fn) => { try { await fn(); } catch (e) { warnings.push(`${label}: ${e.message}`); } };
   const ts = () => new Date().toISOString();

@@ -94,28 +94,28 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'ca', 'daily', 'ads', 'channels', 'device', 'pagesrc', 'ga', 'campaigns', 'campaignland', 'funnel', 'gafunnel', 'itemfunnel', 'pages', 'landing', 'lostpages', 'famille', 'produits', 'renta', 'saisoncompare', 'saison', 'marketplace', 'crosschannel', 'pays', 'ttpays', 'retours', 'annulations'],
+    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'channels', 'ads', 'ga', 'campaigns', 'pagesrc', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'saisoncompare', 'saison', 'renta', 'ca', 'funnel'],
   },
 };
 
-// ── Taxonomie analytique : chaque bloc appartient à un thème (bandeaux de section) ──
+// ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  A: '🎯 Pilotage 360', T: '☀️ Suivi temporel', B: '📡 Acquisition & Trafic',
-  C: '🔄 Conversion (Funnel)', D: '🧭 Comportement & Contenu', E: '👗 Offre & Merchandising',
-  F: '🏬 Omnicanal & Marketplace', G: '🌍 International', H: '⚠️ Qualité & Pertes',
+  P: '🎯 Pilotage 360', T: '📈 Suivi temporel', ES: '🛒 E-Store', AQ: '📡 Acquisition',
+  IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
+  OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['A', 'T', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'A', ca: 'A',
+  kpi: 'P',
   daily: 'T',
-  channels: 'B', device: 'B', pagesrc: 'B', ga: 'B', campaigns: 'B', campaignland: 'B', ads: 'B',
-  fampays: 'G',
-  funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
-  pages: 'D', landing: 'D', lostpages: 'D',
-  famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
-  marketplace: 'F', crosschannel: 'F',
-  pays: 'G', ttpays: 'G',
-  retours: 'H', annulations: 'H',
+  famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
+  itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES',
+  channels: 'AQ', ads: 'AQ', ga: 'AQ', campaigns: 'AQ', pagesrc: 'AQ',
+  pays: 'IN', ttpays: 'IN', fampays: 'IN',
+  marketplace: 'MP', crosschannel: 'MP',
+  campaignland: 'CR',
+  saisoncompare: 'OF', saison: 'OF', renta: 'OF',
+  ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
 };
 // Regroupe les blocs d'un module par thème, dans l'ordre du récit analytique
 function sectionize(layout) {
@@ -378,6 +378,12 @@ function fillDateInputs(meta) {
 function currentPeriod() {
   const v = id => document.getElementById(id).value;
   return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
+}
+// Période d'import : période + plage « cumul saison » → l'import couvre tout (sinon cumul sans données).
+function importPeriod() {
+  const p = currentPeriod();
+  ['cumFrom', 'cumTo', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el && el.value) p[id] = el.value; });
+  return p;
 }
 // Comparable retail N-1 = N − 364 jours (52 semaines pile) → même jour de semaine
 // (jeudi vs jeudi). Préféré au « même date l'an dernier » qui décale d'un jour.
@@ -1391,7 +1397,7 @@ async function ga4Status() {
 document.getElementById('ga4refresh').addEventListener('click', async () => {
   const note = document.getElementById('ga4note');
   note.textContent = 'Récupération GA4 sur la période sélectionnée…';
-  const q = new URLSearchParams(currentPeriod()).toString();
+  const q = new URLSearchParams(importPeriod()).toString();
   const r = await fetch('/api/ga4/refresh?' + q, { method: 'POST' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur GA4'); return; }
@@ -1414,7 +1420,7 @@ async function googleAdsStatus() {
 document.getElementById('adsrefresh').addEventListener('click', async () => {
   const note = document.getElementById('adsnote');
   note.textContent = 'Récupération Google Ads sur la période sélectionnée…';
-  const q = new URLSearchParams(currentPeriod()).toString();
+  const q = new URLSearchParams(importPeriod()).toString();
   const r = await fetch('/api/googleads/refresh?' + q, { method: 'POST' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur Google Ads'); return; }
@@ -1495,7 +1501,7 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const btns = [document.getElementById('wshoprefresh'), document.getElementById('wshopsync')];
   btns.forEach(b => { b.disabled = true; }); note.textContent = 'Lancement de l\'import WSHOP…';
   try {
-    const q = new URLSearchParams(currentPeriod()).toString();
+    const q = new URLSearchParams(importPeriod()).toString();
     const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
     if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }

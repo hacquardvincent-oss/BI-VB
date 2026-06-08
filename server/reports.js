@@ -180,7 +180,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   };
   // Cumul mensuel : du 1er du mois (de la dernière date OMS) au dernier jour de données, vs même fenêtre N-1.
   let cumulMensuel = null;
-  const refDate = omsN.dateMax;
+  // « Mois en cours » = mois de la fin de période analysée (to), du 1er à cette date. Repli : dernière donnée OMS.
+  const refDate = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
   if (refDate && /^\d{4}-\d{2}-\d{2}$/.test(refDate)) {
     const mf = refDate.slice(0, 7) + '-01';
     cumulMensuel = scorecard(mf, refDate, shiftYear(mf, -1), shiftYear(refDate, -1));
