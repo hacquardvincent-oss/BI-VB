@@ -394,7 +394,7 @@ function reportQuery() {
     ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
     : `preset=all&dim=${CURRENT_DIM}`;
   const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
-  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}`;
+  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -828,25 +828,29 @@ function renderReport(rep) {
     ].join('');
     // Tableau croisé Ads × GA4 (CA attribué, conv, ROAS, COS par campagne) — Top/Flop surlignés.
     const cc = A.campaigns || [];
+    const pct0 = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
+    const tgt = A.cosTarget != null ? A.cosTarget : 0.30;
     const topSet = new Set((A.top || []).map(c => c.campaign)), flopSet = new Set((A.flop || []).map(c => c.campaign));
     let crossTable, legend;
     if (cc.length) {
       const rows = cc.map(c => {
-        const flag = topSet.has(c.campaign) ? '🟢 ' : (flopSet.has(c.campaign) ? '🔴 ' : '');
+        const flag = (topSet.has(c.campaign) ? '🟢 ' : (flopSet.has(c.campaign) ? '🔴 ' : '')) + (c.saturated ? '🪫 ' : '');
         const bg = topSet.has(c.campaign) ? 'background:rgba(80,200,120,.12)' : (flopSet.has(c.campaign) ? 'background:rgba(239,68,68,.12)' : '');
-        return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.caGA <= 0 || (c.cos != null && c.cos > 0.3) ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td></tr>`;
+        return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td title="part dépense / part CA">${pct0(c.shareSpend)} / ${pct0(c.shareCA)}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.aboveTarget ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td></tr>`;
       }).join('');
-      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Δ N-1</th><th>Sessions</th><th>Conv.</th><th>CA (GA4)</th><th>ROAS</th><th>COS</th><th>CPA</th></tr></thead><tbody>${rows}</tbody></table>`;
-      legend = 'CA & conversions = attribution GA4 (last-click). ROAS/COS par campagne = CA GA4 ÷ dépense. COS global = dépense ÷ CA EShop (WSHOP). 🟢 = top ROAS (scaler) · 🔴 = COS élevé / sans CA (optimiser/couper).';
+      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Δ N-1</th><th>% dép/CA</th><th>Sessions</th><th>Conv.</th><th>CA (GA4)</th><th>ROAS</th><th>COS</th><th>CPA</th></tr></thead><tbody>${rows}</tbody></table>`;
+      legend = `Cible COS = <b>${pct0(tgt)}</b> (COS rouge = au-dessus, marge perdue ; vert = sous la cible, marge pour scaler). « % dép/CA » = part de la dépense / part du CA (déséquilibre = arbitrage). 🪫 = saturation (dépense ↑ mais ROAS ↓ vs N-1). CA & conv = attribution GA4 ; COS global = dépense ÷ CA EShop (WSHOP).`;
     } else {
       const rows = (a.byCampaign || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
       crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Clics</th><th>CTR</th><th>CPC</th><th>Conv.</th><th>CPA</th><th>ROAS Ads</th></tr></thead><tbody>${rows}</tbody></table>`;
       legend = 'Charge/actualise GA4 pour croiser dépense × CA attribué × conversions par campagne (ROAS/COS par campagne).';
     }
-    // Recommandations auto Top/Flop
+    // Recommandations auto : Top/Flop + saturation + déséquilibre Pareto (vs cible COS)
     const recos = [];
-    (A.top || []).slice(0, 2).forEach(c => recos.push(`<div class="sig up"><span>🟢</span><div><b>${esc(c.campaign)}</b> : ROAS ${roas(c.roas)} (COS ${cos(c.cos)}) → opportunité de scale.</div></div>`));
-    (A.flop || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🔴</span><div><b>${esc(c.campaign)}</b> : ${c.caGA > 0 ? 'COS ' + cos(c.cos) : 'aucun CA attribué'} pour ${fEur(c.spend)} dépensés → à optimiser/couper.</div></div>`));
+    (A.top || []).slice(0, 2).forEach(c => recos.push(`<div class="sig up"><span>🟢</span><div><b>${esc(c.campaign)}</b> : ROAS ${roas(c.roas)} (COS ${cos(c.cos)} &lt; cible ${pct0(tgt)}) → marge pour <b>scaler le budget</b>.</div></div>`));
+    (A.flop || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🔴</span><div><b>${esc(c.campaign)}</b> : ${c.caGA > 0 ? 'COS ' + cos(c.cos) + ' &gt; cible ' + pct0(tgt) : 'aucun CA attribué'} pour ${fEur(c.spend)} dépensés → <b>optimiser/couper</b>.</div></div>`));
+    (A.saturated || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🪫</span><div><b>${esc(c.campaign)}</b> : saturation — dépense +${Math.round((c.spend / Math.max(c.spendN1, 1) - 1) * 100)}% mais ROAS en baisse vs N-1 (${roas(c.roasN1)} → ${roas(c.roas)}) → rendement décroissant, plafonner le budget.</div></div>`));
+    (A.imbalanced || []).slice(0, 1).forEach(c => recos.push(`<div class="sig dn"><span>⚖️</span><div><b>${esc(c.campaign)}</b> : ${pct0(c.shareSpend)} de la dépense mais seulement ${pct0(c.shareCA)} du CA → <b>arbitrage budgétaire</b> vers les campagnes rentables.</div></div>`));
     const recosHtml = recos.length ? `<div class="bilan-sigs" style="margin-top:10px">${recos.join('')}</div>` : '';
     adsCard = `<div class="card"><h3>📣 Google Ads — Acquisition payante (COS / ROAS)${A.n1 ? ' · N vs N-1' : ''}</h3>
       <div class="kgrid">${tiles}</div>${crossTable}${recosHtml}
@@ -1576,8 +1580,8 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
-// Taux de consentement cookies (RGPD) : recharge le rapport (ajuste les sessions GA)
-['consentN', 'consentN1'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
+// Consentement cookies (sessions) + cible COS (acquisition) : recharge le rapport au changement
+['consentN', 'consentN1', 'cosTarget'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
