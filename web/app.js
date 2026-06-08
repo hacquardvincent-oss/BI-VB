@@ -393,7 +393,8 @@ function reportQuery() {
   const base = DATES
     ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
     : `preset=all&dim=${CURRENT_DIM}`;
-  return `${base}&scope=${SCOPE}`;
+  const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
+  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -980,9 +981,13 @@ function buildBilan(rep) {
     ? 'Colle le contexte dans Claude.ai (abonnement, 0 €) ou génère la synthèse via l\'API.'
     : 'Colle le contexte dans Claude.ai (couvert par ton abonnement Pro/Max) — 0 € d\'API.';
   const ia = `<div class="toolbar" style="margin-top:12px">${copyBtn}${iaBtn}<span class="note" style="margin:0">${iaNote}</span></div><div id="bilanIASynth"></div>`;
+  // Note consentement : sessions GA brutes → ajustées (÷ taux d'acceptation)
+  const cs = rep.meta && rep.meta.consent;
+  let consentNote = '';
+  if (cs && cs.n) consentNote = `<div class="note" style="margin-top:6px">🍪 Sessions ajustées du consentement — N : ${Math.round(cs.n * 100)}% d'acceptation (${fInt(cs.sessionsRawN)} GA → <b>${fInt(k.sessions)}</b> réelles)${cs.n1 && cs.sessionsRawN1 != null ? ` · N-1 : ${Math.round(cs.n1 * 100)}% (${fInt(cs.sessionsRawN1)} → ${fInt(k1 && k1.sessions)})` : ''}. Le taux de transfo est recalculé sur cette base.</div>`;
   return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
     <div class="kgrid">${tiles.join('')}</div>
-    ${mkHtml}${sigHtml}${ia}</div>`;
+    ${mkHtml}${consentNote}${sigHtml}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
@@ -1571,6 +1576,8 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
+// Taux de consentement cookies (RGPD) : recharge le rapport (ajuste les sessions GA)
+['consentN', 'consentN1'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

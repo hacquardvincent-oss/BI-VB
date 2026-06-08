@@ -44,7 +44,7 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1 }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
@@ -79,7 +79,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
   rowsN = calc.filterOutstore(rowsN, omsN.map); // périmètre EShop = Outstore (exclut l'Instore)
   if (refSetN) rowsN = calc.filterToRefs(rowsN, omsN.map, refSetN);
-  const sessionsN = calc.getSessionsForPeriod(gaNf, from, to, isAll);
+  // Taux d'acceptation cookies (RGPD) : GA ne voit que les consentants → sessions réelles
+  // = sessions GA ÷ taux. Saisie manuelle (0-100 ou 0-1). Recale le taux de transfo.
+  const consentRate = v => { const n = parseFloat((v || '').toString().replace(',', '.')); if (!n || n <= 0) return null; return n > 1 ? n / 100 : n; };
+  const rateN = consentRate(consentN), rateN1 = consentRate(consentN1);
+  const sessionsRawN = calc.getSessionsForPeriod(gaNf, from, to, isAll);
+  const sessionsN = (sessionsRawN != null && rateN) ? Math.round(sessionsRawN / rateN) : sessionsRawN;
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
   const mktN = calc.calcMarketplace(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {});
@@ -100,8 +105,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
   if (rowsN1) rowsN1 = calc.filterDim(rowsN1, mapN1, dim);
   if (rowsN1) rowsN1 = calc.filterOutstore(rowsN1, mapN1); // périmètre EShop = Outstore
   if (rowsN1 && refSetN1) rowsN1 = calc.filterToRefs(rowsN1, mapN1, refSetN1);
+  let sessionsRawN1 = null;
   if (rowsN1 && rowsN1.length) {
-    const sessionsN1 = calc.getSessionsForPeriod(gaN1f, cf, ct, isAll);
+    sessionsRawN1 = calc.getSessionsForPeriod(gaN1f, cf, ct, isAll);
+    const sessionsN1 = (sessionsRawN1 != null && rateN1) ? Math.round(sessionsRawN1 / rateN1) : sessionsRawN1;
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);
     mktN1 = calc.calcMarketplace(rowsN1, mapN1, y2N1 ? y2N1.rows : (omsN1 ? [] : (y2N ? y2N.rows : [])), y2N1 ? y2N1.map : (y2N ? y2N.map : {}));
@@ -412,6 +419,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
       hasImpl: !!implN, hasImplN1: !!implN1, hasAds: !!adsN, scope: scopeColl ? 'collection' : 'all',
+      consent: { n: rateN, n1: rateN1, sessionsRawN, sessionsRawN1 },
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
@@ -454,9 +462,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1 } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1 });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });

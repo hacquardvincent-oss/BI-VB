@@ -33,7 +33,6 @@
       <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
       <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
-      <button class="btn blue" id="applyDates">Appliquer</button>
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Presets</span>
@@ -56,6 +55,8 @@
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px">Périmètre</span>
       <button class="pb on" data-scope="all" title="Mode complet : CA global de la période (toutes ventes, y compris archives/relances)">Tout (saison complète)</button>
       <button class="pb" data-scope="collection" title="Mode exclusif : uniquement les références de la collection (implantation E26/E25)">Collection saison (exclusif)</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn blue" id="applyDates">Appliquer</button>
     </div>
     <div class="note">🧵 <b>Analyse de saison — 2 modes</b> : clique <b>Saison Été/Hiver</b> pour la fenêtre d'implantation (dates éditables), puis choisis le périmètre : <b>« Collection saison »</b> = évolution des seules pièces de la collection ; <b>« Tout »</b> = impact de la saison sur le CA global de la période.</div>
     <div class="note" id="metaNote"></div>
@@ -83,6 +84,16 @@
       <span class="note" id="adsnote">Importe coût/clics/conversions par campagne depuis Google Ads sur la période N et N-1</span>
     </div>
     <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
+
+    <!-- Consentement cookies (RGPD) : ajuste les sessions GA (GA ne voit que les consentants) -->
+    <div class="toolbar" style="margin-top:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase" title="GA ne compte que les visiteurs ayant accepté les cookies. Sessions réelles = sessions GA ÷ taux d'acceptation.">🍪 Taux d'acceptation cookies</span>
+      <span style="font-size:11px;color:var(--t3)">N</span>
+      <input type="number" id="consentN" min="1" max="100" step="1" placeholder="ex. 70" style="width:70px;background:var(--s2);color:var(--fg);border:1px solid var(--bd,#2e3350);border-radius:6px;padding:5px 8px"> <span style="color:var(--t3)">%</span>
+      <span style="font-size:11px;color:var(--t3);margin-left:8px">N-1</span>
+      <input type="number" id="consentN1" min="1" max="100" step="1" placeholder="ex. 68" style="width:70px;background:var(--s2);color:var(--fg);border:1px solid var(--bd,#2e3350);border-radius:6px;padding:5px 8px"> <span style="color:var(--t3)">%</span>
+      <span class="note" style="margin:0">Laisse vide = pas d'ajustement (sessions GA brutes).</span>
+    </div>
 
     <!-- Bouton PDF : sous les CTA de chargement -->
     <div class="toolbar" style="margin-top:10px">
