@@ -38,9 +38,9 @@ const MODULES = {
   },
   saisonprod: {
     icon: '👗', label: 'Offre & Merchandising', preset: 'all',
-    intro: 'Récap offre : analyse par famille, top produits (N et N-1), comparaison de saison (E26 vs E25), rentabilité et funnel produit.',
-    files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
-    layout: ['famille', 'produits', 'saisoncompare', 'saison', 'renta', 'itemfunnel'],
+    intro: 'Analyse d\'offre (figée, suivie dans le temps) : CA par famille vs N-1, top produits, comparaison de saison (E26 vs E25), rentabilité, et analyse des campagnes/communications vs N-1 (a-t-on raté une mise en avant ?).',
+    files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ga', 'ret'] },
+    layout: ['famille', 'produits', 'saisoncompare', 'saison', 'renta', 'campaigns'],
   },
   croisees: {
     icon: '🔀', label: 'Analyses croisées', preset: 'all',
