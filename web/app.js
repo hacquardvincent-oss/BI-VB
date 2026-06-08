@@ -727,24 +727,19 @@ function renderReport(rep) {
   const tpQte = (rep.topProduitsQte && rep.topProduitsQte.n || []).slice(0, 5);
   const prodQteP = miniPanel('Top 5 produits (Quantité)', ['Produit', 'Qté', 'CA'],
     tpQte.length ? tpQte.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('') : null);
-  // CA & Quantité par famille
-  const famD = (rep.familleDetail || []).slice(0, 8);
-  const famDetP = miniPanel('CA & Quantité par famille', ['Famille', 'CA', 'Δ', 'Qté', 'Δ'],
-    famD.length ? famD.map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.caN)}</td><td>${f.caN1 != null ? delta(f.caN, f.caN1) : '—'}</td><td>${fInt(f.qteN)}</td><td>${f.qteN1 != null ? delta(f.qteN, f.qteN1) : '—'}</td></tr>`).join('') : null);
-  const pilotPanels = [paysInterP, canauxP, pagesP, prodCAP, prodQteP, famDetP].filter(Boolean).join('');
-
-  // Pilotage 360 : KPI (gauche) + détail CA & Marketplace (droite) + panneaux Top 5
-  const kpiCard = `<div class="card"><h3>Pilotage 360 — KPI EShop & CA — ${dimLabel}</h3>
-      <div class="grid cols2">
-        <div>
-          <table><thead><tr><th>Indicateur</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-          <tbody>${kRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table>
-          ${ttNote}
-        </div>
-        <div><div class="note" style="margin:0 0 6px">Détail du chiffre d'affaires</div><div class="kgrid">${caBlocks}</div>
-          ${mpMini}</div>
-      </div>
-      ${pilotPanels ? `<div class="grid cols2" style="margin-top:12px">${pilotPanels}</div>` : ''}</div>`;
+  // Top Famille (par CA)
+  const topFam = (rep.famille || []).slice(0, 5);
+  const famP = miniPanel('Top 5 familles (CA)', ['Famille', 'CA', 'Δ N-1'],
+    topFam.length ? topFam.map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.n)}</td><td>${f.n1 != null ? delta(f.n, f.n1) : '—'}</td></tr>`).join('') : null);
+  // Top Campagnes (CA attribué GA4 × ROAS, depuis le croisement acquisition)
+  const campA = (rep.ads && rep.ads.campaigns || []).filter(c => c.caGA > 0).sort((a, b) => b.caGA - a.caGA).slice(0, 5);
+  const campP = miniPanel('Top 5 campagnes (CA)', ['Campagne', 'CA', 'ROAS'],
+    campA.length ? campA.map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 28))}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? c.roas.toFixed(2) + '×' : '—'}</td></tr>`).join('') : null);
+  // Pilotage 360 = uniquement les TOP (KPI/détail CA/marketplace portés par le Bilan)
+  const pilotPanels = [paysInterP, famP, prodCAP, prodQteP, canauxP, campP].filter(Boolean).join('');
+  const kpiCard = pilotPanels
+    ? `<div class="card"><h3>Pilotage 360 — Tops — ${dimLabel}</h3><div class="grid cols2">${pilotPanels}</div></div>`
+    : '';
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
