@@ -84,7 +84,10 @@ function loadSpecs() {
   }
 }
 
-// Démarrage : init base (si configurée) + hydratation RAM + fichiers specs, puis écoute.
+// Démarrage : on OUVRE LE PORT D'ABORD (détection rapide par l'hébergeur), puis on
+// initialise la base + hydratation RAM + fichiers specs en arrière-plan. Évite le
+// « port scan timeout » quand l'hydratation depuis Postgres devient longue.
+app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
 (async () => {
   try {
     await db.init();
@@ -94,6 +97,5 @@ function loadSpecs() {
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
   }
   loadSpecs();
-  const mode = db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)';
-  app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT} — ${mode}`));
+  console.log(`[bidash] initialisation terminée — ${db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)'}`);
 })();
