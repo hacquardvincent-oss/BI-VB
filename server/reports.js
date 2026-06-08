@@ -571,6 +571,7 @@ function dailyOff(rows, map) {
   return by;
 }
 const isoShiftDays = (iso, days) => new Date(Date.parse(iso + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10);
+const daysBetween = (a, b) => { const da = Date.parse(a + 'T00:00:00Z'), db = Date.parse(b + 'T00:00:00Z'); return (!isNaN(da) && !isNaN(db)) ? Math.max(0, Math.round((db - da) / 86400000)) + 1 : 30; };
 const OP_LABEL = m => ({ 12: 'Pré-soldes / déstockage', 1: "Soldes d'hiver", 2: 'Last chance / 2e démarque', 3: 'Archives (anciennes collections)', 4: 'Ventes privées', 5: 'Ventes privées', 6: "Soldes d'été", 7: "Soldes d'été" }[m] || 'Démarque');
 function detectDemarque(byDayN, byDayN1, threshold) {
   if (!byDayN) return null;
@@ -633,6 +634,13 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const saisonsDispo = [...new Set(Object.values(saisonMap))].sort();
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
   const y2N = await loadDataset('saisony2', 'N'), y2N1 = await loadDataset('saisony2', 'N1');
+  const stockN = await loadDataset('saisonstock', 'N'), stockN1 = await loadDataset('saisonstock', 'N1');
+  const retDsN = await loadDataset('saisonret', 'N'), retDsN1 = await loadDataset('saisonret', 'N1');
+  // Stock par référence (ref. externe → quantité dispo) et retours (ref → {qté, montant})
+  const stockMap = ds => { if (!ds || !ds.rows) return {}; const mp = (ds.map && Object.keys(ds.map).length) ? ds.map : calc.autoMap(ds.hdrs, calc.STOCK_ALIASES); const ri = mp.ref_ext, qi = mp.qte; if (ri === undefined || qi === undefined) return {}; const o = {}; ds.rows.forEach(r => { const k = (r[ri] || '').toString().trim(); if (!k) return; o[k] = (o[k] || 0) + (parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0); }); return o; };
+  const retMap = ds => { if (!ds || !ds.rows) return {}; const mp = (ds.map && Object.keys(ds.map).length) ? ds.map : calc.autoMap(ds.hdrs, calc.RET_ALIASES); const ri = mp.ref_ext, qi = mp.qte, mi = mp.montant; if (ri === undefined) return {}; const o = {}; ds.rows.forEach(r => { const k = (r[ri] || '').toString().trim(); if (!k) return; const e = o[k] || (o[k] = { qte: 0, montant: 0 }); e.qte += qi !== undefined ? (parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0) : 0; e.montant += mi !== undefined ? calc.fN(r[mi]) : 0; }); return o; };
+  const stkN = stockMap(stockN), stkN1 = stockMap(stockN1);
+  const retN = retMap(retDsN), retrN1 = retMap(retDsN1);
 
   if (!from || !to) { from = omsN.dateMin; to = omsN.dateMax; }
   const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
@@ -709,6 +717,14 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const nWin = calc.salesByRefFam(rowsN, omsN.map, refMap);
   const n1Win = hasN1 ? calc.salesByRefFam(rowsN1, mapN1, refMapN1) : {};
   const nArr = Object.values(nWin), n1Arr = Object.values(n1Win);
+  // Enrichit chaque référence avec son stock dispo et ses retours (qté + montant)
+  const enrich = (arr, stk, ret) => arr.forEach(e => { e.stock = stk[e.ref] || 0; const rr = ret[e.ref]; e.qteRet = rr ? rr.qte : 0; e.montantRet = rr ? rr.montant : 0; });
+  enrich(nArr, stkN, retN); enrich(n1Arr, stkN1, retrN1);
+  // Stock total par famille (inclut les réfs en stock NON vendues — vrai sell-through famille)
+  const famStock = (stk, rm) => { const o = {}; for (const ref in stk) { const fam = (rm && rm[ref]) || '(non référencé)'; o[fam] = (o[fam] || 0) + stk[ref]; } return o; };
+  const famStockN = famStock(stkN, refMap), famStockN1 = famStock(stkN1, refMapN1);
+  const hasStock = Object.keys(stkN).length > 0;
+  const hasRet = Object.keys(retN).length > 0;
 
   // Appartenance collection (indicateur secondaire) : modèles implantation E26 (N) / E25 (N-1)
   const setN = implN ? calc.implRefSet(implN) : null;
@@ -719,19 +735,21 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
 
   // Index désignation (modèle) → CA/qté, N et N-1 (tout EShop) pour le comparatif produit
   const desKey = e => `${e.fam} ${e.des || e.ref || '(sans désignation)'}`;
-  const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0, caFP: 0 }); t.ca += e.ca; t.qte += e.qte; t.caFP += e.caFP || 0; }); return o; };
+  const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0, caFP: 0, stock: 0, qteRet: 0, montantRet: 0 }); t.ca += e.ca; t.qte += e.qte; t.caFP += e.caFP || 0; t.stock += e.stock || 0; t.qteRet += e.qteRet || 0; t.montantRet += e.montantRet || 0; }); return o; };
   const nDes = desIdx(nArr), n1Des = desIdx(n1Arr);
 
-  // Agrégat famille sur TOUT l'EShop (réconcilie avec le CA global) + part collection + full price
+  // Agrégat famille sur TOUT l'EShop (réconcilie avec le CA global) + part collection + full price + stock/retours
   const famAgg = {};
-  const mkFam = fam => famAgg[fam] || (famAgg[fam] = { fam, ca: 0, qte: 0, caN1: 0, qteN1: 0, collCa: 0, caFP: 0, caFPN1: 0, qteFP: 0 });
-  nArr.forEach(e => { const x = mkFam(e.fam); x.ca += e.ca; x.qte += e.qte; x.caFP += e.caFP || 0; x.qteFP += e.qteFP || 0; if (inColN(e)) x.collCa += e.ca; });
-  n1Arr.forEach(e => { const x = mkFam(e.fam); x.caN1 += e.ca; x.qteN1 += e.qte; x.caFPN1 += e.caFP || 0; });
+  const mkFam = fam => famAgg[fam] || (famAgg[fam] = { fam, ca: 0, qte: 0, caN1: 0, qteN1: 0, collCa: 0, caFP: 0, caFPN1: 0, qteFP: 0, qteRet: 0, montantRet: 0, qteRetN1: 0 });
+  nArr.forEach(e => { const x = mkFam(e.fam); x.ca += e.ca; x.qte += e.qte; x.caFP += e.caFP || 0; x.qteFP += e.qteFP || 0; x.qteRet += e.qteRet || 0; x.montantRet += e.montantRet || 0; if (inColN(e)) x.collCa += e.ca; });
+  n1Arr.forEach(e => { const x = mkFam(e.fam); x.caN1 += e.ca; x.qteN1 += e.qte; x.caFPN1 += e.caFP || 0; x.qteRetN1 += e.qteRet || 0; });
 
+  const weeks = Math.max(1, daysBetween(from, to) / 7);
+  const stRate = (sold, stock) => (sold + stock) > 0 ? sold / (sold + stock) : null;
   const familles = Object.values(famAgg).map(f => {
     // Top 10 produits (désignation) de la famille, vs même produit en N-1 (0 si nouveauté)
     const produits = Object.values(nDes).filter(d => d.fam === f.fam).sort((a, b) => b.ca - a.ca).slice(0, 80)
-      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caFP: d.caFP, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0, caFPN1: p ? p.caFP : 0 }; });
+      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caFP: d.caFP, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0, caFPN1: p ? p.caFP : 0, stock: d.stock, sellThrough: hasStock ? stRate(d.qte, d.stock) : null, qteRet: d.qteRet, tauxRetour: (hasRet && d.qte > 0) ? d.qteRet / d.qte : null, caNet: d.ca - (d.montantRet || 0) }; });
     // Réfs bien vendues en N-1 (collection E25) qu'on ne vend plus cette année (désignation, EShop complet N)
     const top = produits.slice(0, 10);
     const perdusRaw = {};
@@ -749,6 +767,12 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
       poidsN1: (kN1 && kN1.ca > 0) ? f.caN1 / kN1.ca : null,
       fpShare: f.ca > 0 ? f.caFP / f.ca : 0,
       caOff: f.ca - f.caFP, caOffN1: f.caN1 - f.caFPN1,
+      stock: hasStock ? (famStockN[f.fam] || 0) : null,
+      sellThrough: hasStock ? stRate(f.qte, famStockN[f.fam] || 0) : null,
+      couvSem: hasStock && f.qte > 0 ? (famStockN[f.fam] || 0) / (f.qte / weeks) : null,
+      qteRet: f.qteRet, tauxRetour: hasRet && f.qte > 0 ? f.qteRet / f.qte : null,
+      tauxRetourN1: hasRet && f.qteN1 > 0 ? f.qteRetN1 / f.qteN1 : null,
+      caNet: f.ca - (f.montantRet || 0),
       top, produits, perdus,
     };
   }).sort((a, b) => b.ca - a.ca);
@@ -772,7 +796,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const demarque = detectDemarque(dailyOff(rowsN, omsN.map), hasN1 ? dailyOff(rowsN1, mapN1) : null, seuil > 1 ? seuil / 100 : seuil);
 
   return {
-    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '' },
+    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet },
     global: {
       ca: kN.ca, caN1: kN1 ? kN1.ca : null,
       commandes: kN.commandes, commandesN1: kN1 ? kN1.commandes : null,

@@ -93,6 +93,34 @@
       </div>
     </div>
 
+    <div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">📦 Stock disponible (sell-through, couverture)</div>
+    <div class="grid sources" style="margin-top:4px">
+      <div class="src">
+        <div class="name">Stock E26 — N <span class="pill miss" id="pillStockN">optionnel</span></div>
+        <label>Réf. externe → quantité dispo</label>
+        <input type="file" id="fileStockN" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+      <div class="src">
+        <div class="name">Stock E25 — N-1 <span class="pill miss" id="pillStockN1">optionnel</span></div>
+        <label>Réf. externe → quantité dispo (fin saison N-1)</label>
+        <input type="file" id="fileStockN1" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+    </div>
+
+    <div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">↩️ Retours (taux de retour, CA net)</div>
+    <div class="grid sources" style="margin-top:4px">
+      <div class="src">
+        <div class="name">Retours E26 — N <span class="pill miss" id="pillRetN">optionnel</span></div>
+        <label>Export retours (réf. + qté + montant)</label>
+        <input type="file" id="fileRetN" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+      <div class="src">
+        <div class="name">Retours E25 — N-1 <span class="pill miss" id="pillRetN1">optionnel</span></div>
+        <label>Export retours saison N-1</label>
+        <input type="file" id="fileRetN1" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+    </div>
+
     <div class="toolbar" style="margin-top:12px">
       <button class="btn blue" id="loadBtn">📊 Afficher l'analyse</button>
       <span class="note" id="ingestNote">Charge au minimum les deux OMS (E26 et E25) puis clique « Afficher l'analyse ». Y2 et référentiels affinent l'analyse.</span>

@@ -152,6 +152,11 @@ const RET_ALIASES = {
   statut: ['statut ret'],
   libelle: ['libelle'],
 };
+// Export de stock (saison) : référence + quantité disponible
+const STOCK_ALIASES = {
+  ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref ext', 'reference', 'ref'],
+  qte: ['stock', 'quantite stock', 'stock disponible', 'quantite disponible', 'disponible', 'quantite', 'qte', 'stock e-commerce', 'stock web', 'dispo'],
+};
 // Implantation (catalogue saison E-Store) — 1ère feuille du classeur
 const IMPL_ALIASES = {
   rc: ['rc'],
@@ -1071,7 +1076,7 @@ function dateBounds(rows, map) {
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
