@@ -606,6 +606,45 @@ function calcCAFamille(rows, omsMap, refMap) {
   return byFam;
 }
 
+// Full/Off price par famille (hors mkt) — { fam: { ca, caFP, caOP, qte } }
+// Off price = toute remise : Prix Vente Remisé ≠ 0 ET ≠ Prix Vente.
+function fullOffSplit(omsMap) {
+  const pvi = omsMap.pv, pvri = omsMap.pv_remise;
+  if (pvi === undefined || pvri === undefined) return null;
+  return r => { const pv = fN(r[pvi]), pvr = fN(r[pvri]); return (pvr === 0) || (Math.abs(pvr - pv) < 0.01); };
+}
+function calcFullOffByFamille(rows, omsMap, refMap) {
+  if (!refMap || Object.keys(refMap).length === 0) return null;
+  const isFPof = fullOffSplit(omsMap); if (!isFPof) return null;
+  const pi = omsMap.prix, ti = omsMap.type, qi = omsMap.qte;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined) return null;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const fam = refMap[(r[refIdx] || '').trim()] || '(non référencé)';
+    const p = fN(r[pi]);
+    const e = by[fam] || (by[fam] = { ca: 0, caFP: 0, caOP: 0, qte: 0 });
+    e.ca += p; e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    if (isFPof(r)) e.caFP += p; else e.caOP += p;
+  });
+  return by;
+}
+function calcFullOffByProduct(rows, omsMap) {
+  const isFPof = fullOffSplit(omsMap); if (!isFPof) return null;
+  const pi = omsMap.prix, di = omsMap.des, ti = omsMap.type, qi = omsMap.qte;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const des = (di !== undefined ? (r[di] || '').trim() : ''); if (!des) return;
+    const p = fN(r[pi]);
+    const e = by[des] || (by[des] = { ca: 0, caFP: 0, caOP: 0, qte: 0 });
+    e.ca += p; e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    if (isFPof(r)) e.caFP += p; else e.caOP += p;
+  });
+  return by;
+}
+
 // CA ET Quantité par famille (hors marketplaces) — { fam: { ca, qte } }
 function calcFamilleDetail(rows, omsMap, refMap) {
   if (!refMap || Object.keys(refMap).length === 0) return null;
@@ -1015,7 +1054,7 @@ module.exports = {
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
-  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs,
