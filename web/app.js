@@ -1012,14 +1012,15 @@ function renderScorecard(title, pack, showDetails) {
   if (showDetails) {
     const ca = n.ca || {}, ca1 = n1.ca || {}, mk = n.mkt || {}, mk1 = n1.mkt || {};
     const t = (l, v, v1) => bilanTile(l, fEur(v), v, v1);
-    const block = (label, rows) => rows ? `<div><div class="note" style="margin:0 0 4px"><b>${label}</b></div><div class="kgrid">${rows}</div></div>` : '';
-    const intl = block('🌍 International', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt));
-    const omni = block('🏬 Omnicanal', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS));
-    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP)) : '';
+    // Découpe = camembert (canvas, rempli par renderCharts) + tuiles (valeurs + Δ N-1).
+    const block = (label, donutId, rows) => rows ? `<div><div class="note" style="margin:0 0 4px"><b>${label}</b></div><div class="grid cols2" style="align-items:center"><div style="height:150px"><canvas id="${donutId}"></canvas></div><div class="kgrid">${rows}</div></div></div>` : '';
+    const intl = block('🌍 International', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt));
+    const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS));
+    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP)) : '';
     let mp = '';
     if (mk.total > 0) {
       const mr = [['CA Marketplace', mk.total, mk1.total], ['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]].filter(([, v]) => v > 0).map(([l, v, v1]) => t(l, v, v1)).join('');
-      mp = block('🛍️ Marketplace', mr);
+      mp = block('🛍️ Marketplace', 'binDonutMP', mr);
     }
     details = `<div class="grid cols2" style="margin-top:10px">${intl}${omni}${dem}${mp}</div>`;
   }
@@ -1255,6 +1256,15 @@ function renderCharts(rep) {
     scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } },
   };
   const cut = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+  // Camemberts des découpes CA du Bilan (International / Omnicanal / Démarque / Marketplace)
+  const segDonut = (id, segs) => { const s = segs.filter(x => (x[1] || 0) > 0); if (s.length) mk(id, { type: 'doughnut', data: { labels: s.map(x => x[0]), datasets: [{ data: s.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts }); };
+  const bca = rep.ca && rep.ca.n, bmk = rep.marketplace && rep.marketplace.n;
+  if (bca) {
+    segDonut('binDonutIntl', [['France', bca.caFR], ['International', bca.caInt]]);
+    segDonut('binDonutOmni', [['Entrepôt', bca.caEnt], ['Ship-from-store', bca.caSFS]]);
+    if (bca.caFP != null) segDonut('binDonutDem', [['Full Price', bca.caFP], ['Off Price', bca.caOP]]);
+  }
+  if (bmk && bmk.total > 0) segDonut('binDonutMP', [['GL', bmk.glTotal], ['Printemps', bmk.printemps], ['PDT', bmk.pdt], ['Lulli', bmk.lulli]]);
 
   if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
     const s = [...rep.ga.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
