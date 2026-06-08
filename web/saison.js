@@ -155,20 +155,55 @@ function render(rep) {
     </details>`;
   }).join('');
 
+  // 4 · Démarque — opérations détectées automatiquement (à partir du CA off-price quotidien)
+  let demCard = '';
+  if (rep.demarque && rep.demarque.ops) {
+    const d = rep.demarque;
+    const opR = d.ops.map(o => `<tr>
+      <td>${esc(o.label)}</td>
+      <td>${esc(o.start)} → ${esc(o.end)}</td>
+      <td>${fInt(o.days)} j</td>
+      <td>${fEur(o.off)}</td>
+      <td>${o.total > 0 ? fPct(o.share) : '—'}</td>
+      <td>${d.offTotal > 0 ? fPct(o.off / d.offTotal) : '—'}</td>
+      <td>${o.offN1 ? delta(o.off, o.offN1) + ' · ' + fEur(o.offN1) : '<span class="na">—</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="na">Aucune opération détectée au seuil actuel.</td></tr>';
+    const subiePct = d.offTotal > 0 ? d.offSubie / d.offTotal : 0;
+    demCard = `<div class="card">
+      <h3>🏷️ Démarque — opérations détectées sur la saison</h3>
+      <div class="toolbar" style="margin-bottom:8px">
+        <span class="note" style="margin:0">Seuil de détection (part off-price/jour)</span>
+        <input type="number" id="demSeuil" min="1" max="90" step="1" value="${Math.round((d.threshold || 0.15) * 100)}" style="width:70px;background:var(--s2);color:var(--fg);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span class="note" style="margin:0">%</span>
+      </div>
+      <table><thead><tr><th>Opération</th><th>Période (1er → dernier jour)</th><th>Durée</th><th>CA Off</th><th>Profondeur</th><th>% du Off total</th><th>vs N-1</th></tr></thead><tbody>${opR}</tbody></table>
+      <div class="kgrid" style="margin-top:10px">
+        ${tile('Off price total', fEur(d.offTotal), '')}
+        ${tile('Off en opérations (piloté)', fEur(d.offInOps), d.offTotal > 0 ? `${fPct(d.offInOps / d.offTotal)} du off` : '')}
+        ${tile('Off hors opération (subi)', fEur(d.offSubie), `${fPct(subiePct)} du off`)}
+      </div>
+      <div class="note">Op détectée = suite de jours où la part d'<b>off-price</b> (démarque prix : Prix Vente Remisé ≠ Prix Vente) dépasse le seuil. Le <b>1er/dernier jour</b> bornent l'op. L'<b>off hors opération</b> = démarque <b>subie</b> (non pilotée) = piste de marge à récupérer. Auto-nommage par mois (ajuste le seuil pour fusionner/séparer les ops).</div>
+    </div>`;
+  }
+
   // Contrôle des données (CA global EShop + réconciliation) : replié, sert au contrôle du chargement
   const controlSection = `<details>
     <summary class="card" style="cursor:pointer;font-weight:700;font-size:12px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;list-style:none">🛠️ Contrôle du chargement des données (CA global EShop + réconciliation) ▾</summary>
     <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">${head}${recoCard}</div>
   </details>`;
 
-  box.innerHTML = kpiCard + controlSection + famCard + fpCard + famBlocks;
+  box.innerHTML = kpiCard + controlSection + famCard + fpCard + demCard + famBlocks;
+  // Recalcule la détection de démarque au changement de seuil
+  const ds = document.getElementById('demSeuil');
+  if (ds) ds.addEventListener('change', loadReport);
 }
 
 async function loadReport() {
   const box = document.getElementById('report');
+  const seuilEl = document.getElementById('demSeuil');
+  const demSeuil = seuilEl && seuilEl.value ? seuilEl.value : '';
   box.innerHTML = '<div class="card">Chargement…</div>';
   const p = period();
-  const q = new URLSearchParams({ ...p, dim: DIM }).toString();
+  const q = new URLSearchParams({ ...p, dim: DIM, demSeuil }).toString();
   try {
     const rep = await (await fetch('/api/report/saison?' + q)).json();
     render(rep);

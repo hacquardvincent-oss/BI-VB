@@ -1077,7 +1077,7 @@ module.exports = {
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
-  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,
