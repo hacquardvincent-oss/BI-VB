@@ -42,11 +42,36 @@
 
   <!-- 2 · CHARGEMENT -->
   <div class="card">
-    <h3>2 · Chargement des données — OMS (WSHOP)</h3>
-    <div class="toolbar">
-      <button class="btn blue" id="wshoprefresh">🔄 Importer l'OMS de saison (API WSHOP)</button>
-      <button class="btn" id="loadBtn">📊 Afficher l'analyse</button>
-      <span class="note" id="wshopnote">Importe les commandes OMS de la saison E26 et E25 (peut prendre 1-2 min sur 6 mois).</span>
+    <h3>2 · Chargement des données — OMS de saison</h3>
+
+    <!-- Import par fichier (recommandé au-delà de ~10K commandes) -->
+    <div class="note" style="margin-top:0"><b>Import par fichier (recommandé)</b> — dépose l'export OMS WSHOP (CSV ou Excel). Aucune limite de volume, et les colonnes client (PII) sont retirées automatiquement à l'import.</div>
+    <div class="grid sources" style="margin-top:8px">
+      <div class="src">
+        <div class="name">📦 OMS E26 — saison N <span class="pill miss" id="pillN">à charger</span></div>
+        <label>Export commandes 1 déc 2025 → 7 juin 2026</label>
+        <input type="file" id="fileN" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+      <div class="src">
+        <div class="name">📦 OMS E25 — saison N-1 <span class="pill miss" id="pillN1">à charger</span></div>
+        <label>Export commandes 1 déc 2024 → 7 juin 2025</label>
+        <input type="file" id="fileN1" accept=".csv,.xlsx,.xls,.txt">
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <button class="btn blue" id="loadBtn">📊 Afficher l'analyse</button>
+      <span class="note" id="ingestNote">Charge les deux fichiers (E26 et E25) puis clique « Afficher l'analyse ».</span>
+    </div>
+
+    <!-- Import par API (replié — peut peiner au-delà de ~10K commandes) -->
+    <div style="margin-top:12px;border-top:1px solid var(--br);padding-top:10px">
+      <div id="apiToggle" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--t2)">🔄 Import par API WSHOP (alternatif) <span id="apiCaret">▸</span></div>
+      <div id="apiBody" class="hidden" style="margin-top:8px">
+        <div class="toolbar">
+          <button class="btn" id="wshoprefresh">Importer l'OMS de saison (API)</button>
+          <span class="note" id="wshopnote">Récupère les commandes via l'API (découpage automatique des dates). Peut être long / instable sur de gros volumes — préférer l'import par fichier.</span>
+        </div>
+      </div>
     </div>
   </div>
 

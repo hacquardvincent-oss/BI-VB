@@ -186,6 +186,38 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
 
 document.getElementById('loadBtn').addEventListener('click', loadReport);
 
+// Import par fichier → slot dédié 'saisonoms' (N = E26, N1 = E25). Aucune limite de volume.
+function wireUpload(inputId, period, pillId, label) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const note = document.getElementById('ingestNote');
+    const pill = document.getElementById(pillId);
+    note.textContent = `Import de ${label}…`;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`/api/ingest/saisonoms/${period}`, { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+      if (pill) { pill.textContent = `${fInt(j.rows)} lignes`; pill.className = 'pill'; }
+      const dropped = (j.anonymized && j.anonymized.length) ? ` · ${j.anonymized.length} colonne(s) client retirée(s)` : '';
+      note.textContent = `✓ ${label} : ${fInt(j.rows)} lignes (${j.dateMin || '?'} → ${j.dateMax || '?'})${dropped}. Clique « Afficher l'analyse ».`;
+      loadReport();
+    } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+  });
+}
+wireUpload('fileN', 'N', 'pillN', 'OMS E26 (N)');
+wireUpload('fileN1', 'N1', 'pillN1', 'OMS E25 (N-1)');
+
+// Repli/dépli de la section import API
+document.getElementById('apiToggle').addEventListener('click', () => {
+  const body = document.getElementById('apiBody'), caret = document.getElementById('apiCaret');
+  const open = body.classList.toggle('hidden') === false;
+  caret.textContent = open ? '▾' : '▸';
+});
+
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); DIM = b.dataset.dim; loadReport();

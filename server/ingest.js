@@ -13,9 +13,11 @@ const calc = require('./calc');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl'];
+const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl', 'saisonoms'];
 const PERIODS = ['N', 'N1'];
-const ANONYMIZE = new Set(['oms', 'ret']); // sources contenant du PII client
+const ANONYMIZE = new Set(['oms', 'ret', 'saisonoms']); // sources contenant du PII client
+// Sources de type OMS (mêmes colonnes/alias, index ref. externe, bornes de dates)
+const OMS_LIKE = new Set(['oms', 'saisonoms']);
 
 // Colonnes PII à NE PAS conserver (privacy by design — cf. ADR-005)
 const PII_DENY = [
@@ -89,7 +91,7 @@ function parseBuffer(buf, filename, source) {
   return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
 }
 
-const aliasesFor = s => ({ oms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
+const aliasesFor = s => ({ oms: calc.OMS_ALIASES, saisonoms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, ret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES }[s]);
 
 // Parse + anonymise + mappe + stocke un buffer (réutilisé par la route ET le chargement auto SPECS)
 function ingestBuffer(source, period, buffer, filename, uploadedBy) {
@@ -98,9 +100,9 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy) {
   let dropped = [];
   if (ANONYMIZE.has(source)) ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
   const map = calc.autoMap(hdrs, aliasesFor(source));
-  if (source === 'oms') calc.ensureRefExtIdx(hdrs, map);
+  if (OMS_LIKE.has(source)) calc.ensureRefExtIdx(hdrs, map);
   let dateMin = null, dateMax = null;
-  if (source === 'oms' || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
+  if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
   store.setDataset(source, period, {
     hdrs, rows, map, filename,
     row_count: rows.length, date_min: dateMin, date_max: dateMax,
