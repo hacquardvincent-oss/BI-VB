@@ -94,6 +94,7 @@ const OMS_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe'],
   pv: ['prix vente'],
   pv_remise: ['prix vente remise'],
+  lieu: ['lieu de prise de commande', 'lieu prise de commande', 'lieu de commande'],
 };
 const Y2_ALIASES = {
   date: ['date'],
@@ -192,6 +193,15 @@ const EXCL_GLOBAL = ['gl.com', 'printemps'];
 const MKT_ALL = ['gl.com', 'printemps', 'la redoute', '24s'];
 const isExcl = t => EXCL_GLOBAL.some(m => (t || '').toLowerCase().includes(m));
 const isMkt = t => MKT_ALL.some(m => (t || '').toLowerCase().includes(m));
+
+// ── Filtre « Outstore » : exclut l'Instore (ventes téléphone vendeur en magasin) ──
+// Périmètre EShop métier = Outstore uniquement. Si la colonne « Lieu de prise de commande »
+// est absente (anciens imports), aucun filtre n'est appliqué (pas de régression).
+const isInstore = s => norm(s).includes('instore');
+function filterOutstore(rows, map) {
+  const li = map.lieu; if (li === undefined) return rows;
+  return rows.filter(r => !isInstore(r[li]));
+}
 
 // ── Filtre par dimension Global / FR / International (sur 'Pays livraison') ──
 function filterDim(rows, map, dim) {
@@ -923,7 +933,7 @@ module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES,
-  autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, calcAds,
+  autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

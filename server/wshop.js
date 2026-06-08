@@ -142,6 +142,8 @@ function orderToRows(order) {
   const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
   const mag = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
   const pay = (o.payment_method && o.payment_method.label) || '';
+  // Lieu de prise de commande (Outstore = e-commerce ; Instore = vente téléphone vendeur en magasin)
+  const lieu = (o.orderLocation && typeof o.orderLocation === 'object' ? o.orderLocation.label : o.orderLocation) || '';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   return items.map(it => {
@@ -159,6 +161,7 @@ function orderToRows(order) {
       'quantites commandees': qOrd,
       'Quantité non livré': Math.max(0, qOrd - qShip),
       'Ref. externe': it.reference || it.ean || '',
+      'Lieu de prise de commande': lieu,
     };
   });
 }
@@ -168,7 +171,7 @@ function buildOmsDataset(orders, fromISO, toISO) {
   const objRows = orders.flatMap(orderToRows);
   const hdrs = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN',
     'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees',
-    'Quantité non livré', 'Ref. externe'];
+    'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande'];
   const rows = objRows.map(o => hdrs.map(h => (o[h] == null ? '' : String(o[h]))));
   const map = calc.autoMap(hdrs, calc.OMS_ALIASES);
   calc.ensureRefExtIdx(hdrs, map);
@@ -208,7 +211,7 @@ function buildReturnsDataset(orders, from, to) {
 }
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
-const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe'];
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande'];
 // 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
 const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
 const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"

@@ -77,6 +77,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
 
   // ── N ──
   let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
+  rowsN = calc.filterOutstore(rowsN, omsN.map); // périmètre EShop = Outstore (exclut l'Instore)
   if (refSetN) rowsN = calc.filterToRefs(rowsN, omsN.map, refSetN);
   const sessionsN = calc.getSessionsForPeriod(gaNf, from, to, isAll);
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
@@ -97,6 +98,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope }) 
     rowsN1 = calc.filterRows(omsN.rows, omsN.map, cf, ct, false);
   }
   if (rowsN1) rowsN1 = calc.filterDim(rowsN1, mapN1, dim);
+  if (rowsN1) rowsN1 = calc.filterOutstore(rowsN1, mapN1); // périmètre EShop = Outstore
   if (rowsN1 && refSetN1) rowsN1 = calc.filterToRefs(rowsN1, mapN1, refSetN1);
   if (rowsN1 && rowsN1.length) {
     const sessionsN1 = calc.getSessionsForPeriod(gaN1f, cf, ct, isAll);
