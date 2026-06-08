@@ -268,11 +268,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const gaIdx = m => { const o = {}; Object.entries(m || {}).forEach(([k, v]) => { o[nrm(k)] = v; }); return o; };
     const gN = gaIdx(gaCampAggN), gN1 = gaIdx(gaCampAggN1), adsN1Map = {};
     (adsCalcN1 && adsCalcN1.byCampaign || []).forEach(c => { adsN1Map[nrm(c.campaign)] = c; });
+    const adsisN = store.getDataset('adsis', 'N'); const isMap = {};
+    (adsisN && adsisN.rows || []).forEach(x => { isMap[nrm(x.campaign)] = x; });
     const target = (() => { const t = parseFloat((cosTarget || '').toString().replace(',', '.')); if (!t || t <= 0) return 0.30; return t > 1 ? t / 100 : t; })();
     const totalSpend = adsCalcN.cost || 0;
     let sumCA = 0;
     const rows = adsCalcN.byCampaign.filter(c => c.cost > 0).map(c => {
       const g = gN[nrm(c.campaign)] || {}, a1 = adsN1Map[nrm(c.campaign)] || {}, g1 = gN1[nrm(c.campaign)] || {};
+      const isr = isMap[nrm(c.campaign)] || {};
       const caGA = g.revenue || 0, sessions = g.sessions || 0, purchases = g.purchases || 0;
       const spendN1 = a1.cost || 0, caGAN1 = g1.revenue || 0;
       const roas = caGA > 0 ? caGA / c.cost : null;
@@ -285,6 +288,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
         cpa: purchases > 0 ? c.cost / purchases : (c.conversions > 0 ? c.cost / c.conversions : null),
         roasN1, aboveTarget: caGA > 0 ? (c.cost / caGA) > target : true, // sans CA = au-dessus de la cible
         saturated: (roas != null && roasN1 != null && c.cost > spendN1 * 1.1 && roas < roasN1 * 0.95),
+        impressionShare: isr.is != null ? isr.is : null, lostBudget: isr.lostBudget != null ? isr.lostBudget : null, lostRank: isr.lostRank != null ? isr.lostRank : null,
       };
     }).sort((a, b) => b.spend - a.spend);
     // Parts de dépense / de CA (Pareto)
@@ -298,6 +302,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     ads.saturated = sig.filter(r => r.saturated).sort((a, b) => b.spend - a.spend).slice(0, 5);
     // Déséquilibre Pareto : grosse part de dépense, faible part de CA
     ads.imbalanced = sig.filter(r => r.shareSpend > 0.1 && r.shareCA < r.shareSpend * 0.6).sort((a, b) => (b.shareSpend - b.shareCA) - (a.shareSpend - a.shareCA)).slice(0, 5);
+    // Limité par le budget : IS perdu sur budget > 10% ET rentable (sous la cible COS) → +budget = +CA
+    ads.budgetLimited = sig.filter(r => r.lostBudget != null && r.lostBudget > 0.1 && r.roas != null && !r.aboveTarget).sort((a, b) => b.lostBudget - a.lostBudget).slice(0, 3);
+    ads.hasIS = rows.some(r => r.impressionShare != null || r.lostBudget != null);
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');

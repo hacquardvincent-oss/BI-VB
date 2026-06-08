@@ -105,6 +105,18 @@ async function fetchCampaigns(startISO, endISO) {
     ];
   });
 }
+// Impression Share par campagne (Search/Shopping) sur la période — « budget perdu » d'acquisition.
+async function fetchImpressionShare(startISO, endISO) {
+  const gaql = `SELECT campaign.name, metrics.search_impression_share, `
+    + `metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share `
+    + `FROM campaign WHERE segments.date BETWEEN '${startISO}' AND '${endISO}'`;
+  const rows = await search(gaql);
+  return rows.map(r => {
+    const c = r.campaign || {}, m = r.metrics || {};
+    const n = x => (x == null || x === '' ? null : Number(x));
+    return { campaign: c.name || '', is: n(m.searchImpressionShare), lostBudget: n(m.searchBudgetLostImpressionShare), lostRank: n(m.searchRankLostImpressionShare) };
+  }).filter(x => x.campaign && (x.is != null || x.lostBudget != null || x.lostRank != null));
+}
 function toDataset(rows, startISO, endISO) {
   return {
     hdrs: ADS_HDRS, rows, map: calc.autoMap(ADS_HDRS, calc.ADS_ALIASES),
@@ -128,14 +140,18 @@ async function refresh(opts = {}) {
   if (opts.cfrom && opts.cto) n1 = { start: opts.cfrom, end: opts.cto };
   else if (/^\d{4}-\d{2}-\d{2}$/.test(nStart)) n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
 
+  const warnings = [];
   const rowsN = await fetchCampaigns(nStart, nEnd);
   store.setDataset('ads', 'N', toDataset(rowsN, nStart, nEnd));
   let rowsN1 = null;
-  const warnings = [];
   if (n1) {
     try { const r1 = await fetchCampaigns(n1.start, n1.end); store.setDataset('ads', 'N1', toDataset(r1, n1.start, n1.end)); rowsN1 = r1.length; }
     catch (e) { warnings.push(`Google Ads N-1 : ${e.message}`); }
   }
+  // Impression Share (best-effort : indispo/null pour PMax & Display — n'interrompt pas l'import)
+  const setIS = async (period, s, e) => { try { store.setDataset('adsis', period, { rows: await fetchImpressionShare(s, e), uploaded_at: new Date().toISOString() }); } catch (err) { warnings.push(`Impression Share ${period} : ${err.message}`); } };
+  await setIS('N', nStart, nEnd);
+  if (n1) await setIS('N1', n1.start, n1.end);
   return { period: { start: nStart, end: nEnd }, rowsN: rowsN.length, rowsN1, warnings };
 }
 
