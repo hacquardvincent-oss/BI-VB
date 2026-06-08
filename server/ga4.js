@@ -159,6 +159,22 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
   }));
 }
 
+// ── Campagne × famille/catégorie produit (quelles campagnes tirent quelles familles) ──
+async function fetchCampaignCategory(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'sessionCampaignName' }, { name: 'itemCategory' }],
+    metrics: [{ name: 'itemRevenue' }, { name: 'itemsPurchased' }],
+    orderBys: [{ metric: { metricName: 'itemRevenue' }, desc: true }],
+    limit: 2000,
+  });
+  return (data.rows || []).map(r => ({
+    campaign: r.dimensionValues[0].value, category: r.dimensionValues[1].value,
+    revenue: parseFloat(r.metricValues[0].value) || 0,
+    qty: parseFloat(r.metricValues[1].value) || 0,
+  }));
+}
+
 // ── Campagnes × nouveaux/anciens (acquisition pure : ROAS nouveaux clients) ──
 async function fetchCampaignsNewReturning(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
@@ -248,6 +264,7 @@ async function refresh(opts = {}) {
   await safe('items N', async () => store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campaigns N', async () => store.setDataset('gacampaigns', 'N', { rows: await fetchCampaigns(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campnr N', async () => store.setDataset('gacampnr', 'N', { rows: await fetchCampaignsNewReturning(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campaignland N', async () => store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
   let n1Count = null;
   if (n1) {

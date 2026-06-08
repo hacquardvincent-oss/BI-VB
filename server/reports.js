@@ -321,6 +321,22 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     ads.newRoas = (totalSpend > 0 && sumNewRev > 0) ? sumNewRev / totalSpend : null;
     // Campagnes au gros budget mais peu de nouveaux clients (réachat déguisé en acquisition)
     ads.lowNew = sig.filter(r => r.newShare != null && r.newShare < 0.3 && r.spend >= 1).sort((a, b) => b.spend - a.spend).slice(0, 2);
+    // Campagne → famille/catégorie produit (GA4 itemCategory) : top familles tirées par le payant
+    const campcatN = store.getDataset('gacampcat', 'N');
+    if (campcatN && campcatN.rows && campcatN.rows.length) {
+      const catAgg = {};
+      campcatN.rows.forEach(x => {
+        const cat = (x.category || '').trim();
+        if (!cat || cat === '(not set)') return;
+        const e = catAgg[cat] || (catAgg[cat] = { category: cat, revenue: 0, byCampaign: {} });
+        e.revenue += x.revenue || 0;
+        e.byCampaign[x.campaign] = (e.byCampaign[x.campaign] || 0) + (x.revenue || 0);
+      });
+      ads.categories = Object.values(catAgg).filter(c => c.revenue > 0).map(c => {
+        const top = Object.entries(c.byCampaign).sort((a, b) => b[1] - a[1])[0] || ['', 0];
+        return { category: c.category, revenue: c.revenue, topCampaign: top[0], topCampaignRev: top[1] };
+      }).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+    }
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
