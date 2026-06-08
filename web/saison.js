@@ -5,6 +5,7 @@
 // OMS uniquement, jeux dédiés ('saisonoms') via /api/wshop/refresh?slot=saison.
 // ============================================================================
 let DIM = 'global';
+let LAST_REP = null;
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -155,6 +156,48 @@ function render(rep) {
     </details>`;
   }).join('');
 
+  // 1bis · Détail Full price / Off price (+ part hors référentiel)
+  const fo = rep.fullOff || {};
+  const foRow = (label, n, n1, sub) => `<tr><td>${sub ? '<span class="na">↳</span> ' : ''}${label}</td><td>${fEur(n)}</td><td>${n1 != null ? fEur(n1) : '<span class="na">—</span>'}</td><td>${n1 != null ? delta(n, n1) : '<span class="na">—</span>'}</td></tr>`;
+  const fullOffCard = (fo.fpN != null) ? `<div class="card">
+    <h3>💎 Détail Full price / Off price — saison N vs N-1</h3>
+    <table><thead><tr><th>Métrique</th><th>N (E26)</th><th>N-1 (E25)</th><th>Δ</th></tr></thead><tbody>
+      ${foRow('CA Full price', fo.fpN, fo.fpN1)}
+      ${foRow('CA Off price (démarque)', fo.offN, fo.offN1)}
+      ${foRow('dont Full price hors référentiel', fo.horsRefFpN, fo.horsRefFpN1, true)}
+      ${foRow('dont Off price hors référentiel', fo.horsRefOffN, fo.horsRefOffN1, true)}
+    </tbody></table>
+    <div class="note">Off price = démarque prix (Prix Vente Remisé ≠ Prix Vente). « Hors référentiel » = références vendues absentes du référentiel produit de la saison (non rattachées à une famille) — souvent d'anciennes collections.</div>
+  </div>` : '';
+
+  // 2 · Tableaux famille (Global / Full / Off) — clic sur une famille = volet détail produits
+  const famMetric = metric => {
+    const val = f => metric === 'full' ? f.caFP : metric === 'off' ? (f.caOff || 0) : f.ca;
+    const valN1 = f => metric === 'full' ? f.caFPN1 : metric === 'off' ? (f.caOffN1 || 0) : f.caN1;
+    const fams = rep.familles.filter(f => val(f) > 0).sort((a, b) => val(b) - val(a));
+    const total = fams.reduce((s, f) => s + val(f), 0);
+    const rows = fams.map(f => `<tr class="fam-row" data-fam="${esc(f.fam)}" style="cursor:pointer">
+      <td>${esc(f.fam)} <span class="na" style="font-size:10px">› détail</span></td>
+      <td>${fEur(val(f))}</td>
+      <td>${valN1(f) ? delta(val(f), valN1(f)) : '<span class="na">nouveau</span>'}</td>
+      <td>${total > 0 ? fPct(val(f) / total) : '—'}</td>
+      <td>${fInt(f.qte)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="na">—</td></tr>';
+    return `<table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids</th><th>Qté</th></tr></thead><tbody>${rows}</tbody></table>`;
+  };
+  const famTablesCard = `<div class="card">
+    <h3>👗 CA par famille — clique une famille pour le détail produits</h3>
+    <div class="toolbar" id="famTabs" style="margin-bottom:8px">
+      <button class="pb on" data-fam-tab="global">Global</button>
+      <button class="pb" data-fam-tab="full">Full price</button>
+      <button class="pb" data-fam-tab="off">Off price</button>
+    </div>
+    <div data-fam-pane="global">${famMetric('global')}</div>
+    <div data-fam-pane="full" class="hidden">${famMetric('full')}</div>
+    <div data-fam-pane="off" class="hidden">${famMetric('off')}</div>
+    <div class="note">Poids = part de la famille dans le total de la colonne. Clique une ligne → volet latéral : tous les produits (Δ N-1) + les références qui cartonnaient en N-1 et manquent cette année.</div>
+  </div>`;
+
   // 4 · Démarque — opérations détectées automatiquement (à partir du CA off-price quotidien)
   let demCard = '';
   if (rep.demarque && rep.demarque.ops) {
@@ -191,10 +234,19 @@ function render(rep) {
     <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">${head}${recoCard}</div>
   </details>`;
 
-  box.innerHTML = kpiCard + controlSection + famCard + fpCard + demCard + famBlocks;
+  LAST_REP = rep;
+  box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
   if (ds) ds.addEventListener('change', loadReport);
+  // Onglets des tableaux famille (Global / Full / Off)
+  document.querySelectorAll('#famTabs [data-fam-tab]').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.famTab;
+    document.querySelectorAll('#famTabs [data-fam-tab]').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-fam-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.famPane !== t));
+  }));
+  // Clic sur une famille → volet latéral détail produits
+  document.querySelectorAll('.fam-row').forEach(r => r.addEventListener('click', () => openDrawer(r.dataset.fam)));
 }
 
 async function loadReport() {
@@ -242,6 +294,56 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
 });
 
 document.getElementById('loadBtn').addEventListener('click', loadReport);
+
+// ── Volet latéral : détail produits d'une famille ──────────────────────────
+function closeDrawer() {
+  document.getElementById('drawer').classList.add('hidden');
+  document.getElementById('drawerBackdrop').classList.add('hidden');
+}
+function openDrawer(fam) {
+  if (!LAST_REP) return;
+  const f = (LAST_REP.familles || []).find(x => x.fam === fam);
+  if (!f) return;
+  document.getElementById('drawerTitle').textContent = f.fam;
+  const off = f.caOff != null ? f.caOff : (f.ca - (f.caFP || 0));
+  const offN1 = f.caOffN1 != null ? f.caOffN1 : ((f.caN1 || 0) - (f.caFPN1 || 0));
+  const tile = (label, val, d) => `<div class="kc"><div class="l">${label}</div><div class="v">${val}</div>${d ? `<div class="note" style="margin-top:2px">${d}</div>` : ''}</div>`;
+  const prodR = (f.produits || []).map(p => {
+    const pOff = p.ca - (p.caFP || 0);
+    return `<tr>
+      <td title="${esc(p.des)}">${esc((p.des || '').slice(0, 44))}</td>
+      <td>${fEur(p.ca)}</td>
+      <td>${p.caN1 ? delta(p.ca, p.caN1) : '<span class="na">nouv.</span>'}</td>
+      <td>${fEur(p.caFP || 0)}</td>
+      <td>${pOff > 0 ? fEur(pOff) : '—'}</td>
+      <td>${fInt(p.qte)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="na">Aucun produit.</td></tr>';
+  const perdusR = (f.perdus || []).map(p => `<tr>
+    <td title="${esc(p.des)}">${esc((p.des || '').slice(0, 44))}</td>
+    <td>${fEur(p.caN1)}</td>
+    <td>${p.ca > 0 ? fEur(p.ca) : '<span class="dn">0 €</span>'}</td>
+    <td><span class="dn">−${fEur(p.caN1 - p.ca)}</span></td>
+  </tr>`).join('');
+  const perdusBlock = (f.perdus && f.perdus.length) ? `
+    <h3 style="margin-top:16px;font-size:13px">⚠️ Cartonnaient en E25, manquent en E26</h3>
+    <table><thead><tr><th>Produit (E25)</th><th>CA E25</th><th>CA E26</th><th>Perte</th></tr></thead><tbody>${perdusR}</tbody></table>
+    <div class="note">Pistes de réassort / réédition.</div>` : '';
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="kgrid" style="margin-bottom:12px">
+      ${tile('CA global', fEur(f.ca), f.caN1 ? `${delta(f.ca, f.caN1)} vs N-1` : '')}
+      ${tile('Full price', fEur(f.caFP || 0), f.caFPN1 ? delta(f.caFP, f.caFPN1) : '')}
+      ${tile('Off price', fEur(off), offN1 ? delta(off, offN1) : '')}
+    </div>
+    <h3 style="font-size:13px">Produits de la famille (${fInt((f.produits || []).length)})</h3>
+    <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>Qté</th></tr></thead><tbody>${prodR}</tbody></table>
+    ${perdusBlock}`;
+  document.getElementById('drawer').classList.remove('hidden');
+  document.getElementById('drawerBackdrop').classList.remove('hidden');
+}
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
 // Import par fichier → slots dédiés saison (saisonoms / saisony2 / saisonref), N = E26, N1 = E25.
 function wireUpload(inputId, source, period, pillId, label) {
