@@ -243,11 +243,17 @@ function datasetFromRows(hdrs, rows, source, from, to) {
 }
 // Récupère une plage par pages, convertit chaque page en lignes légères et JETTE la page brute.
 // extra : filtres additionnels (begin/end = date de modification, pour le delta).
+// Plafond de pagination de l'API WSHOP (max_result_window) : au-delà de ~10000 résultats,
+// la pagination page/limit ne renvoie plus rien. On le contourne en découpant la fenêtre
+// de dates en sous-périodes dès qu'une fenêtre atteint ce plafond (récursif).
+const RESULT_CAP = parseInt(process.env.WSHOP_MAX_WINDOW || '10000', 10) || 10000;
+const isoAddDays = (iso, d) => { const p = iso.split('-').map(Number); const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2])); dt.setUTCDate(dt.getUTCDate() + d); return dt.toISOString().slice(0, 10); };
+const daysBetween = (a, b) => { const pa = a.split('-').map(Number), pb = b.split('-').map(Number); return Math.round((Date.UTC(pb[0], pb[1] - 1, pb[2]) - Date.UTC(pa[0], pa[1] - 1, pa[2])) / 86400000); };
+
 // guard : ne garde que les commandes dont la date de CRÉATION est dans [from,to] (sécurité delta).
 async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) {
-  const oms = [], ret = [], ids = new Set(); let page = 1, n = 0;
+  const oms = [], ret = [], ids = new Set(); let n = 0;
   const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
-  const MAX_PAGES = 2000;
   const inPeriod = o => {
     if (!guard) return true;
     const m = String(o.orderDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -255,20 +261,37 @@ async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) 
     const d = `${m[1]}-${m[2]}-${m[3]}`;
     return d >= fromISO && d <= toISO;
   };
-  while (page <= MAX_PAGES) {
-    const resp = await apiPost('/api/v1/orders/get', Object.assign({ created_from: `${fromISO} 00:00:00`, created_to: `${toISO} 23:59:59`, page, limit }, extra));
-    const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+  const consume = batch => {
     for (const o of batch) {
       if (!inPeriod(o)) continue;
+      const oid = o.orderId || o.mainOrderId || '';
+      if (oid && ids.has(oid)) continue; // dédup entre sous-fenêtres
+      if (oid) ids.add(oid);
       n++;
-      const oid = o.orderId || o.mainOrderId || ''; if (oid) ids.add(oid);
       for (const ro of orderToRows(o)) oms.push(OMS_HDRS.map(h => (ro[h] == null ? '' : String(ro[h]))));
       for (const rr of orderRetRowObjs(o)) ret.push(RET_HDRS.map(h => (rr[h] == null ? '' : String(rr[h]))));
     }
     if (onCount) onCount(n);
-    if (batch.length < limit) break;
-    page += 1;
-  }
+  };
+  // Pagine une fenêtre ; si on atteint le plafond API, on la coupe en deux par date et on
+  // récupère chaque moitié (la dédup par n° de commande absorbe les recouvrements).
+  const collectChunk = async (f, t) => {
+    const MAX_PAGES = Math.ceil(RESULT_CAP / limit) + 2;
+    let page = 1, got = 0;
+    while (page <= MAX_PAGES) {
+      const resp = await apiPost('/api/v1/orders/get', Object.assign({ created_from: `${f} 00:00:00`, created_to: `${t} 23:59:59`, page, limit }, extra));
+      const batch = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+      consume(batch); got += batch.length;
+      if (batch.length < limit) break;
+      page += 1;
+    }
+    if (got >= RESULT_CAP && daysBetween(f, t) >= 1) {
+      const mid = isoAddDays(f, Math.floor(daysBetween(f, t) / 2));
+      await collectChunk(f, mid);
+      await collectChunk(isoAddDays(mid, 1), t);
+    }
+  };
+  await collectChunk(fromISO, toISO);
   return { oms, ret, count: n, ids };
 }
 
