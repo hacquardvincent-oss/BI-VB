@@ -135,6 +135,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n1: kpiEShopN1 ? { sessions: kpiEShopN1.sessions, commandes: kpiEShopN1.commandes, ca: kpiEShopN1.ca, tt: kpiEShopN1.tt, caPerSession: cps(kpiEShopN1) } : null,
   };
   const channels = { n: calc.channelPerf(gaCalcN), n1: calc.channelPerf(gaCalcN1) };
+  const channelTypes = { n: calc.calcChannelTypes(gaCalcN), n1: calc.calcChannelTypes(gaCalcN1) };
 
   // ── Google Ads : coût / ROAS / coût par commande (croisé avec le CA EShop) ──
   const adsCalcN = adsN ? calc.calcAds(adsN.rows, adsN.map) : null;
@@ -535,6 +536,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     produits,
     funnel,
     channels,
+    channelTypes,
     device,
     daily,
     dailyN1,

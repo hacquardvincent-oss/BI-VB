@@ -414,6 +414,30 @@ function ttByCountry(paysArr, ga, top = 10) {
   }).sort((a, b) => b.commandes - a.commandes).slice(0, top);
 }
 
+// ── Récap par TYPE de canal (Paid / Direct / CRM / Social / SEO / Referral) ──
+function channelType(canal) {
+  const c = (canal || '').toLowerCase();
+  if (/paid|display|shopping|cross-network|video/.test(c)) return 'Paid';
+  if (/email|sms|crm|newsletter/.test(c)) return 'CRM';
+  if (/social/.test(c)) return 'Social';
+  if (c === 'direct' || c === '(direct)') return 'Direct';
+  if (/organic|search|seo/.test(c)) return 'SEO';
+  if (/referr|affiliate/.test(c)) return 'Referral';
+  return 'Autre';
+}
+function calcChannelTypes(g) {
+  if (!g || !g.byCanal) return null;
+  const acc = {};
+  g.byCanal.forEach(c => {
+    const t = channelType(c.canal);
+    const e = acc[t] || (acc[t] = { type: t, sessions: 0, revenue: 0, events: 0 });
+    e.sessions += c.sessions || 0; e.revenue += c.revenue || 0; e.events += c.events || 0;
+  });
+  const tot = Object.values(acc).reduce((s, x) => s + x.sessions, 0) || 1;
+  return Object.values(acc).map(x => ({ ...x, convRate: x.sessions > 0 ? x.events / x.sessions : null, share: x.sessions / tot }))
+    .sort((a, b) => b.sessions - a.sessions);
+}
+
 // ── Performance par canal d'acquisition (croisement efficacité) ─────────────
 // À partir d'un résultat calcGA : taux de conversion, CA/session, parts trafic/revenu.
 function channelPerf(g) {
@@ -990,7 +1014,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  channelPerf, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
+  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
