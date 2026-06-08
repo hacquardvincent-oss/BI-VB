@@ -34,7 +34,7 @@ const MODULES = {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
     intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
-    layout: ['ads', 'channels', 'ga', 'campaigns', 'campaignland', 'pagesrc', 'landing', 'gafunnel', 'device'],
+    layout: ['ga', 'canaltype', 'channels', 'ads', 'campaigns'],
   },
   saisonprod: {
     icon: '👗', label: 'Offre & Merchandising', preset: 'all',
@@ -46,7 +46,7 @@ const MODULES = {
     icon: '🔀', label: 'Analyses croisées', preset: 'all',
     intro: 'Croisements : Top Campagnes × Pages d\'atterrissage × Conversion, et acquisition payante par campagne.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
-    layout: ['campaignland', 'ads'],
+    layout: ['campaignland', 'pagesrc', 'ads'],
   },
   onsite: {
     icon: '🧭', label: 'Comportement on-site', preset: 'all',
@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'channels', 'ads', 'ga', 'campaigns', 'pagesrc', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'saisoncompare', 'saison', 'renta', 'ca', 'funnel'],
+    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca', 'funnel'],
   },
 };
 
@@ -110,7 +110,8 @@ const THEME_OF = {
   daily: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES',
-  channels: 'AQ', ads: 'AQ', ga: 'AQ', campaigns: 'AQ', pagesrc: 'AQ',
+  ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
+  pagesrc: 'CR', // top sources × pages → Analyses croisées
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP',
   campaignland: 'CR',
@@ -532,6 +533,14 @@ function renderReport(rep) {
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
+  // Récap par TYPE de canal (Paid / Direct / CRM / Social / SEO / Referral) — N vs N-1
+  let canalTypeCard = '';
+  const ctN = rep.channelTypes && rep.channelTypes.n;
+  if (ctN && ctN.length) {
+    const c1 = {}; (rep.channelTypes.n1 || []).forEach(x => { c1[x.type] = x; });
+    const ctRows = ctN.map(c => { const p = c1[c.type] || {}; return `<tr><td><b>${esc(c.type)}</b></td><td>${fInt(c.sessions)}</td><td>${p.sessions ? delta(c.sessions, p.sessions) : '—'}</td><td>${fPct(c.share)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.revenue)}</td><td>${p.revenue ? delta(c.revenue, p.revenue) : '—'}</td></tr>`; }).join('');
+    canalTypeCard = `<div class="card"><h3>📊 Récap par type de canal — N vs N-1</h3><table><thead><tr><th>Type</th><th>Sessions</th><th>Δ</th><th>% trafic</th><th>Conv.</th><th>Revenu</th><th>Δ rev.</th></tr></thead><tbody>${ctRows}</tbody></table><div class="note">Regroupement Paid / Direct / CRM / Social / SEO / Referral des canaux GA4.</div></div>`;
+  }
   const ch = rep.channels ? rep.channels.n : null;
   let channelsCard = '';
   if (ch && ch.length) {
@@ -903,7 +912,7 @@ function renderReport(rep) {
   // Cartes nommées + layout adapté à la cadence
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
-    channels: channelsCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
+    channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
