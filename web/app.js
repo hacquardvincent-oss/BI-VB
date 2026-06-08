@@ -1635,8 +1635,16 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
-// Consentement cookies (sessions) + cible COS + cumul saison : recharge le rapport au changement
-['consentN', 'consentN1', 'cosTarget', 'cumFrom', 'cumTo', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
+// Cumul saison : saisir N (cumFrom/cumTo) → N-1 (cumCfrom/cumCto) auto sur le comparable −364 j.
+function syncCumulComparable() {
+  const f = document.getElementById('cumFrom'), t = document.getElementById('cumTo');
+  const cf = document.getElementById('cumCfrom'), ct = document.getElementById('cumCto');
+  if (f && f.value && cf) cf.value = comparable364(f.value);
+  if (t && t.value && ct) ct.value = comparable364(t.value);
+}
+['cumFrom', 'cumTo'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { syncCumulComparable(); loadReport(); }); });
+// Consentement cookies (sessions) + cible COS + cumul saison N-1 : recharge le rapport au changement
+['consentN', 'consentN1', 'cosTarget', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
