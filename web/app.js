@@ -5,7 +5,7 @@
 let CURRENT = 'all';
 let CURRENT_DIM = 'global';
 let USER_DIM = 'global';   // prisme géo choisi par l'utilisateur (Global/FR/Inter), conservé entre les vues
-let CURRENT_MODULE = 'direction';
+let CURRENT_MODULE = 'full';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
@@ -1503,7 +1503,7 @@ function renderCAAudit(res) {
     + `<table style="margin-top:6px;font-size:12px;border-collapse:collapse"><tbody>`
     + cands.map(row).join('')
     + `</tbody></table>`
-    + brk('Par type de paiement (PVP)', a.byPayment) + brk('Par magasin / canal (PVP)', a.byStore)
+    + brk('Par type de paiement (PVP)', a.byPayment) + brk('Par lieu de prise de commande (PVP)', a.byLocation) + brk('Par magasin / canal (PVP)', a.byStore)
     + `<div style="margin-top:4px;color:var(--mut);font-size:11px">Plage des commandes récupérées : <b>${esc(a.dateMin || '—')}</b> → <b>${esc(a.dateMax || '—')}</b>. CA EShop = PVP hors GL.com/Printemps (type de paiement), magasins ship-from-store conservés.</div>`;
   function brk(title, arr) {
     if (!arr || !arr.length) return '';

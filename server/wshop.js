@@ -336,7 +336,8 @@ function newCAAudit() {
   const isExclPay = p => { const t = (p || '').toLowerCase(); return t.includes('gl.com') || t.includes('printemps') || t.includes('la redoute') || t.includes('24s'); };
   let orders = 0, lines = 0, refunds = 0, pvpTotal = 0, pvpEShop = 0, orderTotalSum = 0, shipSum = 0;
   let dateMin = '', dateMax = '';
-  const byStore = Object.create(null), byPayment = Object.create(null);
+  const byStore = Object.create(null), byPayment = Object.create(null), byLocation = Object.create(null);
+  const locOf = o => { const l = o.orderLocation; return (l && typeof l === 'object' ? (l.label || l.name || l.code || JSON.stringify(l)) : l) || '(vide)'; };
   const bump = (map, key, amt) => { const k = key || '(vide)'; const e = map[k] || (map[k] = { count: 0, total: 0 }); e.count++; e.total += amt; };
   return {
     add(o) {
@@ -354,6 +355,7 @@ function newCAAudit() {
       pvpTotal += pvpOrder;
       bump(byStore, store, pvpOrder);
       bump(byPayment, pay, pvpOrder);
+      bump(byLocation, locOf(o), pvpOrder); // Lieu de prise de commande (Outstore/Instore) — diagnostic
       if (!isExclPay(pay)) pvpEShop += pvpOrder; // PVP hors marketplaces (par type de paiement)
     },
     result() {
@@ -370,7 +372,7 @@ function newCAAudit() {
         .sort((a, b) => b.total - a.total);
       return {
         candidates, refunds: r2(refunds), orders, lines,
-        dateMin, dateMax, byStore: breakdown(byStore), byPayment: breakdown(byPayment),
+        dateMin, dateMax, byStore: breakdown(byStore), byPayment: breakdown(byPayment), byLocation: breakdown(byLocation),
       };
     },
   };
