@@ -439,6 +439,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const cancellations = {
     n: calc.calcCancellations(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.calcCancellations(rowsN1, mapN1) : null,
+    detail: calc.calcCancellationsDetail(rowsN, omsN.map),
   };
 
   // ── Retours ──
