@@ -222,4 +222,14 @@ assert.strictEqual(fd['Robes'].qte, 5, 'Qté famille Robes (2+3, hors mkt)');
 assert.strictEqual(fd['Sacs'].ca, 50, 'CA famille Sacs');
 assert.strictEqual(fd['Sacs'].qte, 1, 'Qté famille Sacs');
 
+// ── Filtre Outstore (exclut l'Instore = ventes téléphone vendeur) ───────────
+const loHdrs = ['Prix de vente paye', 'Lieu de prise de commande'];
+const loMap = calc.autoMap(loHdrs, calc.OMS_ALIASES);
+const loRows = [['100', 'OUTSTORE'], ['50', 'INSTORE'], ['30', 'Outstore'], ['20', '']];
+const loOut = calc.filterOutstore(loRows, loMap);
+assert.strictEqual(loOut.length, 3, 'Outstore : exclut la ligne Instore, garde Outstore + vide');
+assert.ok(!loOut.some(r => /instore/i.test(r[1])), 'aucune ligne Instore conservée');
+// colonne absente → aucun filtre (pas de régression)
+assert.strictEqual(calc.filterOutstore([['100'], ['50']], calc.autoMap(['Prix de vente paye'], calc.OMS_ALIASES)).length, 2, 'sans colonne lieu → tout conservé');
+
 console.log('✅ calc.test.js : tous les calculs OK');
