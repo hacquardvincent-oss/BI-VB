@@ -529,6 +529,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
     topProduitsQte: { n: topListQte(topNobj), n1: topN1obj ? topListQte(topN1obj) : null },
     familleDetail,
+    familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
     produits,
     funnel,
     channels,

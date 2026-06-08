@@ -52,7 +52,7 @@ const MODULES = {
     icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
     intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays'],
+    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays', 'fampays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
@@ -103,6 +103,7 @@ const THEME_OF = {
   kpi: 'A', ca: 'A',
   daily: 'T',
   channels: 'B', device: 'B', pagesrc: 'B', ga: 'B', campaigns: 'B', campaignland: 'B', ads: 'B',
+  fampays: 'G',
   funnel: 'C', gafunnel: 'C', itemfunnel: 'C',
   pages: 'D', landing: 'D', lostpages: 'D',
   famille: 'E', produits: 'E', renta: 'E', saison: 'E', saisoncompare: 'E',
@@ -747,6 +748,15 @@ function renderReport(rep) {
       <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
+  // International : performance par famille pour le top 5 pays
+  let fampaysCard = '';
+  if (rep.familleParPays && rep.familleParPays.length) {
+    const frows = rep.familleParPays.map(c => {
+      const fams = (c.familles || []).map(f => `${esc(f.fam)} <span style="color:var(--t3)">(${fEur(f.ca)})</span>`).join(' · ');
+      return `<tr><td><b>${esc(c.pays)}</b></td><td>${fEur(c.ca)}</td><td style="font-size:11px">${fams || '—'}</td></tr>`;
+    }).join('');
+    fampaysCard = `<div class="card"><h3>🌍 Performance par famille — Top 5 pays</h3><table><thead><tr><th>Pays</th><th>CA</th><th>Top familles</th></tr></thead><tbody>${frows}</tbody></table><div class="note">Top 5 pays par CA (vue International = hors France) avec leurs familles les plus vendues.</div></div>`;
+  }
 
   // Comparaison de saison (Implantation E26 vs E25)
   const sc = rep.seasonCompare;
@@ -870,7 +880,7 @@ function renderReport(rep) {
   const C = {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
     channels: channelsCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
-    pays: paysCard, ttpays: ttPaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
+    pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,

@@ -599,6 +599,27 @@ function calcFamilleDetail(rows, omsMap, refMap) {
   return byFam;
 }
 
+// CA par famille pour les top pays (International) — [{ pays, ca, familles: [{fam, ca}] }]
+function calcFamilleParPays(rows, omsMap, refMap, topN = 5) {
+  if (!refMap || Object.keys(refMap).length === 0) return null;
+  const pi = omsMap.prix, ti = omsMap.type, pai = omsMap.pays;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined || pai === undefined) return null;
+  const byPays = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const pays = (r[pai] || '').trim(); if (!pays) return;
+    const fam = refMap[(r[refIdx] || '').trim()] || '(non référencé)';
+    const p = fN(r[pi]);
+    const e = byPays[pays] || (byPays[pays] = { pays, ca: 0, fam: {} });
+    e.ca += p; e.fam[fam] = (e.fam[fam] || 0) + p;
+  });
+  return Object.values(byPays).sort((a, b) => b.ca - a.ca).slice(0, topN).map(c => ({
+    pays: c.pays, ca: c.ca,
+    familles: Object.entries(c.fam).filter(([f]) => f !== '(non référencé)').sort((a, b) => b[1] - a[1]).slice(0, 5).map(([fam, ca]) => ({ fam, ca })),
+  }));
+}
+
 // ── Saison : ref. externe → saison (depuis le référentiel) ──────────────────
 function buildSeasonMap(ref) {
   if (!ref || !ref.rows || !ref.hdrs) return {};
@@ -938,7 +959,7 @@ module.exports = {
   filterRows, calcOMS, calcKPIEShop, calcMarketplace,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
-  buildRefMap, calcCAFamille, calcFamilleDetail, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs,
