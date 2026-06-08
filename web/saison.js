@@ -73,6 +73,22 @@ function render(rep) {
     <div class="note">⚠️ Le <b>ship-from-store</b> (commande passée en ligne, expédiée d'une boutique) est aujourd'hui compté en <b>Instore</b> donc exclu de l'EShop. Si ton « Taux commande SFS » est élevé, ça explique une grosse part de l'écart — dis-le moi et je le rebascule en EShop.</div>
   </div>` : '';
 
+  // 0 · KPI global Saison (bloc principal d'analyse)
+  const k = rep.kpiGlobal || {};
+  const dN = (n, n1) => (n1 != null && n1 !== 0) ? delta(n, n1) : '<span class="na">—</span>';
+  const kpiCard = rep.kpiGlobal ? `<div class="card">
+    <h3>📈 KPI global — saison E26 (${esc(m.from)} → ${esc(m.to)}) vs E25</h3>
+    <div class="kgrid">
+      ${tile('CA EShop (hors mkt)', fEur(k.eshopHorsMkt), dN(k.eshopHorsMkt, k.eshopHorsMktN1))}
+      ${tile('CA Marketplace (OMS+Y2)', fEur(k.mkt), `OMS ${fEur(k.mktOMS)} · Y2 ${fEur(k.mktY2)}`)}
+      ${tile('CA France', fEur(k.caFR), dN(k.caFR, k.caFRN1))}
+      ${tile('CA International', fEur(k.caInter), dN(k.caInter, k.caInterN1))}
+      ${tile('CA Full price', fEur(k.caFP), `${dN(k.caFP, k.caFPN1)} · ${k.eshopHorsMkt > 0 ? fPct(k.caFP / k.eshopHorsMkt) : '—'} du CA EShop`)}
+      ${tile('CA Off price', fEur(k.caOff), `${dN(k.caOff, k.caOffN1)} · ${k.eshopHorsMkt > 0 ? fPct(k.caOff / k.eshopHorsMkt) : '—'} du CA EShop`)}
+    </div>
+    <div class="note">CA EShop = ventes en ligne hors marketplaces et hors Instore. Marketplace = GL.com/Printemps (OMS) + PDT/Lulli/GL (Y2, si chargé). Full/Off price sur le périmètre EShop.</div>
+  </div>` : '';
+
   // 2 · Poids des familles dans le CA global EShop (tout l'EShop)
   const famR = rep.familles.map(f => `<tr>
     <td>${esc(f.fam)}</td>
@@ -139,7 +155,13 @@ function render(rep) {
     </details>`;
   }).join('');
 
-  box.innerHTML = head + recoCard + famCard + fpCard + famBlocks;
+  // Contrôle des données (CA global EShop + réconciliation) : replié, sert au contrôle du chargement
+  const controlSection = `<details>
+    <summary class="card" style="cursor:pointer;font-weight:700;font-size:12px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;list-style:none">🛠️ Contrôle du chargement des données (CA global EShop + réconciliation) ▾</summary>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">${head}${recoCard}</div>
+  </details>`;
+
+  box.innerHTML = kpiCard + controlSection + famCard + fpCard + famBlocks;
 }
 
 async function loadReport() {
@@ -186,8 +208,8 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
 
 document.getElementById('loadBtn').addEventListener('click', loadReport);
 
-// Import par fichier → slot dédié 'saisonoms' (N = E26, N1 = E25). Aucune limite de volume.
-function wireUpload(inputId, period, pillId, label) {
+// Import par fichier → slots dédiés saison (saisonoms / saisony2 / saisonref), N = E26, N1 = E25.
+function wireUpload(inputId, source, period, pillId, label) {
   const input = document.getElementById(inputId);
   if (!input) return;
   input.addEventListener('change', async () => {
@@ -198,18 +220,23 @@ function wireUpload(inputId, period, pillId, label) {
     note.textContent = `Import de ${label}…`;
     try {
       const fd = new FormData(); fd.append('file', file);
-      const r = await fetch(`/api/ingest/saisonoms/${period}`, { method: 'POST', body: fd });
+      const r = await fetch(`/api/ingest/${source}/${period}`, { method: 'POST', body: fd });
       const j = await r.json();
       if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
       if (pill) { pill.textContent = `${fInt(j.rows)} lignes`; pill.className = 'pill'; }
-      const dropped = (j.anonymized && j.anonymized.length) ? ` · ${j.anonymized.length} colonne(s) client retirée(s)` : '';
-      note.textContent = `✓ ${label} : ${fInt(j.rows)} lignes (${j.dateMin || '?'} → ${j.dateMax || '?'})${dropped}. Clique « Afficher l'analyse ».`;
+      const dropped = (source === 'saisonoms' && j.anonymized && j.anonymized.length) ? ' · colonnes client retirées' : '';
+      const dates = (j.dateMin || j.dateMax) ? ` (${j.dateMin || '?'} → ${j.dateMax || '?'})` : '';
+      note.textContent = `✓ ${label} : ${fInt(j.rows)} lignes${dates}${dropped}. Clique « Afficher l'analyse ».`;
       loadReport();
     } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
   });
 }
-wireUpload('fileN', 'N', 'pillN', 'OMS E26 (N)');
-wireUpload('fileN1', 'N1', 'pillN1', 'OMS E25 (N-1)');
+wireUpload('fileN', 'saisonoms', 'N', 'pillN', 'OMS E26 (N)');
+wireUpload('fileN1', 'saisonoms', 'N1', 'pillN1', 'OMS E25 (N-1)');
+wireUpload('fileY2N', 'saisony2', 'N', 'pillY2N', 'Y2 E26 (N)');
+wireUpload('fileY2N1', 'saisony2', 'N1', 'pillY2N1', 'Y2 E25 (N-1)');
+wireUpload('fileRefN', 'saisonref', 'N', 'pillRefN', 'Référentiel E26 (N)');
+wireUpload('fileRefN1', 'saisonref', 'N1', 'pillRefN1', 'Référentiel E25 (N-1)');
 
 // Repli/dépli de la section import API
 document.getElementById('apiToggle').addEventListener('click', () => {
