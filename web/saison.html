@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Analyse de saison</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <span style="color:var(--t3);font-size:11px">Analyse de saison — période longue</span>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a class="btn" href="/app.html" title="Retour au reporting (analyses courtes)">← Reporting</a>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap">
+  <!-- INTRO -->
+  <div class="card">
+    <h3>🏷️ Démarque & saison — E26 vs E25</h3>
+    <div class="note">Analyse <b>période longue</b>, indépendante de l'app centrale : <b>Full price vs Off price</b> par famille et top produits, saison <b>E26</b> (1 déc 2025 → 7 juin 2026) vs <b>E25</b> (1 déc 2024 → 7 juin 2025). Données <b>OMS uniquement</b>, importées dans des jeux dédiés (n'écrase pas le reporting courant).</div>
+  </div>
+
+  <!-- 1 · PÉRIODE -->
+  <div class="card">
+    <h3>1 · Période de saison — N (E26) vs N-1 (E25)</h3>
+    <div class="toolbar">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">N (E26)</span>
+      <input type="date" id="dNfrom" class="dt" value="2025-12-01"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt" value="2026-06-07">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1 (E25)</span>
+      <input type="date" id="dCfrom" class="dt" value="2024-12-01"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt" value="2025-06-07">
+    </div>
+    <div class="toolbar" style="margin-top:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
+      <button class="pb on" data-dim="global">FR + Inter</button>
+      <button class="pb" data-dim="fr">France</button>
+      <button class="pb" data-dim="inter">International</button>
+    </div>
+  </div>
+
+  <!-- 2 · CHARGEMENT -->
+  <div class="card">
+    <h3>2 · Chargement des données — OMS (WSHOP)</h3>
+    <div class="toolbar">
+      <button class="btn blue" id="wshoprefresh">🔄 Importer l'OMS de saison (API WSHOP)</button>
+      <button class="btn" id="loadBtn">📊 Afficher l'analyse</button>
+      <span class="note" id="wshopnote">Importe les commandes OMS de la saison E26 et E25 (peut prendre 1-2 min sur 6 mois).</span>
+    </div>
+  </div>
+
+  <!-- RÉSULTAT -->
+  <div id="report"></div>
+</div>
+
+<script src="/saison.js"></script>
+</body>
+</html>

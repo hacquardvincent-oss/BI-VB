@@ -16,7 +16,7 @@ const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' }
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'demarque', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
@@ -41,13 +41,6 @@ const MODULES = {
     intro: 'Analyse d\'offre (figée, suivie dans le temps) : CA par famille vs N-1, top produits, comparaison de saison (E26 vs E25), rentabilité, et analyse des campagnes/communications vs N-1 (a-t-on raté une mise en avant ?).',
     files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ga', 'ret'] },
     layout: ['famille', 'produits', 'saisoncompare', 'saison', 'renta', 'campaigns'],
-  },
-  demarque: {
-    icon: '🏷️', label: 'Démarque E26/E25', preset: 'all',
-    dates: { from: '2025-12-01', to: '2026-06-07', cfrom: '2024-12-01', cto: '2025-06-07' },
-    intro: 'Full price vs Off price — saison E26 (1 déc 2025 → 7 juin 2026) vs E25 (1 déc 2024 → 7 juin 2025) : familles et top produits vs N-1. ⚠️ Importer l\'OMS sur cette plage.',
-    files: { required: ['oms'], optional: ['ref', 'impl'] },
-    layout: ['fulloff', 'saisoncompare'],
   },
   croisees: {
     icon: '🔀', label: 'Analyses croisées', preset: 'all',
@@ -394,11 +387,9 @@ function currentPeriod() {
   const v = id => document.getElementById(id).value;
   return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
 }
-// Période d'import : période + plage « cumul saison » → l'import couvre tout (sinon cumul sans données).
+// Période d'import : la période courte sélectionnée (N vs N-1).
 function importPeriod() {
-  const p = currentPeriod();
-  ['cumFrom', 'cumTo', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el && el.value) p[id] = el.value; });
-  return p;
+  return currentPeriod();
 }
 // Comparable retail N-1 = N − 364 jours (52 semaines pile) → même jour de semaine
 // (jeudi vs jeudi). Préféré au « même date l'an dernier » qui décale d'un jour.
@@ -428,8 +419,7 @@ function reportQuery() {
     ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
     : `preset=all&dim=${CURRENT_DIM}`;
   const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
-  const cum = `&cumFrom=${cv('cumFrom')}&cumTo=${cv('cumTo')}&cumCfrom=${cv('cumCfrom')}&cumCto=${cv('cumCto')}`;
-  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}${cum}`;
+  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -1073,8 +1063,6 @@ function buildBilan(rep) {
   };
   const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
   const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true);
-  const mensuelCard = rep.cumulMensuel ? renderScorecard(`📅 Cumul mensuel${per(rep.cumulMensuel.period)}`, rep.cumulMensuel, false) : '';
-  const saisonCard = rep.cumulSaison ? renderScorecard(`📅 Cumul saison${per(rep.cumulSaison.period)}`, rep.cumulSaison, false) : '';
   const sigs = bilanSignals(rep);
   const sigHtml = sigs.length
     ? `<div class="bilan-sigs">${sigs.slice(0, 6).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
@@ -1090,7 +1078,7 @@ function buildBilan(rep) {
   let consentNote = '';
   if (cs && cs.n) consentNote = `<div class="note" style="margin-top:6px">🍪 Sessions ajustées du consentement — N : ${Math.round(cs.n * 100)}% d'acceptation (${fInt(cs.sessionsRawN)} GA → <b>${fInt(k.sessions)}</b> réelles)${cs.n1 && cs.sessionsRawN1 != null ? ` · N-1 : ${Math.round(cs.n1 * 100)}% (${fInt(cs.sessionsRawN1)} → ${fInt(k1 && k1.sessions)})` : ''}. Le taux de transfo est recalculé sur cette base.</div>`;
   return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
-    ${mainCard}${mensuelCard}${saisonCard}${consentNote}${sigHtml}${ia}</div>`;
+    ${mainCard}${consentNote}${sigHtml}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
@@ -1688,16 +1676,8 @@ document.getElementById('applyDates').addEventListener('click', () => {
   document.getElementById('datesAll').classList.remove('on');
   loadReport();
 });
-// Cumul saison : saisir N (cumFrom/cumTo) → N-1 (cumCfrom/cumCto) auto sur le comparable −364 j.
-function syncCumulComparable() {
-  const f = document.getElementById('cumFrom'), t = document.getElementById('cumTo');
-  const cf = document.getElementById('cumCfrom'), ct = document.getElementById('cumCto');
-  if (f && f.value && cf) cf.value = comparable364(f.value);
-  if (t && t.value && ct) ct.value = comparable364(t.value);
-}
-['cumFrom', 'cumTo'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { syncCumulComparable(); loadReport(); }); });
-// Consentement cookies (sessions) + cible COS + cumul saison N-1 : recharge le rapport au changement
-['consentN', 'consentN1', 'cosTarget', 'cumCfrom', 'cumCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
+// Consentement cookies (sessions) + cible COS : recharge le rapport au changement
+['consentN', 'consentN1', 'cosTarget'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
