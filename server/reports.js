@@ -697,7 +697,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
 
   // Index désignation (modèle) → CA/qté, N et N-1 (tout EShop) pour le comparatif produit
   const desKey = e => `${e.fam} ${e.des || e.ref || '(sans désignation)'}`;
-  const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0 }); t.ca += e.ca; t.qte += e.qte; }); return o; };
+  const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0, caFP: 0 }); t.ca += e.ca; t.qte += e.qte; t.caFP += e.caFP || 0; }); return o; };
   const nDes = desIdx(nArr), n1Des = desIdx(n1Arr);
 
   // Agrégat famille sur TOUT l'EShop (réconcilie avec le CA global) + part collection + full price
@@ -708,9 +708,10 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
 
   const familles = Object.values(famAgg).map(f => {
     // Top 10 produits (désignation) de la famille, vs même produit en N-1 (0 si nouveauté)
-    const top = Object.values(nDes).filter(d => d.fam === f.fam).sort((a, b) => b.ca - a.ca).slice(0, 10)
-      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0 }; });
+    const produits = Object.values(nDes).filter(d => d.fam === f.fam).sort((a, b) => b.ca - a.ca).slice(0, 80)
+      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caFP: d.caFP, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0, caFPN1: p ? p.caFP : 0 }; });
     // Réfs bien vendues en N-1 (collection E25) qu'on ne vend plus cette année (désignation, EShop complet N)
+    const top = produits.slice(0, 10);
     const perdusRaw = {};
     n1Arr.filter(e => e.fam === f.fam && inColN1(e)).forEach(e => { const k = e.des || e.ref || '(sans désignation)'; const t = perdusRaw[k] || (perdusRaw[k] = { des: k, caN1: 0, qteN1: 0 }); t.caN1 += e.ca; t.qteN1 += e.qte; });
     const perdus = Object.values(perdusRaw)
@@ -725,12 +726,24 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
       collShare: f.ca > 0 ? f.collCa / f.ca : 0,
       poidsN1: (kN1 && kN1.ca > 0) ? f.caN1 / kN1.ca : null,
       fpShare: f.ca > 0 ? f.caFP / f.ca : 0,
-      top, perdus,
+      caOff: f.ca - f.caFP, caOffN1: f.caN1 - f.caFPN1,
+      top, produits, perdus,
     };
   }).sort((a, b) => b.ca - a.ca);
   // Total full price (hors démarque) sur tout l'EShop, N et N-1
   const caFP = kN.caFP != null ? kN.caFP : null;
   const caFPN1 = (kN1 && kN1.caFP != null) ? kN1.caFP : null;
+  // Détail Full/Off price + part « hors référentiel » (réfs non mappées à une famille)
+  const horsN = nArr.filter(e => e.fam === '(non référencé)');
+  const horsN1 = n1Arr.filter(e => e.fam === '(non référencé)');
+  const sumFP = a => a.reduce((s, e) => s + (e.caFP || 0), 0);
+  const sumOff = a => a.reduce((s, e) => s + (e.ca - (e.caFP || 0)), 0);
+  const fullOff = {
+    fpN: caFP, fpN1: caFPN1,
+    offN: caFP != null ? kN.ca - caFP : null, offN1: caFPN1 != null ? kN1.ca - caFPN1 : null,
+    horsRefFpN: sumFP(horsN), horsRefFpN1: hasN1 ? sumFP(horsN1) : null,
+    horsRefOffN: sumOff(horsN), horsRefOffN1: hasN1 ? sumOff(horsN1) : null,
+  };
 
   // Démarque : détection auto des opérations à partir de la série quotidienne off-price
   const seuil = parseFloat((demSeuil || '').toString().replace(',', '.'));
@@ -752,6 +765,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil }) {
       ordersEshop: recoN.ordersEshop, ordersInstore: recoN.ordersInstore, ordersMkt: recoN.ordersMkt,
     },
     kpiGlobal,
+    fullOff,
     demarque,
     familles,
   };
