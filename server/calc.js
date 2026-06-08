@@ -922,8 +922,9 @@ function salesByRefFam(rows, omsMap, refMap) {
   if (refIdx === undefined) return out;
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
-    const rc = (r[refIdx] || '').toString().trim(); if (!rc) return;
-    const e = out[rc] || (out[rc] = { ref: rc, model: baseRef(rc), fam: (refMap && refMap[rc]) || '(non référencé)', des: '', ca: 0, qte: 0 });
+    const rc = (r[refIdx] || '').toString().trim();
+    const key = rc || '∅';
+    const e = out[key] || (out[key] = { ref: rc, model: rc ? baseRef(rc) : '', fam: (refMap && refMap[rc]) || '(non référencé)', des: '', ca: 0, qte: 0 });
     if (!e.des && di !== undefined && r[di]) e.des = (r[di] || '').toString().trim();
     e.ca += fN(r[pi]);
     e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;

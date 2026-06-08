@@ -42,30 +42,38 @@ function render(rep) {
   // 1 · Bilan global EShop de la saison
   const tile = (label, val, d) => `<div class="kc"><div class="l">${label}</div><div class="v">${val}</div>${d ? `<div class="note" style="margin-top:2px">${d}</div>` : ''}</div>`;
   const colShare = g.ca > 0 && g.collectionCa != null ? g.collectionCa / g.ca : null;
+  // Réconciliation : CA EShop retenu + ce qui est exclu (Instore, Marketplaces)
+  const recoBits = [];
+  if (g.instore) recoBits.push(`Instore exclu (commandes prises en boutique) : <b>${fEur(g.instore)}</b>`);
+  if (g.mkt) recoBits.push(`Marketplaces exclus : <b>${fEur(g.mkt)}</b>`);
+  const recoNote = recoBits.length ? `<div class="note">Réconciliation OMS sur la fenêtre : ${recoBits.join(' · ')}. Le reste = <b>CA EShop saison ${fEur(g.ca)}</b>.</div>` : '';
   const head = `<div class="card">
     <h3>📊 CA global EShop — saison E26 (${esc(m.from)} → ${esc(m.to)}) vs E25${m.hasN1 ? ` (${esc(m.cfrom)} → ${esc(m.cto)})` : ' · <span class="na">pas de N-1</span>'}</h3>
     <div class="kgrid">
       ${tile('CA EShop saison', fEur(g.ca), g.caN1 != null ? `${delta(g.ca, g.caN1)} vs ${fEur(g.caN1)}` : '')}
       ${tile('Commandes', fInt(g.commandes), g.commandesN1 != null ? `${delta(g.commandes, g.commandesN1)}` : '')}
       ${tile('Pièces', fInt(g.pieces), g.piecesN1 != null ? `${delta(g.pieces, g.piecesN1)}` : '')}
-      ${tile('CA collection E26', fEur(g.collectionCa), colShare != null ? `${fPct(colShare)} du CA EShop saison` : '')}
+      ${g.collectionCa != null ? tile('dont collection E26', fEur(g.collectionCa), colShare != null ? `${fPct(colShare)} du CA EShop saison` : '') : ''}
     </div>
-    <div class="note">Le <b>CA EShop saison</b> = toutes les ventes EShop de la fenêtre (hors marketplaces). Le détail famille/produits ci-dessous est rattaché à la <b>collection</b> (réfs de l'implantation E26 pour N, E25 pour N-1) : le reste du CA EShop = reports d'anciennes collections / hors implantation.</div>
+    <div class="note">Le <b>CA EShop saison</b> = toutes les ventes EShop de la fenêtre (hors marketplaces, hors Instore). Le détail famille/produits ci-dessous couvre <b>tout l'EShop</b> et réconcilie avec ce total. La <b>collection E26</b> (réfs de l'implantation) est indiquée à part : c'est la part de chaque famille issue de la collection courante.</div>
+    ${recoNote}
+    ${m.dataMax ? `<div class="note">Données OMS de saison jusqu'au <b>${esc(m.dataMax)}</b>. Si une vente récente manque, relance l'import.</div>` : ''}
   </div>`;
 
-  // 2 · Poids des familles (collection) dans le CA global EShop
+  // 2 · Poids des familles dans le CA global EShop (tout l'EShop)
   const famR = rep.familles.map(f => `<tr>
     <td>${esc(f.fam)}</td>
     <td>${fEur(f.ca)}</td>
     <td>${f.caN1 ? delta(f.ca, f.caN1) : '<span class="na">nouveau</span>'}</td>
     <td>${fPct(f.poids)}</td>
+    <td>${fPct(f.collShare)}</td>
     <td>${fInt(f.qte)}</td>
     <td>${f.qteN1 ? delta(f.qte, f.qteN1) : '—'}</td>
   </tr>`).join('');
   const famCard = `<div class="card">
-    <h3>👗 Poids du CA par famille (collection E26) — vs E25</h3>
-    <table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids EShop</th><th>Qté</th><th>Δ Qté</th></tr></thead><tbody>${famR}</tbody></table>
-    <div class="note">Poids EShop = CA de la famille (collection) ÷ CA global EShop de la saison.</div>
+    <h3>👗 Poids du CA par famille (tout l'EShop) — vs E25</h3>
+    <table><thead><tr><th>Famille</th><th>CA</th><th>Δ N-1</th><th>Poids EShop</th><th>Part coll. E26</th><th>Qté</th><th>Δ Qté</th></tr></thead><tbody>${famR}</tbody></table>
+    <div class="note">Poids EShop = CA famille ÷ CA EShop saison (somme ≈ 100%). Part coll. E26 = part de la famille issue de la collection (implantation) ; le reste = reports / hors collection.</div>
   </div>`;
 
   // 3 · Détail par famille : top 10 produits + références perdues vs N-1
@@ -85,11 +93,11 @@ function render(rep) {
     </tr>`).join('');
     const perdusBlock = f.perdus.length ? `
       <h3 style="margin-top:14px;font-size:13px">⚠️ Bien vendues en E25, en perte de vitesse en E26</h3>
-      <table><thead><tr><th>Produit (réf E25)</th><th>CA E25</th><th>CA E26</th><th>Perte</th><th>Qté E25</th></tr></thead><tbody>${perdusR}</tbody></table>
-      <div class="note">Références de la collection E25 qui performaient l'an dernier et qu'on ne vend plus (ou beaucoup moins) cette saison — pistes de réassort / réédition.</div>` : '';
+      <table><thead><tr><th>Produit (collection E25)</th><th>CA E25</th><th>CA E26</th><th>Perte</th><th>Qté E25</th></tr></thead><tbody>${perdusR}</tbody></table>
+      <div class="note">Produits de la collection E25 qui performaient l'an dernier et qu'on ne vend plus (ou beaucoup moins) cette saison — pistes de réassort / réédition.</div>` : '';
     return `<details class="card" ${rep.familles.length <= 4 ? 'open' : ''}>
       <summary style="cursor:pointer;font-weight:700;font-size:14px">${esc(f.fam)} — ${fEur(f.ca)} ${f.caN1 ? `(${delta(f.ca, f.caN1)} vs N-1)` : ''} · ${fInt(f.qte)} pièces</summary>
-      <h3 style="margin-top:12px;font-size:13px">Top 10 produits E26</h3>
+      <h3 style="margin-top:12px;font-size:13px">Top 10 produits (tout l'EShop)</h3>
       <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Qté</th></tr></thead><tbody>${topR}</tbody></table>
       ${perdusBlock}
     </details>`;
