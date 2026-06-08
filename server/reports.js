@@ -553,14 +553,19 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // ── Analyse de saison (page à part, période longue) ────────────────────────
-// OMS uniquement, jeux dédiés ('saisonoms'). Full vs Off price par famille et top
-// produits, N (E26) vs N-1 (E25). Indépendant de l'app centrale (période courte).
+// OMS uniquement, jeux dédiés ('saisonoms'). Rattachement « collection + date » :
+//   N   = réfs de l'implantation E26 vendues sur la fenêtre N (déc→juin),
+//   N-1 = réfs de l'implantation E25 vendues sur la fenêtre N-1.
+// Restitue : CA global EShop de la saison (toutes ventes fenêtre) N vs N-1, poids
+// des familles (collection) dans ce global, top 10 produits/famille vs N-1, et les
+// références bien vendues en N-1 qu'on ne vend plus cette année (par famille).
 async function buildSaison({ from, to, cfrom, cto, dim }) {
   dim = dim || 'global';
   const omsN = await loadDataset('saisonoms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
   const omsN1 = await loadDataset('saisonoms', 'N1');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
 
   if (!from || !to) { from = omsN.dateMin; to = omsN.dateMax; }
   const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
@@ -568,30 +573,68 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
   const refMap = ref ? calc.buildRefMap(ref) : {};
 
-  let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, false), omsN.map, dim);
-  rowsN = calc.filterOutstore(rowsN, omsN.map);
-
+  let rowsN = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, false), omsN.map, dim), omsN.map);
   let rowsN1 = null, mapN1 = omsN.map;
   if (omsN1) {
     calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map); mapN1 = omsN1.map;
     rowsN1 = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN1.rows, mapN1, cf, ct, false), mapN1, dim), mapN1);
   }
+  const hasN1 = !!(rowsN1 && rowsN1.length);
 
-  const fullOffFamille = (() => {
-    const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
-    const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;
-    const keys = new Set([...Object.keys(a), ...(b ? Object.keys(b) : [])]);
-    return [...keys].filter(k => k !== '(non référencé)').map(f => ({ fam: f, ca: (a[f] || {}).ca || 0, caFP: (a[f] || {}).caFP || 0, caOP: (a[f] || {}).caOP || 0, qte: (a[f] || {}).qte || 0, caN1: b ? ((b[f] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca);
-  })();
-  const fullOffProduits = (() => {
-    const a = calc.calcFullOffByProduct(rowsN, omsN.map); if (!a) return null;
-    const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByProduct(rowsN1, mapN1) : null;
-    return Object.entries(a).map(([des, v]) => ({ des, ca: v.ca, caFP: v.caFP, caOP: v.caOP, qte: v.qte, caN1: b ? ((b[des] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca).slice(0, 30);
-  })();
+  // CA global EShop de la saison = toutes les ventes EShop de la fenêtre (hors marketplaces)
+  const kN = calc.calcKPIEShop(rowsN, omsN.map, null);
+  const kN1 = hasN1 ? calc.calcKPIEShop(rowsN1, mapN1, null) : null;
+
+  // Ventes par référence (RC) sur toute la fenêtre, N et N-1
+  const nWin = calc.salesByRefFam(rowsN, omsN.map, refMap);
+  const n1Win = hasN1 ? calc.salesByRefFam(rowsN1, mapN1, refMap) : {};
+
+  // Appartenance collection : modèles de l'implantation E26 (N) / E25 (N-1)
+  const setN = implN ? calc.implRefSet(implN) : null;    // E26
+  const setN1 = implN1 ? calc.implRefSet(implN1) : null;  // E25
+  const colN = Object.values(nWin).filter(e => !setN || setN.has(e.model));
+  const colN1 = Object.values(n1Win).filter(e => !setN1 || setN1.has(e.model));
+  const sum = arr => arr.reduce((s, e) => s + e.ca, 0);
+
+  // Agrégat famille (collection)
+  const famAgg = {};
+  const bump = (fam, e, side) => {
+    const x = famAgg[fam] || (famAgg[fam] = { fam, ca: 0, qte: 0, caN1: 0, qteN1: 0 });
+    if (side === 'N') { x.ca += e.ca; x.qte += e.qte; } else { x.caN1 += e.ca; x.qteN1 += e.qte; }
+  };
+  colN.forEach(e => bump(e.fam, e, 'N'));
+  colN1.forEach(e => bump(e.fam, e, 'N1'));
+
+  const byFam = arr => { const o = {}; arr.forEach(e => { (o[e.fam] = o[e.fam] || []).push(e); }); return o; };
+  const colNByFam = byFam(colN), colN1ByFam = byFam(colN1);
+
+  const familles = Object.values(famAgg).map(f => {
+    // Top 10 produits E26 de la famille, vs même RC en N-1 (0 si nouveauté)
+    const top = (colNByFam[f.fam] || []).slice().sort((a, b) => b.ca - a.ca).slice(0, 10)
+      .map(e => { const p = n1Win[e.ref]; return { ref: e.ref, des: e.des || e.ref, ca: e.ca, qte: e.qte, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0 }; });
+    // Réfs bien vendues en N-1 (collection E25) qu'on ne vend plus cette année (fenêtre N complète)
+    const perdus = (colN1ByFam[f.fam] || []).slice()
+      .map(e => { const p = nWin[e.ref]; return { ref: e.ref, des: e.des || e.ref, caN1: e.ca, qteN1: e.qte, ca: p ? p.ca : 0, qte: p ? p.qte : 0 }; })
+      .filter(x => x.caN1 > 0 && x.ca < x.caN1)
+      .sort((a, b) => (b.caN1 - b.ca) - (a.caN1 - a.ca))
+      .slice(0, 8);
+    return {
+      fam: f.fam, ca: f.ca, caN1: f.caN1, qte: f.qte, qteN1: f.qteN1,
+      poids: kN.ca > 0 ? f.ca / kN.ca : 0,
+      poidsN1: (kN1 && kN1.ca > 0) ? f.caN1 / kN1.ca : null,
+      top, perdus,
+    };
+  }).sort((a, b) => b.ca - a.ca);
 
   return {
-    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1: !!(rowsN1 && rowsN1.length), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0 },
-    fullOffFamille, fullOffProduits,
+    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0 },
+    global: {
+      ca: kN.ca, caN1: kN1 ? kN1.ca : null,
+      commandes: kN.commandes, commandesN1: kN1 ? kN1.commandes : null,
+      pieces: kN.pieces, piecesN1: kN1 ? kN1.pieces : null,
+      collectionCa: sum(colN), collectionCaN1: hasN1 ? sum(colN1) : null,
+    },
+    familles,
   };
 }
 
