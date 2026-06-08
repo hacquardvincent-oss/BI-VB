@@ -564,14 +564,18 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   const omsN = await loadDataset('saisonoms', 'N');
   if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
   const omsN1 = await loadDataset('saisonoms', 'N1');
-  const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  // Référentiel : priorité au référentiel de saison déposé (N / N-1), sinon le référentiel global
+  const refN = (await loadDataset('saisonref', 'N')) || (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  const refN1 = (await loadDataset('saisonref', 'N1')) || refN;
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
+  const y2N = await loadDataset('saisony2', 'N'), y2N1 = await loadDataset('saisony2', 'N1');
 
   if (!from || !to) { from = omsN.dateMin; to = omsN.dateMax; }
   const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
-  const refMap = ref ? calc.buildRefMap(ref) : {};
+  const refMap = refN ? calc.buildRefMap(refN) : {};
+  const refMapN1 = refN1 ? calc.buildRefMap(refN1) : refMap;
 
   // Lignes de la fenêtre avant filtre Outstore (pour la réconciliation Instore/Mkt)
   const rawN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, false), omsN.map, dim);
@@ -587,6 +591,24 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   // CA global EShop de la saison = toutes les ventes EShop de la fenêtre (hors marketplaces, Outstore)
   const kN = calc.calcKPIEShop(rowsN, omsN.map, null);
   const kN1 = hasN1 ? calc.calcKPIEShop(rowsN1, mapN1, null) : null;
+
+  // Ventilations CA : FR / International (EShop hors mkt) + Marketplaces (OMS + Y2)
+  const caOMSn = calc.calcOMS(rowsN, omsN.map);
+  const caOMSn1 = hasN1 ? calc.calcOMS(rowsN1, mapN1) : null;
+  const y2winN = y2N ? calc.filterRows(y2N.rows, y2N.map, from, to, false) : [];
+  const y2winN1 = (hasN1 && y2N1) ? calc.filterRows(y2N1.rows, y2N1.map, cf, ct, false) : [];
+  const mpN = calc.calcMarketplace(rowsN, omsN.map, y2winN, y2N ? y2N.map : {});
+  const mpN1 = hasN1 ? calc.calcMarketplace(rowsN1, mapN1, y2winN1, y2N1 ? y2N1.map : {}) : null;
+  const mktY2 = m => m ? (m.glY2 + m.pdt + m.lulli) : 0;
+  const kpiGlobal = {
+    eshopHorsMkt: kN.ca, eshopHorsMktN1: kN1 ? kN1.ca : null,
+    mkt: caOMSn.caMkt + mktY2(mpN), mktN1: caOMSn1 ? (caOMSn1.caMkt + mktY2(mpN1)) : null,
+    mktOMS: caOMSn.caMkt, mktY2: mktY2(mpN),
+    caFR: caOMSn.caFR, caFRN1: caOMSn1 ? caOMSn1.caFR : null,
+    caInter: caOMSn.caInt, caInterN1: caOMSn1 ? caOMSn1.caInt : null,
+    caFP: kN.caFP, caFPN1: kN1 ? kN1.caFP : null,
+    caOff: kN.ca - (kN.caFP || 0), caOffN1: kN1 ? (kN1.ca - (kN1.caFP || 0)) : null,
+  };
 
   // Réconciliation avec WSHOP : décompose le CA importé (toutes lignes de la fenêtre,
   // avant filtre Outstore) en EShop (retenu) / Instore (exclu) / Marketplaces (exclu),
@@ -613,7 +635,7 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
 
   // Ventes par référence (RC) sur toute la fenêtre EShop, N et N-1
   const nWin = calc.salesByRefFam(rowsN, omsN.map, refMap);
-  const n1Win = hasN1 ? calc.salesByRefFam(rowsN1, mapN1, refMap) : {};
+  const n1Win = hasN1 ? calc.salesByRefFam(rowsN1, mapN1, refMapN1) : {};
   const nArr = Object.values(nWin), n1Arr = Object.values(n1Win);
 
   // Appartenance collection (indicateur secondaire) : modèles implantation E26 (N) / E25 (N-1)
@@ -675,6 +697,7 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
       omsTotalCa: recoN.total, omsOrders: recoN.orders,
       ordersEshop: recoN.ordersEshop, ordersInstore: recoN.ordersInstore, ordersMkt: recoN.ordersMkt,
     },
+    kpiGlobal,
     familles,
   };
 }
