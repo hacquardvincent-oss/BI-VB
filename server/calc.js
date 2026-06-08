@@ -918,16 +918,19 @@ function filterToRefs(rows, map, refSet) {
 function salesByRefFam(rows, omsMap, refMap) {
   const pi = omsMap.prix, ti = omsMap.type, qi = omsMap.qte, di = omsMap.des;
   const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  const isFP = fullOffSplit(omsMap); // prédicat full price (null si pas de colonnes Prix Vente / Remisé)
   const out = {};
   if (refIdx === undefined) return out;
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const rc = (r[refIdx] || '').toString().trim();
     const key = rc || '∅';
-    const e = out[key] || (out[key] = { ref: rc, model: rc ? baseRef(rc) : '', fam: (refMap && refMap[rc]) || '(non référencé)', des: '', ca: 0, qte: 0 });
+    const e = out[key] || (out[key] = { ref: rc, model: rc ? baseRef(rc) : '', fam: (refMap && refMap[rc]) || '(non référencé)', des: '', ca: 0, qte: 0, caFP: 0, qteFP: 0 });
     if (!e.des && di !== undefined && r[di]) e.des = (r[di] || '').toString().trim();
-    e.ca += fN(r[pi]);
-    e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const p = fN(r[pi]);
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    e.ca += p; e.qte += q;
+    if (isFP && isFP(r)) { e.caFP += p; e.qteFP += q; }
   });
   return out;
 }

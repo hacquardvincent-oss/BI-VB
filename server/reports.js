@@ -628,10 +628,11 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0 }); t.ca += e.ca; t.qte += e.qte; }); return o; };
   const nDes = desIdx(nArr), n1Des = desIdx(n1Arr);
 
-  // Agrégat famille sur TOUT l'EShop (réconcilie avec le CA global) + part collection
+  // Agrégat famille sur TOUT l'EShop (réconcilie avec le CA global) + part collection + full price
   const famAgg = {};
-  nArr.forEach(e => { const x = famAgg[e.fam] || (famAgg[e.fam] = { fam: e.fam, ca: 0, qte: 0, caN1: 0, qteN1: 0, collCa: 0 }); x.ca += e.ca; x.qte += e.qte; if (inColN(e)) x.collCa += e.ca; });
-  n1Arr.forEach(e => { const x = famAgg[e.fam] || (famAgg[e.fam] = { fam: e.fam, ca: 0, qte: 0, caN1: 0, qteN1: 0, collCa: 0 }); x.caN1 += e.ca; x.qteN1 += e.qte; });
+  const mkFam = fam => famAgg[fam] || (famAgg[fam] = { fam, ca: 0, qte: 0, caN1: 0, qteN1: 0, collCa: 0, caFP: 0, caFPN1: 0, qteFP: 0 });
+  nArr.forEach(e => { const x = mkFam(e.fam); x.ca += e.ca; x.qte += e.qte; x.caFP += e.caFP || 0; x.qteFP += e.qteFP || 0; if (inColN(e)) x.collCa += e.ca; });
+  n1Arr.forEach(e => { const x = mkFam(e.fam); x.caN1 += e.ca; x.qteN1 += e.qte; x.caFPN1 += e.caFP || 0; });
 
   const familles = Object.values(famAgg).map(f => {
     // Top 10 produits (désignation) de la famille, vs même produit en N-1 (0 si nouveauté)
@@ -647,12 +648,17 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
       .slice(0, 8);
     return {
       fam: f.fam, ca: f.ca, caN1: f.caN1, qte: f.qte, qteN1: f.qteN1, collCa: f.collCa,
+      caFP: f.caFP, caFPN1: f.caFPN1, qteFP: f.qteFP,
       poids: kN.ca > 0 ? f.ca / kN.ca : 0,
       collShare: f.ca > 0 ? f.collCa / f.ca : 0,
       poidsN1: (kN1 && kN1.ca > 0) ? f.caN1 / kN1.ca : null,
+      fpShare: f.ca > 0 ? f.caFP / f.ca : 0,
       top, perdus,
     };
   }).sort((a, b) => b.ca - a.ca);
+  // Total full price (hors démarque) sur tout l'EShop, N et N-1
+  const caFP = kN.caFP != null ? kN.caFP : null;
+  const caFPN1 = (kN1 && kN1.caFP != null) ? kN1.caFP : null;
 
   return {
     meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax },
@@ -662,6 +668,7 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
       pieces: kN.pieces, piecesN1: kN1 ? kN1.pieces : null,
       collectionCa: setN ? sum(nArr.filter(inColN)) : null,
       collectionCaN1: (hasN1 && setN1) ? sum(n1Arr.filter(inColN1)) : null,
+      caFP, caFPN1, // CA full price (hors démarque), N et N-1
       instore: recoN.instore, mkt: recoN.mkt,
       instoreN1: recoN1 ? recoN1.instore : null, mktN1: recoN1 ? recoN1.mkt : null,
       // Réconciliation WSHOP : total OMS importé (tous canaux) sur la fenêtre + commandes
