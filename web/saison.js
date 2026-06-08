@@ -5,6 +5,7 @@
 // OMS uniquement, jeux dédiés ('saisonoms') via /api/wshop/refresh?slot=saison.
 // ============================================================================
 let DIM = 'global';
+let SAISON = '';
 let LAST_REP = null;
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
@@ -235,6 +236,13 @@ function render(rep) {
   </details>`;
 
   LAST_REP = rep;
+  // Peuple le filtre saison depuis le référentiel (1re fois / si la liste a changé)
+  const selSaison = document.getElementById('saisonFilter');
+  if (selSaison && m.saisons && selSaison.dataset.filled !== String(m.saisons.length)) {
+    selSaison.innerHTML = '<option value="">Toutes saisons</option>' + m.saisons.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    selSaison.dataset.filled = String(m.saisons.length);
+  }
+  if (selSaison) selSaison.value = SAISON;
   box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
@@ -255,7 +263,7 @@ async function loadReport() {
   const demSeuil = seuilEl && seuilEl.value ? seuilEl.value : '';
   box.innerHTML = '<div class="card">Chargement…</div>';
   const p = period();
-  const q = new URLSearchParams({ ...p, dim: DIM, demSeuil }).toString();
+  const q = new URLSearchParams({ ...p, dim: DIM, demSeuil, saison: SAISON }).toString();
   try {
     const rep = await (await fetch('/api/report/saison?' + q)).json();
     render(rep);
@@ -386,6 +394,8 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); DIM = b.dataset.dim; loadReport();
 }));
+
+document.getElementById('saisonFilter').addEventListener('change', e => { SAISON = e.target.value || ''; loadReport(); });
 
 document.getElementById('logout').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' });
