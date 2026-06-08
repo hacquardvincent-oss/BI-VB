@@ -588,15 +588,25 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
   const kN = calc.calcKPIEShop(rowsN, omsN.map, null);
   const kN1 = hasN1 ? calc.calcKPIEShop(rowsN1, mapN1, null) : null;
 
-  // Réconciliation : EShop (retenu) vs Instore (exclu) vs Marketplaces (exclu) sur la fenêtre
+  // Réconciliation avec WSHOP : décompose le CA importé (toutes lignes de la fenêtre,
+  // avant filtre Outstore) en EShop (retenu) / Instore (exclu) / Marketplaces (exclu),
+  // + comptage des commandes (distinctes) par catégorie → comparaison directe au dashboard.
   const reco = (rows, map) => {
-    const pi = map.prix, ti = map.type, li = map.lieu; let eshop = 0, instore = 0, mkt = 0;
+    const pi = map.prix, ti = map.type, li = map.lieu, ni = map.num;
+    let eshop = 0, instore = 0, mkt = 0;
+    const oAll = new Set(), oEshop = new Set(), oInstore = new Set(), oMkt = new Set();
     rows.forEach(r => {
       const p = calc.fN(r[pi]); const t = (r[ti] || '').trim();
-      if (calc.isMkt(t)) { mkt += p; return; }
-      if (li !== undefined && calc.norm(r[li]).includes('instore')) instore += p; else eshop += p;
+      const num = ni !== undefined ? (r[ni] || '').toString().trim() : '';
+      if (num) oAll.add(num);
+      if (calc.isMkt(t)) { mkt += p; if (num) oMkt.add(num); return; }
+      if (li !== undefined && calc.norm(r[li]).includes('instore')) { instore += p; if (num) oInstore.add(num); }
+      else { eshop += p; if (num) oEshop.add(num); }
     });
-    return { eshop, instore, mkt, total: eshop + instore + mkt };
+    return {
+      eshop, instore, mkt, total: eshop + instore + mkt,
+      orders: oAll.size, ordersEshop: oEshop.size, ordersInstore: oInstore.size, ordersMkt: oMkt.size,
+    };
   };
   const recoN = reco(rawN, omsN.map);
   const recoN1 = hasN1 ? reco(rawN1, mapN1) : null;
@@ -654,6 +664,9 @@ async function buildSaison({ from, to, cfrom, cto, dim }) {
       collectionCaN1: (hasN1 && setN1) ? sum(n1Arr.filter(inColN1)) : null,
       instore: recoN.instore, mkt: recoN.mkt,
       instoreN1: recoN1 ? recoN1.instore : null, mktN1: recoN1 ? recoN1.mkt : null,
+      // Réconciliation WSHOP : total OMS importé (tous canaux) sur la fenêtre + commandes
+      omsTotalCa: recoN.total, omsOrders: recoN.orders,
+      ordersEshop: recoN.ordersEshop, ordersInstore: recoN.ordersInstore, ordersMkt: recoN.ordersMkt,
     },
     familles,
   };
