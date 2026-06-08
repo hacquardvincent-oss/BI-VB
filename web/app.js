@@ -28,7 +28,7 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'ca', 'funnel', 'daily', 'gafunnel', 'channels', 'device', 'pays', 'retours', 'annulations'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
@@ -131,6 +131,12 @@ function delta(n, n1) {
   if (n == null || n1 == null || n1 === 0) return '<span class="na">—</span>';
   const p = (n - n1) / n1 * 100;
   return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
+}
+// Delta « inversé » : une hausse est mauvaise (annulations, pièces non expédiées) → rouge ; baisse → vert.
+function deltaInv(n, n1) {
+  if (n == null || n1 == null || n1 === 0) return '<span class="na">—</span>';
+  const p = (n - n1) / n1 * 100;
+  return `<span class="${p >= 0 ? 'dn' : 'up'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
@@ -576,8 +582,8 @@ function renderReport(rep) {
       ['Commandes impactées', fInt(cx.commandesImpactees), cx.commandesImpactees, cx1.commandesImpactees],
       ['Taux annulation (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
       ['CA annulé (estimé)', fEur(cx.caAnnuleEstime), cx.caAnnuleEstime, cx1.caAnnuleEstime],
-    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div><div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (rupture, annulation, contrôle). Source OMS (commandé − expédié). CA annulé = estimation au prorata du prix payé. À ne pas confondre avec les retours clients ci-après.</div></div>`;
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div><div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (rupture, annulation, contrôle). Source OMS (commandé − expédié). CA annulé = estimation au prorata du prix payé. ⚠️ Couleur inversée : une <b>hausse</b> des annulations est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
 
   // Retours
