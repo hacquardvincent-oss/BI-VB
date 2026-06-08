@@ -19,7 +19,10 @@ const { requireAuth } = require('./auth');
 const calc = require('./calc');
 
 const router = express.Router();
-const API_VERSION = process.env.GOOGLE_ADS_API_VERSION || 'v18';
+// Versions candidates (la plus récente d'abord) ; on mémorise celle qui répond.
+// GOOGLE_ADS_API_VERSION force une version précise si besoin.
+const VERSIONS = [...new Set([process.env.GOOGLE_ADS_API_VERSION, 'v21', 'v20', 'v19', 'v18'].filter(Boolean))];
+let goodVersion = null;
 const digits = s => (s || '').toString().replace(/[^\d]/g, '');
 
 function cfg() {
@@ -56,37 +59,33 @@ async function getAccessToken() {
   return j.access_token;
 }
 
-// ── Requête GAQL (searchStream) avec retries sur 5xx / réseau ───────────────
-async function search(gaql, tries = 3) {
+// ── Requête GAQL (searchStream) — essaie les versions candidates sur 404 ─────
+async function search(gaql) {
   const c = cfg();
   const token = await getAccessToken();
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${c.customerId}/googleAds:searchStream`;
   const headers = {
     Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
     'developer-token': c.devToken,
   };
   if (c.loginCustomerId) headers['login-customer-id'] = c.loginCustomerId;
+  const tryVersions = goodVersion ? [goodVersion] : VERSIONS;
   let lastErr;
-  for (let i = 1; i <= tries; i++) {
-    try {
-      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query: gaql }) });
-      if (res.status >= 500) { lastErr = new Error(`Google Ads API ${res.status}`); if (i < tries) { await sleep(800 * i); continue; } }
-      const txt = await res.text();
-      if (!res.ok) {
-        let msg = txt.slice(0, 300);
-        try { const e = JSON.parse(txt); msg = (e.error && (e.error.message || (e.error.details && JSON.stringify(e.error.details)))) || msg; } catch { /* texte brut */ }
-        throw new Error(`Google Ads API ${res.status} : ${msg}`);
-      }
-      const data = JSON.parse(txt);
-      // searchStream → tableau de batches { results: [...] }
-      return (Array.isArray(data) ? data : [data]).flatMap(b => b.results || []);
-    } catch (e) {
-      lastErr = e;
-      if (i < tries && !/Google Ads API 4\d\d/.test(e.message)) { await sleep(800 * i); continue; }
-      throw e;
+  for (const ver of tryVersions) {
+    const url = `https://googleads.googleapis.com/${ver}/customers/${c.customerId}/googleAds:searchStream`;
+    let res, txt;
+    try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query: gaql }) }); txt = await res.text(); }
+    catch (e) { lastErr = e; await sleep(400); continue; } // réseau → version/essai suivant
+    if (res.status === 404) { lastErr = new Error(`Google Ads API 404 (version ${ver} indisponible)`); continue; } // version suivante
+    if (!res.ok) {
+      let msg = (txt || '').slice(0, 300);
+      try { const e = JSON.parse(txt); msg = (e.error && (e.error.message || (e.error.details && JSON.stringify(e.error.details)))) || msg; } catch { /* texte brut */ }
+      throw new Error(`Google Ads API ${res.status} : ${msg}`);
     }
+    goodVersion = ver; // mémorise la version qui répond
+    const data = JSON.parse(txt);
+    return (Array.isArray(data) ? data : [data]).flatMap(b => b.results || []); // searchStream → batches { results }
   }
-  throw lastErr;
+  throw lastErr || new Error('Google Ads API : aucune version d\'API compatible (essayées : ' + VERSIONS.join(', ') + ')');
 }
 
 // ── Campagnes × jour → dataset « ads » (compatible calc.calcAds / ADS_ALIASES) ──
@@ -147,14 +146,14 @@ router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfig
 router.get('/ping', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'Google Ads non configuré côté serveur' });
   const c = cfg();
-  const out = { customerId: c.customerId, loginCustomerId: c.loginCustomerId || null, apiVersion: API_VERSION };
+  const out = { customerId: c.customerId, loginCustomerId: c.loginCustomerId || null };
   let t = Date.now();
   try { await getAccessToken(); out.auth = 'ok'; out.authMs = Date.now() - t; }
   catch (e) { out.auth = 'KO — ' + e.message; return res.json(out); }
   t = Date.now();
   try {
     const rows = await search('SELECT campaign.id FROM campaign LIMIT 1');
-    out.query = 'ok'; out.queryMs = Date.now() - t; out.sample = rows.length;
+    out.query = 'ok'; out.queryMs = Date.now() - t; out.sample = rows.length; out.apiVersion = goodVersion;
   } catch (e) { out.query = 'KO — ' + e.message; }
   res.json(out);
 });
