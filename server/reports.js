@@ -270,12 +270,21 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     (adsCalcN1 && adsCalcN1.byCampaign || []).forEach(c => { adsN1Map[nrm(c.campaign)] = c; });
     const adsisN = store.getDataset('adsis', 'N'); const isMap = {};
     (adsisN && adsisN.rows || []).forEach(x => { isMap[nrm(x.campaign)] = x; });
+    // Nouveaux vs anciens (GA4) par campagne : acquisition pure = CA des nouveaux clients
+    const campnrN = store.getDataset('gacampnr', 'N'); const nrMap = {};
+    (campnrN && campnrN.rows || []).forEach(x => {
+      if (!keepGeoRow(x)) return; const k = nrm(x.campaign);
+      const e = nrMap[k] || (nrMap[k] = { newRev: 0, retRev: 0, newPur: 0 });
+      if (x.nvr === 'new') { e.newRev += x.revenue || 0; e.newPur += x.purchases || 0; }
+      else if (x.nvr === 'returning') { e.retRev += x.revenue || 0; }
+    });
     const target = (() => { const t = parseFloat((cosTarget || '').toString().replace(',', '.')); if (!t || t <= 0) return 0.30; return t > 1 ? t / 100 : t; })();
     const totalSpend = adsCalcN.cost || 0;
     let sumCA = 0;
     const rows = adsCalcN.byCampaign.filter(c => c.cost > 0).map(c => {
       const g = gN[nrm(c.campaign)] || {}, a1 = adsN1Map[nrm(c.campaign)] || {}, g1 = gN1[nrm(c.campaign)] || {};
-      const isr = isMap[nrm(c.campaign)] || {};
+      const isr = isMap[nrm(c.campaign)] || {}, nr = nrMap[nrm(c.campaign)] || {};
+      const newRev = nr.newRev || 0, nrTot = (nr.newRev || 0) + (nr.retRev || 0);
       const caGA = g.revenue || 0, sessions = g.sessions || 0, purchases = g.purchases || 0;
       const spendN1 = a1.cost || 0, caGAN1 = g1.revenue || 0;
       const roas = caGA > 0 ? caGA / c.cost : null;
@@ -289,6 +298,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
         roasN1, aboveTarget: caGA > 0 ? (c.cost / caGA) > target : true, // sans CA = au-dessus de la cible
         saturated: (roas != null && roasN1 != null && c.cost > spendN1 * 1.1 && roas < roasN1 * 0.95),
         impressionShare: isr.is != null ? isr.is : null, lostBudget: isr.lostBudget != null ? isr.lostBudget : null, lostRank: isr.lostRank != null ? isr.lostRank : null,
+        newRevenue: newRev, newShare: nrTot > 0 ? newRev / nrTot : null, newRoas: newRev > 0 ? newRev / c.cost : null,
       };
     }).sort((a, b) => b.spend - a.spend);
     // Parts de dépense / de CA (Pareto)
@@ -305,6 +315,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     // Limité par le budget : IS perdu sur budget > 10% ET rentable (sous la cible COS) → +budget = +CA
     ads.budgetLimited = sig.filter(r => r.lostBudget != null && r.lostBudget > 0.1 && r.roas != null && !r.aboveTarget).sort((a, b) => b.lostBudget - a.lostBudget).slice(0, 3);
     ads.hasIS = rows.some(r => r.impressionShare != null || r.lostBudget != null);
+    // Acquisition pure : ROAS nouveaux clients (CA des nouveaux ÷ dépense)
+    const sumNewRev = rows.reduce((s, r) => s + (r.newRevenue || 0), 0);
+    ads.hasNewReturning = rows.some(r => r.newShare != null);
+    ads.newRoas = (totalSpend > 0 && sumNewRev > 0) ? sumNewRev / totalSpend : null;
+    // Campagnes au gros budget mais peu de nouveaux clients (réachat déguisé en acquisition)
+    ads.lowNew = sig.filter(r => r.newShare != null && r.newShare < 0.3 && r.spend >= 1).sort((a, b) => b.spend - a.spend).slice(0, 2);
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');

@@ -818,14 +818,16 @@ function renderReport(rep) {
     const roas = v => (v == null ? '—' : v.toFixed(2) + '×');
     const cos = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
     const kc = (l, v, d) => `<div class="kc"><div class="l">${l}</div><div class="v">${v}</div>${d ? `<div style="font-size:11px">${d}</div>` : ''}</div>`;
-    const tiles = [
+    const tilesArr = [
       kc('Dépense Google Ads', fEur(a.cost), a1.cost ? delta(a.cost, a1.cost) : ''),
       kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
       kc('COS (dépense ÷ CA EShop)', cos(A.cos && A.cos.n), A.cos && A.cos.n1 != null ? 'N-1 ' + cos(A.cos.n1) : ''),
       kc('Coût / commande', A.cac && A.cac.n != null ? fEur(A.cac.n) : '—', A.cac && A.cac.n1 != null ? 'N-1 ' + fEur(A.cac.n1) : ''),
       kc('Clics', fInt(a.clicks), a1.clicks ? delta(a.clicks, a1.clicks) : ''),
       kc('Conversions Ads', fInt(a.conversions), a1.conversions ? delta(a.conversions, a1.conversions) : ''),
-    ].join('');
+    ];
+    if (A.hasNewReturning && A.newRoas != null) tilesArr.push(kc('ROAS nouveaux clients', (A.newRoas).toFixed(2) + '×', 'acquisition pure (CA new ÷ dépense)'));
+    const tiles = tilesArr.join('');
     // Tableau croisé Ads × GA4 (CA attribué, conv, ROAS, COS par campagne) — Top/Flop surlignés.
     const cc = A.campaigns || [];
     const pct0 = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
@@ -837,9 +839,10 @@ function renderReport(rep) {
         const flag = (topSet.has(c.campaign) ? '🟢 ' : (flopSet.has(c.campaign) ? '🔴 ' : '')) + (c.saturated ? '🪫 ' : '');
         const bg = topSet.has(c.campaign) ? 'background:rgba(80,200,120,.12)' : (flopSet.has(c.campaign) ? 'background:rgba(239,68,68,.12)' : '');
         const isCell = A.hasIS ? `<td>${c.impressionShare != null ? pct0(c.impressionShare) : '—'}${c.lostBudget != null && c.lostBudget > 0.05 ? ` <span class="dn" title="IS perdu faute de budget">↓${pct0(c.lostBudget)}</span>` : ''}</td>` : '';
-        return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td title="part dépense / part CA">${pct0(c.shareSpend)} / ${pct0(c.shareCA)}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.aboveTarget ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td>${isCell}</tr>`;
+        const nrCell = A.hasNewReturning ? `<td class="${c.newShare != null && c.newShare < 0.3 ? 'dn' : ''}" title="part du CA issue de nouveaux clients">${c.newShare != null ? pct0(c.newShare) : '—'}</td>` : '';
+        return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td title="part dépense / part CA">${pct0(c.shareSpend)} / ${pct0(c.shareCA)}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.aboveTarget ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td>${isCell}${nrCell}</tr>`;
       }).join('');
-      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Δ N-1</th><th>% dép/CA</th><th>Sessions</th><th>Conv.</th><th>CA (GA4)</th><th>ROAS</th><th>COS</th><th>CPA</th>${A.hasIS ? '<th title="Impression Share (Search/Shopping) — ↓ = perdu faute de budget">IS</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
+      crossTable = `<table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Δ N-1</th><th>% dép/CA</th><th>Sessions</th><th>Conv.</th><th>CA (GA4)</th><th>ROAS</th><th>COS</th><th>CPA</th>${A.hasIS ? '<th title="Impression Share (Search/Shopping) — ↓ = perdu faute de budget">IS</th>' : ''}${A.hasNewReturning ? '<th title="Part du CA issue de nouveaux clients (acquisition pure)">% new</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
       legend = `Cible COS = <b>${pct0(tgt)}</b> (COS rouge = au-dessus, marge perdue ; vert = sous la cible, marge pour scaler). « % dép/CA » = part de la dépense / part du CA (déséquilibre = arbitrage). 🪫 = saturation (dépense ↑ mais ROAS ↓ vs N-1).${A.hasIS ? ' « IS » = part d\'impressions captée (↓ = perdu faute de budget).' : ''} CA & conv = attribution GA4 ; COS global = dépense ÷ CA EShop (WSHOP).`;
     } else {
       const rows = (a.byCampaign || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
@@ -853,6 +856,7 @@ function renderReport(rep) {
     (A.saturated || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🪫</span><div><b>${esc(c.campaign)}</b> : saturation — dépense +${Math.round((c.spend / Math.max(c.spendN1, 1) - 1) * 100)}% mais ROAS en baisse vs N-1 (${roas(c.roasN1)} → ${roas(c.roas)}) → rendement décroissant, plafonner le budget.</div></div>`));
     (A.imbalanced || []).slice(0, 1).forEach(c => recos.push(`<div class="sig dn"><span>⚖️</span><div><b>${esc(c.campaign)}</b> : ${pct0(c.shareSpend)} de la dépense mais seulement ${pct0(c.shareCA)} du CA → <b>arbitrage budgétaire</b> vers les campagnes rentables.</div></div>`));
     (A.budgetLimited || []).slice(0, 2).forEach(c => recos.push(`<div class="sig up"><span>💰</span><div><b>${esc(c.campaign)}</b> : rentable (COS ${cos(c.cos)} ≤ cible) mais <b>${pct0(c.lostBudget)} d'IS perdu faute de budget</b> → augmenter le budget pour capter ce CA.</div></div>`));
+    (A.lowNew || []).slice(0, 2).forEach(c => recos.push(`<div class="sig dn"><span>🧲</span><div><b>${esc(c.campaign)}</b> : seulement ${pct0(c.newShare)} de CA nouveaux clients pour ${fEur(c.spend)} → majoritairement du réachat, pas de l'acquisition (revoir ciblage/exclusions).</div></div>`));
     const recosHtml = recos.length ? `<div class="bilan-sigs" style="margin-top:10px">${recos.join('')}</div>` : '';
     adsCard = `<div class="card"><h3>📣 Google Ads — Acquisition payante (COS / ROAS)${A.n1 ? ' · N vs N-1' : ''}</h3>
       <div class="kgrid">${tiles}</div>${crossTable}${recosHtml}

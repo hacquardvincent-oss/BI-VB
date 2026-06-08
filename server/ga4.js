@@ -159,7 +159,22 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
   }));
 }
 
-// ── Campagnes (UTM) : sessions → panier → achat ─────────────────────────────
+// ── Campagnes × nouveaux/anciens (acquisition pure : ROAS nouveaux clients) ──
+async function fetchCampaignsNewReturning(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'sessionCampaignName' }, { name: 'newVsReturning' }, { name: 'country' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }],
+    limit: 2000,
+  });
+  return (data.rows || []).map(r => ({
+    campaign: r.dimensionValues[0].value, nvr: (r.dimensionValues[1].value || '').toLowerCase(), country: r.dimensionValues[2].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0,
+    purchases: parseFloat(r.metricValues[1].value) || 0,
+    revenue: parseFloat(r.metricValues[2].value) || 0,
+  }));
+}
+
 async function fetchCampaigns(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
@@ -232,6 +247,7 @@ async function refresh(opts = {}) {
   await safe('landing N', async () => store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('items N', async () => store.setDataset('gaitems', 'N', { rows: await fetchItemFunnel(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campaigns N', async () => store.setDataset('gacampaigns', 'N', { rows: await fetchCampaigns(propertyId, nStart, nEnd), uploaded_at: ts() }));
+  await safe('campnr N', async () => store.setDataset('gacampnr', 'N', { rows: await fetchCampaignsNewReturning(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campaignland N', async () => store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
   let n1Count = null;
   if (n1) {
@@ -241,6 +257,7 @@ async function refresh(opts = {}) {
     await safe('landing N-1', async () => store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('items N-1', async () => store.setDataset('gaitems', 'N1', { rows: await fetchItemFunnel(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('campaigns N-1', async () => store.setDataset('gacampaigns', 'N1', { rows: await fetchCampaigns(propertyId, n1.start, n1.end), uploaded_at: ts() }));
+    await safe('campnr N-1', async () => store.setDataset('gacampnr', 'N1', { rows: await fetchCampaignsNewReturning(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('campaignland N-1', async () => store.setDataset('gacampaignland', 'N1', { rows: await fetchCampaignLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count, warnings };
