@@ -142,8 +142,12 @@ function orderToRows(order) {
   const pays = countryName(o.shippingAddress && o.shippingAddress.countryCode);
   const mag = (o.storeItems && o.storeItems.label) || (o.website && o.website.name) || o.orderOrigin || '';
   const pay = (o.payment_method && o.payment_method.label) || '';
-  // Lieu de prise de commande (Outstore = e-commerce ; Instore = vente téléphone vendeur en magasin)
-  const lieu = (o.orderLocation && typeof o.orderLocation === 'object' ? o.orderLocation.label : o.orderLocation) || '';
+  // Lieu de prise de commande : l'API renvoie orderLocation = { code, name }.
+  // Outstore (e-commerce) → vide ; Instore (vente vendeur en magasin) → name = magasin.
+  const locName = (o.orderLocation && typeof o.orderLocation === 'object'
+    ? (o.orderLocation.name || o.orderLocation.code || o.orderLocation.label)
+    : o.orderLocation) || '';
+  const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   return items.map(it => {
