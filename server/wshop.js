@@ -496,15 +496,16 @@ router.get('/ping', requireAuth, async (req, res) => {
     const iso = d => d.toISOString().slice(0, 10);
     const win = { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59` };
     const getArr = r => (r && r.__err) ? [] : (Array.isArray(r) ? r : (r && (r.data || r.orders || r.results)) || []);
-    // Les 3 requêtes EN PARALLÈLE (sinon ~4 appels en série → timeout 504 du proxy) : échantillon
-    // générique + 2 sondes filtrées par statut. Les sondes échouent en douceur (capture d'erreur).
+    // Garde-fou anti-504 : chaque appel WSHOP est plafonné en temps → on renvoie une réponse PARTIELLE
+    // plutôt que de laisser le proxy couper. Les 3 requêtes en parallèle (échantillon + 2 sondes statut).
+    const withTimeout = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
     const [resp, respCancel, respInc] = await Promise.all([
-      apiPost('/api/v1/orders/get', Object.assign({ page: 1, limit: 40 }, win)),
-      apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'Cancelled', page: 1, limit: 30 }, win)).catch(e => ({ __err: e.message })),
-      apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'ShippedIncomplete', page: 1, limit: 30 }, win)).catch(e => ({ __err: e.message })),
+      withTimeout(apiPost('/api/v1/orders/get', Object.assign({ page: 1, limit: 15 }, win)), 9000, 'sample'),
+      withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'Cancelled', page: 1, limit: 15 }, win)), 9000, 'cancelled'),
+      withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'ShippedIncomplete', page: 1, limit: 15 }, win)), 9000, 'incomplete'),
     ]);
     const arr = getArr(resp);
-    out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
+    out.orders = (resp && resp.__err) ? ('partiel — ' + resp.__err) : 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
     // Diagnostic « annulation » : valeurs DISTINCTES de orderCustomerStatus + simulation de la règle.
     try {
       const csVals = {}, osVals = {}; let nlPieces = 0, nlLines = 0; const nlByStatus = {};
