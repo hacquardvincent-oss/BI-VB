@@ -419,29 +419,32 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const tlRows = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, tlStart, tlEnd, false), omsN.map, dim), omsN.map);
     const serie = calc.dailySeries(tlRows, omsN.map, gaNf, sessByDayN);
     if (!serie || !serie.length) return null;
-    // Jours d'envoi email : pic de sessions du canal « Email » GA4 (≥ 1,5× la médiane)
-    const emailByDay = {};
-    if (gaNf && gaNf.rows && gaNf.hdrs) {
-      const gm = gaNf.map && Object.keys(gaNf.map).length ? gaNf.map : calc.autoMap(gaNf.hdrs, calc.GA_ALIASES);
-      const di = gaNf.hdrs.findIndex(h => { const n = calc.norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
-      const ci = gm.canal, si = gm.sessions;
-      if (di >= 0 && ci !== undefined && si !== undefined) {
-        gaNf.rows.forEach(r => {
-          if (!/e-?mail|mailing|newsletter|crm/i.test((r[ci] || '').toString())) return;
-          const raw = (r[di] || '').toString().trim();
-          const iso = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null);
-          if (iso) emailByDay[iso] = (emailByDay[iso] || 0) + (parseInt(r[si]) || 0);
-        });
+    // Jours d'envoi email : pic de sessions du canal « Email » GA4 (≥ 1,5× la médiane).
+    const emailDays = (gaf) => {
+      const by = {};
+      if (gaf && gaf.rows && gaf.hdrs) {
+        const gm = gaf.map && Object.keys(gaf.map).length ? gaf.map : calc.autoMap(gaf.hdrs, calc.GA_ALIASES);
+        const di = gaf.hdrs.findIndex(h => { const n = calc.norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
+        const ci = gm.canal, si = gm.sessions;
+        if (di >= 0 && ci !== undefined && si !== undefined) {
+          gaf.rows.forEach(r => {
+            if (!/e-?mail|mailing|newsletter|crm/i.test((r[ci] || '').toString())) return;
+            const raw = (r[di] || '').toString().trim();
+            const iso = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null);
+            if (iso) by[iso] = (by[iso] || 0) + (parseInt(r[si]) || 0);
+          });
+        }
       }
-    }
-    const vals = Object.values(emailByDay).filter(v => v > 0).sort((a, b) => a - b);
-    const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
-    const thr = Math.max(med * 1.5, 10);
+      const vals = Object.values(by).filter(v => v > 0).sort((a, b) => a - b);
+      const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+      return { by, thr: Math.max(med * 1.5, 10) };
+    };
+    const eN = emailDays(gaNf), eN1 = emailDays(gaN1f);
     // N-1 : même fenêtre décalée de 364 j (CA/TT/ajouts panier) → courbes en pointillé.
     const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
     const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
     const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
-    return serie.map(d => { const e1 = byDate1[isoShiftDays(d.date, -364)]; return { ...d, email: (emailByDay[d.date] || 0) >= thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
+    return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
   // 2e suivi temporel : CA N/N-1 (repris de la timeline) + sessions des meilleures campagnes N & N-1.
   const timeline2 = (timeline && timeline.length) ? (() => {

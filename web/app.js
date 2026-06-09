@@ -532,7 +532,7 @@ function renderReport(rep) {
   const timelineCard = tlDays > 1
     ? `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
        <div style="height:260px"><canvas id="tlChart"></canvas></div>
-       <div class="note">Barres = CA/jour · courbes = taux de transfo (TT) et taux d'ajout panier · ✉️ = jour avec envoi email (détecté via un pic du canal Email GA4).</div></div>`
+       <div class="note">Barres = CA/jour (foncé = N, clair = N-1) · courbes = taux de transfo (TT) et ajout panier (plein = N, pointillé = N-1) · ✉️ croix pleine = email N, croix fine = email N-1 (pic du canal Email GA4).</div></div>`
     : `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
        <div class="note">⚠️ Ce graphe affiche les <b>28 derniers jours</b> de l'OMS — or l'OMS chargé ne couvre que ${tlDays} jour(s). Lance « <b>Importer OMS depuis WSHOP</b> » sur une <b>période large</b> (ex. preset « 30 j » ou un mois) : les données s'accumulent et ce suivi (CA/jour + TT + ajouts panier + croix ✉️ email) s'affichera, quelle que soit la période d'analyse choisie ensuite.</div></div>`;
 
@@ -542,7 +542,7 @@ function renderReport(rep) {
   const timeline2Card = hasT2
     ? `<div class="card"><h3>📡 Suivi temporel — CA & meilleures campagnes (4 semaines)</h3>
        <div style="height:260px"><canvas id="tl2Chart"></canvas></div>
-       <div class="note">Barres = CA/jour (N) · ligne pointillée or = CA/jour N-1 · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = N, pointillé = N-1). Permet de relier les pics de CA aux campagnes.</div></div>`
+       <div class="note">Barres = CA/jour (foncé = N, clair = N-1) · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = N, pointillé = N-1). Permet de relier les pics de CA aux campagnes.</div></div>`
     : '';
 
   // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
@@ -633,7 +633,10 @@ function renderReport(rep) {
         <div class="kc"><div class="l">🏬 Magasin (ship-from-store)</div><div class="v">${fInt(d.magasin.qte)} pièces</div><div style="font-size:11px">${fEur(d.magasin.ca)} CA annulé</div></div></div>`;
       const stores = (d.topStores || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top magasins qui annulent</b></div><table style="font-size:11px"><thead><tr><th>Magasin</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topStores.map(s => `<tr><td>${esc(s.mag)}</td><td>${fInt(s.qte)}</td><td>${fEur(s.ca)}</td></tr>`).join('')}</tbody></table>` : '';
       const prods = (d.topProduits || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top produits annulés</b></div><table style="font-size:11px"><thead><tr><th>Produit</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topProduits.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('')}</tbody></table>` : '';
-      detailHtml = split + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>`;
+      // Produits annulés ventilés par canal qui annule (entrepôt vs chaque magasin)
+      const byCanal = (d.byCanal || []).length ? `<div class="note" style="margin:14px 0 4px"><b>Produits annulés par canal qui annule</b> — qui a annulé quoi ?</div>
+        <div class="grid cols2">${d.byCanal.map(c => `<div style="margin-bottom:6px"><div class="note" style="margin:0 0 3px"><b>${esc(c.canal)}</b> — ${fInt(c.qte)} pièces · ${fEur(c.ca)}</div><table style="font-size:11px"><tbody>${c.top.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td style="text-align:right">${fInt(p.qte)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>` : '';
+      detailHtml = split + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>` + byCanal;
     }
     cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Avant expédition</b> : commandes avec au moins une pièce non livrée (Quantité non livré > 0). <b>Taux d'annulation (commande)</b> = commandes impactées ÷ total commandes. Détail des pièces annulées par canal ci-dessous. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
@@ -652,7 +655,10 @@ function renderReport(rep) {
     const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
-    const topProdTable = tp.length ? `<div style="margin-top:12px"><h3>Top produits retournés</h3><table><thead><tr><th>#</th><th>Produit</th><th>Pièces</th><th>Montant</th><th>Raison principale</th></tr></thead><tbody>${tp.map((x, i) => `<tr><td>${i + 1}</td><td title="${esc(x.des)}">${esc((x.des || '').slice(0, 40))}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td><td>${esc(x.raison)}</td></tr>`).join('')}</tbody></table></div>` : '';
+    const reasonsCell = x => (x.reasons && x.reasons.length)
+      ? x.reasons.map(rr => `${esc(rr.reason)} <span style="color:var(--t3)">(${fInt(rr.qte)})</span>`).join(' · ')
+      : esc(x.raison || '—');
+    const topProdTable = tp.length ? `<div style="margin-top:12px"><h3>Top produits retournés & raisons</h3><table><thead><tr><th>#</th><th>Produit</th><th>Pièces</th><th>Montant</th><th>Raisons (détail)</th></tr></thead><tbody>${tp.map((x, i) => `<tr><td>${i + 1}</td><td title="${esc(x.des)}">${esc((x.des || '').slice(0, 38))}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td><td style="font-size:11px">${reasonsCell(x)}</td></tr>`).join('')}</tbody></table></div>` : '';
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
@@ -1023,56 +1029,79 @@ function bilanTile(label, disp, n, n1, invert) {
   return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>
     <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1'}</div></div>`;
 }
-// Détecte les signaux/recommandations prioritaires (par impact CA) — 100% client.
+// Détecte les leviers prioritaires CLASSÉS PAR IMPACT MONÉTAIRE (€ gagnés/perdus vs N-1) — 100% client.
 function bilanSignals(rep) {
-  const out = [];
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
-  // Produit : CA à reconquérir (souvent le plus fort levier)
-  const m = rep.produits && rep.produits.manquants;
-  if (m && m.length) { const tot = m.reduce((s, x) => s + x.perte, 0); out.push({ tone: 'dn', icon: '🎯', txt: `Produit — ${m.length} forts en N-1 en retrait (<b>${fEur(tot)}</b> de CA à reconquérir), à commencer par <b>${esc(m[0].produit)}</b>.` }); }
-  // TT (taux de transfo)
-  if (k && k1 && k.tt != null && k1.tt != null) {
-    const p = pc(k.tt, k1.tt);
-    if (p != null && p < -5) out.push({ tone: 'dn', icon: '🛒', txt: `TT en baisse (${sgn(p)} vs N-1) → fiches produit, réassurance, simplifier le checkout.` });
+  const levers = []; // { impact (€ signé, pour le tri), tone, icon, txt }
+  const eur = v => fEur(Math.abs(v));
+  const push = (impact, tone, icon, txt) => levers.push({ impact, tone, icon, txt });
+
+  // 1) Familles — plus gros gains/pertes de CA vs N-1
+  if (rep.famille && rep.famille.length) {
+    rep.famille.forEach(f => {
+      if (f.n1 == null) return;
+      const d = f.n - f.n1;
+      if (Math.abs(d) < 1000) return;
+      push(d, d >= 0 ? 'up' : 'dn', d >= 0 ? '📈' : '📉',
+        `Famille <b>${esc(f.fam)}</b> ${d >= 0 ? 'gagne' : 'perd'} <b>${eur(d)}</b> vs N-1 (${fEur(f.n)} vs ${fEur(f.n1)}) → ${d >= 0 ? 'capitaliser (réassort, mise en avant)' : 'relancer (offre, visibilité)'}.`);
+    });
   }
-  // Sessions (trafic)
-  if (k && k1 && k.sessions != null && k1.sessions != null) {
-    const p = pc(k.sessions, k1.sessions);
-    if (p != null && p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Trafic en recul (${sgn(p)} sessions vs N-1) → relancer l'acquisition (SEA/SEO/CRM).` });
+  // 2) Acquisition — gains/pertes de revenu PAR TYPE DE CANAL (quel canal plus qu'un autre)
+  let paidTheme = '';
+  if (rep.ads && rep.ads.categories && rep.ads.categories.length) {
+    const t = [...rep.ads.categories].sort((a, b) => b.revenue - a.revenue)[0];
+    if (t) paidTheme = t.category;
   }
-  // Annulations (pièces non expédiées)
+  if (rep.channelTypes && rep.channelTypes.n && rep.channelTypes.n1) {
+    const m1 = {}; rep.channelTypes.n1.forEach(x => { m1[x.type] = x; });
+    const recoOf = t => t === 'Paid' ? 'relancer SEA/Shopping' : t === 'SEO' ? 'travailler le SEO/contenu' : t === 'CRM' ? 'relancer le CRM/email' : t === 'Social' ? 'réactiver le social' : 'réactiver ce canal';
+    rep.channelTypes.n.forEach(c => {
+      const p = m1[c.type]; if (!p) return;
+      const dRev = (c.revenue || 0) - (p.revenue || 0);
+      const dSessP = pc(c.sessions, p.sessions);
+      if (Math.abs(dRev) < 1000 && Math.abs((c.sessions || 0) - (p.sessions || 0)) < 200) return;
+      const theme = (c.type === 'Paid' && paidTheme) ? ` Historiquement fort sur <b>${esc(paidTheme)}</b>.` : '';
+      push(dRev, dRev >= 0 ? 'up' : 'dn', dRev >= 0 ? '📡' : '🔻',
+        `Canal <b>${esc(c.type)}</b> ${dRev >= 0 ? '+' : '−'}<b>${eur(dRev)}</b> de revenu vs N-1 (sessions ${dSessP != null ? sgn(dSessP) : '—'})${dRev < 0 ? ' → ' + recoOf(c.type) + '.' + theme : ' → maintenir l\'effort.'}`);
+    });
+  }
+  // 3) Annulations — CA non expédié (perte sèche)
   const cx = rep.cancellations && rep.cancellations.n;
-  if (cx && cx.tauxCommande != null && cx.tauxCommande > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `Annulation — <b>${fPct(cx.tauxCommande)}</b> des commandes impactées (${fInt(cx.commandesImpactees)}) → fiabiliser stock/préparation.` });
-  // International : que faire sur les pays #2/#3/#4 par CA (hors France)
+  if (cx && cx.tauxCommande != null && cx.tauxCommande > 0.02) {
+    const lost = cx.caNonLivre || cx.caAnnuleEstime || 0;
+    push(-lost, 'dn', '⛔', `Annulations — <b>${eur(lost)}</b> de CA non expédié (${fPct(cx.tauxCommande)} des commandes, ${fInt(cx.commandesImpactees)} impactées) → fiabiliser stock/préparation.`);
+  }
+  // 4) Produits à reconquérir (forts en N-1, en retrait)
+  const m = rep.produits && rep.produits.manquants;
+  if (m && m.length) {
+    const tot = m.reduce((s, x) => s + x.perte, 0);
+    if (tot > 1000) push(-tot, 'dn', '🎯', `Produits à reconquérir — <b>${eur(tot)}</b> de CA perdu sur ${m.length} réfs fortes en N-1, à commencer par <b>${esc(m[0].produit)}</b>.`);
+  }
+  // 5) Marketplace — enseigne au plus gros écart €
+  const mk = rep.marketplace && rep.marketplace.n, mk1 = (rep.marketplace && rep.marketplace.n1) || {};
+  if (mk && mk.total > 0) {
+    const worst = [['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]]
+      .map(([n, v, v1]) => ({ n, d: (v || 0) - (v1 || 0) })).filter(x => Math.abs(x.d) > 1000).sort((a, b) => a.d - b.d)[0];
+    if (worst) push(worst.d, worst.d >= 0 ? 'up' : 'dn', '🏬', `Marketplace — <b>${esc(worst.n)}</b> ${worst.d >= 0 ? '+' : '−'}<b>${eur(worst.d)}</b> vs N-1 → ${worst.d < 0 ? 'vérifier listing/stock/prix' : 'capitaliser'} sur ce canal.`);
+  }
+  // 6) Taux de transfo — impact € estimé (à sessions constantes)
+  if (k && k1 && k.tt != null && k1.tt != null && k.sessions) {
+    const pm = k.pm || k1.pm || 0;
+    const ttImpact = (k.tt - k1.tt) * k.sessions * pm;
+    if (Math.abs(ttImpact) > 1000) push(ttImpact, ttImpact >= 0 ? 'up' : 'dn', '🛒', `Taux de transfo ${sgn(pc(k.tt, k1.tt))} vs N-1 (~<b>${eur(ttImpact)}</b> de CA ${ttImpact >= 0 ? 'gagné' : 'perdu'}) → fiches produit, réassurance, checkout.`);
+  }
+
+  // Classement par impact monétaire (|€| décroissant) : les leviers qui pèsent le plus d'abord
+  levers.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+  const out = levers.map(({ tone, icon, txt }) => ({ tone, icon, txt }));
+
+  // Complément qualitatif : opportunité international (hors classement €)
   if (rep.pays && rep.pays.length) {
     const foreign = rep.pays.filter(p => (p.pays || '').trim().toLowerCase() !== 'france' && p.n && p.n.ca > 0).slice(0, 3);
     if (foreign.length) {
       const txt = foreign.map(p => `${esc(p.pays)} (${fEur(p.n.ca)}${p.n1 ? ', ' + sgn(pc(p.n.ca, p.n1.ca)) : ''})`).join(' · ');
       out.push({ tone: 'up', icon: '🌍', txt: `International — prioriser ${txt} : réassort, langue, délais/coûts de livraison.` });
     }
-  }
-  // Marketplace : enseigne en repli ou suivi global
-  const mk = rep.marketplace && rep.marketplace.n;
-  if (mk && mk.total > 0) {
-    const mk1 = (rep.marketplace && rep.marketplace.n1) || {};
-    const items = [['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]]
-      .map(([n, v, v1]) => ({ n, v, p: pc(v, v1) })).filter(x => x.v > 500);
-    const worst = items.filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
-    const pTot = pc(mk.total, mk1.total);
-    if (worst && worst.p < -10) out.push({ tone: 'dn', icon: '🏬', txt: `Marketplace — <b>${esc(worst.n)}</b> en repli (${sgn(worst.p)} vs N-1) → vérifier listing/stock/prix sur ce canal.` });
-    else out.push({ tone: 'up', icon: '🏬', txt: `Marketplace ${fEur(mk.total)}${pTot != null ? ' (' + sgn(pTot) + ' vs N-1)' : ''} → surveiller la part de chaque enseigne.` });
-  }
-  // Compléments (familles, canal) si place restante
-  if (rep.famille && rep.famille.length) {
-    const up = rep.famille.filter(f => f.n1 > 0 && f.n > 500).map(f => ({ fam: f.fam, p: pc(f.n, f.n1), ca: f.n })).filter(x => x.p != null).sort((a, b) => b.p - a.p)[0];
-    if (up && up.p > 8) out.push({ tone: 'up', icon: '📈', txt: `Famille en plus forte progression : <b>${esc(up.fam)}</b> (${sgn(up.p)} vs N-1, ${fEur(up.ca)}).` });
-    const dn = rep.famille.filter(f => f.n1 > 1000).map(f => ({ fam: f.fam, p: pc(f.n, f.n1) })).filter(x => x.p != null).sort((a, b) => a.p - b.p)[0];
-    if (dn && dn.p < -8) out.push({ tone: 'dn', icon: '📉', txt: `Famille en repli : <b>${esc(dn.fam)}</b> (${sgn(dn.p)} vs N-1) → à relancer.` });
-  }
-  if (rep.channels && rep.channels.n && rep.channels.n1) {
-    const m1 = {}; rep.channels.n1.forEach(x => { m1[x.canal] = x; });
-    const drop = rep.channels.n.map(c => { const p = m1[c.canal]; return (p && p.revenue > 1000) ? { canal: c.canal, p: pc(c.revenue, p.revenue) } : null; }).filter(x => x && x.p != null).sort((a, b) => a.p - b.p)[0];
-    if (drop && drop.p < -10) out.push({ tone: 'dn', icon: '🔻', txt: `Canal d'acquisition en décrochage : <b>${esc(drop.canal)}</b> (revenu ${sgn(drop.p)} vs N-1).` });
   }
   return out;
 }
@@ -1410,14 +1439,24 @@ function renderCharts(rep) {
   if (rep.famille && rep.famille.length) {
     const f = rep.famille.slice(0, 8);
     const hasN1f = f.some(x => x.n1 != null);
+    // Barre bleue = CA N ; le Δ vs N-1 est EMPILÉ au sommet : vert au-dessus si gain,
+    // rouge mordant le haut de la barre si perte (base N affichée, delta « par dessus »).
     const diff = f.map(x => x.n1 != null ? Math.round(x.n - x.n1) : null);
-    const datasets = [{ label: 'CA N', data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }];
+    const datasets = [{ label: 'CA N', data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.6)', borderColor: '#4a9eff', borderWidth: 1, stack: 'fam' }];
     if (hasN1f) datasets.push({
-      label: 'Δ vs N-1', data: diff,
-      backgroundColor: diff.map(v => (v == null ? 'rgba(148,163,184,.3)' : (v >= 0 ? 'rgba(34,197,94,.6)' : 'rgba(239,68,68,.6)'))),
-      borderColor: diff.map(v => (v == null ? '#94a3b8' : (v >= 0 ? '#22c55e' : '#ef4444'))), borderWidth: 1, borderRadius: 3,
+      label: 'Δ vs N-1', data: diff, stack: 'fam',
+      backgroundColor: diff.map(v => (v == null ? 'rgba(148,163,184,.3)' : (v >= 0 ? 'rgba(34,197,94,.7)' : 'rgba(239,68,68,.7)'))),
+      borderColor: diff.map(v => (v == null ? '#94a3b8' : (v >= 0 ? '#22c55e' : '#ef4444'))), borderWidth: 1,
     });
-    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets }, options: Object.assign({}, barOpts, { plugins: Object.assign({}, barOpts.plugins, { legend: { display: hasN1f, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }) }) });
+    const famOpts = {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: hasN1f, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+      },
+    };
+    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets }, options: famOpts });
   }
   if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
     const p = rep.produits.topN.slice(0, 8);
@@ -1459,18 +1498,21 @@ function renderTimelineChart(rep) {
   const hasN1 = caN1.some(v => v != null);
   const maxCa = Math.max(1, ...ca, ...caN1.filter(v => v != null));
   const emailPts = tl.map(d => d.email ? maxCa * 1.06 : null);
+  const emailN1Pts = tl.map(d => d.emailN1 ? maxCa * 1.12 : null);
+  const hasEmailN1 = emailN1Pts.some(v => v != null);
   const el = document.getElementById('tlChart'); if (!el) return;
   if (_charts.tlChart) _charts.tlChart.destroy();
   _charts.tlChart = new Chart(el.getContext('2d'), {
     data: {
       labels, datasets: [
-        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
-        ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
+        ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 }] : []),
         { type: 'line', label: 'TT % N', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
         ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#22c55e', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
         { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
         ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#a78bfa', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
-        { type: 'line', label: '✉️ Email envoyé', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
+        { type: 'line', label: '✉️ Email N', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
+        ...(hasEmailN1 ? [{ type: 'line', label: '✉️ Email N-1', yAxisID: 'y', data: emailN1Pts, showLine: false, pointStyle: 'cross', pointRadius: 8, pointBorderColor: 'rgba(239,68,68,.55)', pointBorderWidth: 2, borderColor: 'rgba(239,68,68,.55)' }] : []),
       ],
     },
     options: {
@@ -1495,8 +1537,8 @@ function renderTimeline2Chart(rep) {
   const hasN1 = caN1.some(v => v != null);
   const CAMP_COLORS = ['#4a9eff', '#22c55e', '#a78bfa'];
   const datasets = [
-    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.5)', borderColor: '#f5a623', borderWidth: 1 },
-    ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
+    ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 }] : []),
   ];
   (t2.campN || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
   (t2.campN1 || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
