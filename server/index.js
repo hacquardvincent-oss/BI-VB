@@ -21,6 +21,7 @@ const wshop = require('./wshop');
 const googleads = require('./googleads');
 const reco = require('./reco');
 const objectives = require('./objectives');
+const layouts = require('./layouts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/wshop', wshop.router);
 app.use('/api/googleads', googleads.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
+app.use('/api/layouts', layouts.router);
 
 // Statique : on force la revalidation du HTML/JS/CSS (Cache-Control: no-cache) pour que
 // chaque déploiement soit pris en compte immédiatement, sans vidage de cache manuel.
@@ -93,6 +95,7 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     await db.init();
     await store.hydrate();
     await objectives.hydrate();
+    await layouts.hydrate();
   } catch (e) {
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
   }

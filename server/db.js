@@ -42,6 +42,11 @@ async function init() {
     data       jsonb NOT NULL DEFAULT '{}'::jsonb,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS layouts (
+    id         int PRIMARY KEY DEFAULT 1,
+    data       jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     username   text PRIMARY KEY,
     pass_hash  text NOT NULL,

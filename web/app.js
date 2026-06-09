@@ -139,12 +139,22 @@ const CARD_LABELS = {
 };
 const ALL_CARDS = ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
-const LK = m => 'vbLayout:' + m;
+// Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
+// SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
+let SERVER_LAYOUTS = {};
+async function loadServerLayouts() { try { const r = await fetch('/api/layouts'); if (r.ok) SERVER_LAYOUTS = (await r.json()) || {}; } catch (e) { SERVER_LAYOUTS = {}; } }
 function defaultLayout(m) { return (MODULES[m] && MODULES[m].layout) || FULL_LAYOUT; }
-function getLayout(m) { try { const o = localStorage.getItem(LK(m)); if (o) { const a = JSON.parse(o); if (Array.isArray(a) && a.length) return a; } } catch (e) { /* localStorage indispo */ } return defaultLayout(m); }
-function isCustomLayout(m) { try { return !!localStorage.getItem(LK(m)); } catch (e) { return false; } }
-function saveLayout(m, arr) { try { localStorage.setItem(LK(m), JSON.stringify(arr)); } catch (e) { /* ignore */ } }
-function resetLayout(m) { try { localStorage.removeItem(LK(m)); } catch (e) { /* ignore */ } }
+function getLayout(m) { const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m); }
+function isCustomLayout(m) { const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
+async function saveLayout(m, arr) {
+  SERVER_LAYOUTS[m] = arr; // maj mémoire immédiate (rendu sync)
+  const r = await fetch('/api/layouts/' + encodeURIComponent(m), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layout: arr }) });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('HTTP ' + r.status)); }
+}
+async function resetLayout(m) {
+  delete SERVER_LAYOUTS[m];
+  await fetch('/api/layouts/' + encodeURIComponent(m), { method: 'DELETE' });
+}
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
@@ -1190,11 +1200,13 @@ function openViewEditor() {
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   ov.querySelector('.ve-x').onclick = close;
   ov.querySelector('#veCancel').onclick = close;
-  ov.querySelector('#veReset').onclick = () => { resetLayout(mod); close(); loadReport(); };
-  ov.querySelector('#veSave').onclick = () => {
+  ov.querySelector('#veReset').onclick = async () => { try { await resetLayout(mod); } catch (e) { /* best-effort */ } close(); loadReport(); };
+  ov.querySelector('#veSave').onclick = async () => {
     const arr = [...list.querySelectorAll('.ve-item')].filter(li => li.querySelector('input').checked).map(li => li.dataset.key);
     if (!arr.length) { alert('Sélectionne au moins un tableau.'); return; }
-    saveLayout(mod, arr); close(); loadReport();
+    const btn = ov.querySelector('#veSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
+    try { await saveLayout(mod, arr); close(); loadReport(); }
+    catch (e) { btn.disabled = false; btn.textContent = 'Enregistrer'; alert('Échec de l\'enregistrement : ' + e.message); }
   };
 }
 
@@ -2176,6 +2188,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
 // Init
 (async () => {
   if (!(await me())) return;
+  await loadServerLayouts(); // vues personnalisées partagées (avant le 1er rendu)
   initModules();
   const m = MODULES[CURRENT_MODULE];
   CURRENT_DIM = m.dim || 'global';
