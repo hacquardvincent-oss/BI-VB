@@ -118,11 +118,11 @@ function donut(doc, slices) {
   doc.y = cy + r + 12;
 }
 
-function header(doc, rep) {
+function header(doc, rep, subtitle) {
   const m = rep.meta;
   doc.save().rect(0, 0, doc.page.width, 96).fill(COL.dark).restore();
   doc.fillColor('#ffffff').font('Times-Bold').fontSize(26).text('BI ', M, 28, { continued: true }).fillColor(COL.accent).text('Project');
-  doc.fillColor('#9aa0ab').font('Helvetica').fontSize(7.5).text('R E P O R T I N G   E - C O M M E R C E', M, 66, { characterSpacing: 1 });
+  doc.fillColor('#9aa0ab').font('Helvetica').fontSize(7.5).text((subtitle || 'Reporting e-commerce').toUpperCase().split('').join(' ').replace(/\s{2,}/g, '  '), M, 66, { characterSpacing: 1, lineBreak: false });
   doc.y = 112;
   doc.fillColor(COL.ink).font('Helvetica-Bold').fontSize(11).text(`${DIM_LABEL[m.dim] || 'Global'}`, M, 112, { continued: true })
     .font('Helvetica').fillColor(COL.grey).text(`     ${m.from || '?'}  –  ${m.to || '?'}`);
@@ -146,124 +146,232 @@ function footers(doc) {
   }
 }
 
-function renderReport(doc, rep) {
-  header(doc, rep);
-  const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
+const caCols = [{ label: 'Périmètre', w: 235 }, { label: 'N', w: 90, align: 'right' }, { label: 'N-1', w: 90, align: 'right' }, { label: 'Évol.', w: W - 415, align: 'right' }];
+const caRow = (l, n, n1, bold) => [{ text: l, bold }, { text: fEur(n), align: 'right', bold }, { text: fEur(n1), align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, dCell(n, n1))];
+const notFR = p => (p.pays || '').trim().toLowerCase() !== 'france';
 
+// ── Sections réutilisables ──────────────────────────────────────────────────
+function secBilan(doc, rep) {
+  const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
+  const cx = rep.cancellations && rep.cancellations.n, cx1 = (rep.cancellations && rep.cancellations.n1) || {};
+  section(doc, 'Bilan période');
   kpiTiles(doc, [
-    { label: 'Chiffre d’affaires', value: fEur(k.ca), delta: dCell(k.ca, k1.ca), deltaSuffix: ' vs N-1' },
+    { label: 'CA Global EShop', value: fEur(k.ca), delta: dCell(k.ca, k1.ca), deltaSuffix: ' vs N-1' },
     { label: 'Commandes', value: fInt(k.commandes), delta: dCell(k.commandes, k1.commandes), deltaSuffix: ' vs N-1' },
     { label: 'Panier moyen', value: fEur(k.pm), delta: dCell(k.pm, k1.pm), deltaSuffix: ' vs N-1' },
     { label: 'Taux de transfo', value: fPct(k.tt), delta: dCell(k.tt, k1.tt), deltaSuffix: ' vs N-1' },
     { label: 'Sessions', value: fInt(k.sessions), delta: dCell(k.sessions, k1.sessions), deltaSuffix: ' vs N-1' },
+    { label: 'Taux d’annulation', value: cx ? fPct(cx.tauxCommande) : '—', delta: cx ? dCell(cx.tauxCommande, cx1.tauxCommande) : null, deltaSuffix: ' vs N-1' },
   ]);
-
-  // Chiffre d'affaires — donut de répartition + table détail
-  const c = rep.ca.n, c1 = rep.ca.n1 || {};
-  const mk = (rep.marketplace && rep.marketplace.n) || {};
-  section(doc, 'Chiffre d’affaires — répartition');
+  const c = rep.ca.n, c1 = rep.ca.n1 || {}, mk = (rep.marketplace && rep.marketplace.n) || {};
   donut(doc, [
     { label: 'EShop France', value: c.caFR || 0, color: PALETTE[0] },
     { label: 'EShop International', value: c.caInt || 0, color: PALETTE[1] },
     { label: 'Marketplace', value: mk.total || 0, color: PALETTE[2] },
   ]);
-  const caCols = [{ label: 'Périmètre', w: 235 }, { label: 'N', w: 90, align: 'right' }, { label: 'N-1', w: 90, align: 'right' }, { label: 'Évol.', w: W - 415, align: 'right' }];
-  const caRow = (l, n, n1, bold) => [{ text: l, bold }, { text: fEur(n), align: 'right', bold }, { text: fEur(n1), align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, dCell(n, n1))];
   const caRows = [caRow('CA Global', c.caGlob, c1.caGlob, true), caRow('CA EShop', c.caEShop, c1.caEShop), caRow('   France', c.caFR, c1.caFR), caRow('   International', c.caInt, c1.caInt)];
   if (c.caFP != null) caRows.push(caRow('CA Full Price', c.caFP, c1.caFP));
   if (c.caOP != null) caRows.push(caRow('CA Off Price', c.caOP, c1.caOP));
   table(doc, caCols, caRows);
+}
+function secFamille(doc, rep) {
+  if (!rep.famille || !rep.famille.length) return;
+  section(doc, 'E-Store — Performance par famille');
+  table(doc, [{ label: 'Famille', w: 235 }, { label: 'CA N', w: 90, align: 'right' }, { label: 'CA N-1', w: 90, align: 'right' }, { label: 'Évol.', w: W - 415, align: 'right' }],
+    rep.famille.slice(0, 12).map(f => [cut(f.fam, 36), { text: fEur(f.n), align: 'right' }, { text: fEur(f.n1), align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, dCell(f.n, f.n1))]));
+}
+function secTopProduits(doc, rep) {
+  const p = rep.produits; if (!p || !p.topN || !p.topN.length) return;
+  section(doc, 'E-Store — Top produits');
+  const n1Map = {}; (p.topN1 || []).forEach(x => { n1Map[x.des] = x; });
+  table(doc, [{ label: 'Produit', w: 250 }, { label: 'CA', w: 90, align: 'right' }, { label: 'Qté', w: 60, align: 'right' }, { label: 'CA N-1', w: W - 400, align: 'right' }],
+    p.topN.slice(0, 12).map(x => { const o = n1Map[x.des]; return [cut(x.des, 44), { text: fEur(x.ca), align: 'right' }, { text: fInt(x.qte), align: 'right' }, { text: o ? fEur(o.ca) : '—', align: 'right', color: COL.grey }]; }));
+  if (p.topN1 && p.topN1.length) {
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(COL.grey).text('Rappel top produits N-1', M, doc.y); doc.moveDown(0.25);
+    table(doc, [{ label: 'Produit', w: 340 }, { label: 'CA N-1', w: W - 340, align: 'right' }],
+      p.topN1.slice(0, 8).map(x => [cut(x.des, 60), { text: fEur(x.ca), align: 'right', color: COL.grey }]));
+  }
+}
+function secTopAReconquerir(doc, rep) {
+  const m = rep.produits && rep.produits.manquants; if (!m || !m.length) return;
+  section(doc, 'E-Store — Top produits à reconquérir');
+  table(doc, [{ label: 'Produit (fort N-1)', w: 250 }, { label: 'CA N-1', w: 90, align: 'right' }, { label: 'CA N', w: 80, align: 'right' }, { label: 'Perte', w: W - 420, align: 'right' }],
+    m.slice(0, 10).map(x => [cut(x.produit, 44), { text: fEur(x.caN1), align: 'right', color: COL.grey }, { text: fEur(x.caN), align: 'right' }, { text: '-' + fEur(x.perte), align: 'right', color: COL.down }]));
+}
+function secTopPages(doc, rep) {
+  if (!rep.topPages || !rep.topPages.length) return;
+  section(doc, 'E-Store — Top pages vues');
+  table(doc, [{ label: 'Page', w: 360 }, { label: 'Vues N', w: 90, align: 'right' }, { label: 'Vues N-1', w: W - 450, align: 'right' }],
+    rep.topPages.slice(0, 12).map(p => [cut(p.page, 64), { text: fInt(p.viewsN), align: 'right' }, { text: fInt(p.viewsN1), align: 'right', color: COL.grey }]));
+}
+function secTopPays(doc, rep, n) {
+  const pays = (rep.pays || []).filter(notFR); if (!pays.length) return;
+  section(doc, 'International — Top pays (hors France)');
+  table(doc, [{ label: 'Pays', w: 200 }, { label: 'CA N', w: 100, align: 'right' }, { label: 'CA N-1', w: 100, align: 'right' }, { label: 'Évol.', w: W - 400, align: 'right' }],
+    pays.slice(0, n || 12).map(p => [cut(p.pays, 34), { text: fEur(p.n.ca), align: 'right' }, { text: p.n1 ? fEur(p.n1.ca) : '—', align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, p.n1 ? dCell(p.n.ca, p.n1.ca) : { text: '—', color: COL.faint })]));
+}
+function secFamillesParPays(doc, rep) {
+  const fp = (rep.familleParPays || []).filter(notFR); if (!fp.length) return;
+  section(doc, 'International — Top familles par pays');
+  fp.slice(0, 5).forEach(c => {
+    ensureSpace(doc, 26);
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.ink).text(cut(c.pays, 40), M, doc.y); doc.moveDown(0.2);
+    const fams = (c.familles || []).slice(0, 6);
+    table(doc, [{ label: 'Famille', w: 320 }, { label: 'CA', w: W - 320, align: 'right' }],
+      fams.map(f => [cut(f.fam, 50), { text: fEur(f.ca), align: 'right' }]));
+  });
+}
+function secGaKpi(doc, rep) {
+  const g = rep.ga, g1 = rep.gaN1 || {}; if (!g) return;
+  section(doc, 'Acquisition — Traffic Google Analytics (N vs N-1)');
+  kpiTiles(doc, [
+    { label: 'Sessions', value: fInt(g.totalSessions), delta: dCell(g.totalSessions, g1.totalSessions), deltaSuffix: ' vs N-1' },
+    { label: 'Utilisateurs', value: fInt(g.totalUsers), delta: dCell(g.totalUsers, g1.totalUsers), deltaSuffix: ' vs N-1' },
+    { label: 'Nouveaux utilisateurs', value: fInt(g.totalNewUsers), delta: dCell(g.totalNewUsers, g1.totalNewUsers), deltaSuffix: ' vs N-1' },
+    { label: 'Taux engagement', value: fPct(g.engRateTotal), delta: dCell(g.engRateTotal, g1.engRateTotal), deltaSuffix: ' vs N-1' },
+    { label: 'Revenus GA', value: fEur(g.totalRevenue), delta: dCell(g.totalRevenue, g1.totalRevenue), deltaSuffix: ' vs N-1' },
+  ]);
+}
+function secTypeCanal(doc, rep) {
+  const ct = rep.channelTypes && rep.channelTypes.n; if (!ct || !ct.length) return;
+  const n1 = {}; (rep.channelTypes.n1 || []).forEach(x => { n1[x.type] = x; });
+  section(doc, 'Acquisition — Récap par type de canal');
+  table(doc, [{ label: 'Type de canal', w: 150 }, { label: 'Sessions', w: 90, align: 'right' }, { label: '% trafic', w: 70, align: 'right' }, { label: 'Conv.', w: 70, align: 'right' }, { label: 'Revenu', w: W - 380, align: 'right' }],
+    ct.map(x => [cut(x.type, 24), { text: fInt(x.sessions), align: 'right' }, { text: fPct(x.share), align: 'right', color: COL.grey }, { text: x.convRate != null ? fPct(x.convRate) : '—', align: 'right' }, { text: fEur(x.revenue), align: 'right' }]));
+}
+function secAdsKpi(doc, rep) {
+  const a = rep.ads; if (!a || !a.n) return;
+  section(doc, 'Acquisition — Google Ads (KPI)');
+  const cpc = a.n.clicks > 0 ? a.n.cost / a.n.clicks : null;
+  kpiTiles(doc, [
+    { label: 'Dépense', value: fEur(a.n.cost) },
+    { label: 'ROAS', value: a.roas && a.roas.n != null ? a.roas.n.toFixed(2) + '×' : '—' },
+    { label: 'COS', value: a.cos && a.cos.n != null ? fPct(a.cos.n) : '—' },
+    { label: 'Coût / commande', value: a.cac && a.cac.n != null ? fEur(a.cac.n) : '—' },
+    { label: 'Clics', value: fInt(a.n.clicks) },
+    { label: 'Conversions', value: fInt(a.n.conversions) },
+  ]);
+}
+function secAdsCampagnes(doc, rep) {
+  const c = rep.ads && rep.ads.campaigns; if (!c || !c.length) return;
+  section(doc, 'Acquisition — Analyse campagnes Google Ads');
+  const rows = c.filter(x => x.spend > 0).sort((a, b) => (b.caGA || 0) - (a.caGA || 0) || b.spend - a.spend).slice(0, 10);
+  table(doc, [{ label: 'Campagne', w: 180 }, { label: 'Dépense', w: 80, align: 'right' }, { label: 'CA', w: 80, align: 'right' }, { label: 'ROAS', w: 60, align: 'right' }, { label: 'COS', w: W - 400, align: 'right' }],
+    rows.map(x => [cut(x.campaign, 32), { text: fEur(x.spend), align: 'right' }, { text: x.caGA > 0 ? fEur(x.caGA) : '—', align: 'right' }, { text: x.roas != null ? x.roas.toFixed(2) + '×' : '—', align: 'right' }, { text: x.cos != null ? fPct(x.cos) : '—', align: 'right', color: COL.grey }]));
+}
+function secTopFamillesPayant(doc, rep) {
+  const cats = rep.ads && rep.ads.categories; if (!cats || !cats.length) return;
+  section(doc, 'Acquisition — Top familles tirées par le payant');
+  table(doc, [{ label: 'Famille / catégorie', w: 300 }, { label: 'CA payant', w: W - 300, align: 'right' }],
+    cats.slice(0, 10).map(x => [cut(x.category || x.name || x.fam, 50), { text: fEur(x.revenue != null ? x.revenue : x.ca), align: 'right' }]));
+}
+function secMarketplace(doc, rep) {
+  const mk = (rep.marketplace && rep.marketplace.n) || {}; if (!mk.total) return;
+  const mk1 = (rep.marketplace && rep.marketplace.n1) || {};
+  section(doc, 'Marketplace — CA');
+  table(doc, caCols, [
+    caRow('Galeries Lafayette', mk.glTotal, mk1.glTotal), caRow('Printemps', mk.printemps, mk1.printemps),
+    caRow('Place des Tendances', mk.pdt, mk1.pdt), caRow('Lulli EShop', mk.lulli, mk1.lulli), caRow('Total marketplace', mk.total, mk1.total, true),
+  ]);
+}
+function secCrossCanal(doc, rep) {
+  const cc = rep.crossChannel; if (!cc || !cc.arbitrage || !cc.arbitrage.length) return;
+  section(doc, 'Marketplace — Performance cross-canal');
+  table(doc, [{ label: 'Produit', w: 200 }, { label: 'CA EShop', w: 90, align: 'right' }, { label: 'CA Marketplaces', w: 110, align: 'right' }, { label: 'Constat', w: W - 400 }],
+    cc.arbitrage.slice(0, 10).map(x => [cut(x.name, 32), { text: fEur(x.eshop), align: 'right' }, { text: fEur(x.mkt), align: 'right' }, { text: x.sens === 'eshop' ? 'à lister en MP' : 'à pousser EShop', color: COL.grey }]));
+}
+function secAnnulations(doc, rep) {
+  const cx = rep.cancellations && rep.cancellations.n; if (!cx) return;
+  section(doc, 'Annulations EShop — avant expédition (commandes non finalisées exclues)');
+  table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
+    ['Commandes impactées', { text: fInt(cx.commandesImpactees), align: 'right' }],
+    ['Total commandes', { text: fInt(cx.commandes), align: 'right' }],
+    ['Taux d’annulation (commande)', { text: fPct(cx.tauxCommande), align: 'right' }],
+    ['CA non livré', { text: fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime), align: 'right' }],
+  ]);
+  const d = rep.cancellations && rep.cancellations.detail;
+  if (d) table(doc, [{ label: 'Canal', w: 200 }, { label: 'Pièces', w: 90, align: 'right' }, { label: 'CA non livré', w: W - 290, align: 'right' }], [
+    ['Entrepôt (WEBSTORE)', { text: fInt(d.entrepot.qte), align: 'right' }, { text: fEur(d.entrepot.ca), align: 'right' }],
+    ['Magasin (ship-from-store)', { text: fInt(d.magasin.qte), align: 'right' }, { text: fEur(d.magasin.ca), align: 'right' }],
+  ]);
+}
+function secRemboursements(doc, rep) {
+  const rt = rep.returns && rep.returns.n; if (!rt) return;
+  section(doc, 'Remboursements — retours clients après livraison');
+  table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
+    ['CA retourné', { text: fEur(rt.caRetourne), align: 'right' }],
+    ['Taux de retour', { text: fPct(rep.returns.tauxRetour), align: 'right' }],
+    ['Pièces retournées', { text: fInt(rt.qte), align: 'right' }],
+  ]);
+}
+function secPilotage(doc, rep) {
+  section(doc, 'Pilotage 360 — synthèse');
+  const k = rep.kpiEShop.n, a = rep.ads;
+  kpiTiles(doc, [
+    { label: 'CA EShop', value: fEur(k.ca) }, { label: 'Commandes', value: fInt(k.commandes) },
+    { label: 'Sessions', value: fInt(k.sessions) }, { label: 'TT', value: fPct(k.tt) },
+    { label: 'Dépense Ads', value: a && a.n ? fEur(a.n.cost) : '—' }, { label: 'ROAS', value: a && a.roas && a.roas.n != null ? a.roas.n.toFixed(2) + '×' : '—' },
+  ]);
+}
+function secSuiviTemporel(doc, rep) {
+  const tl = rep.timeline; if (!tl || tl.length < 2) return;
+  section(doc, 'Suivi temporel — CA / jour (4 dernières semaines)');
+  barChart(doc, tl.map(d => ({ label: (d.date || '').slice(5), value: Math.round(d.ca || 0), valueLabel: fEur(d.ca) + (d.email ? '  ✉' : '') })), COL.accent);
+}
+function secAnalysesCroisees(doc, rep) {
+  const cl = rep.campaignLanding; if (!cl || !cl.length) return;
+  section(doc, 'Analyses croisées — campagne × page d’atterrissage');
+  table(doc, [{ label: 'Campagne', w: 180 }, { label: 'Page', w: 200 }, { label: 'Sessions', w: W - 380, align: 'right' }],
+    cl.slice(0, 10).map(x => [cut(x.campaign, 30), cut(x.landing, 36), { text: fInt(x.sessions), align: 'right' }]));
+}
 
-  // Marketplace
-  if (mk.total) {
-    section(doc, 'Omnicanal — Marketplace');
-    const mk1 = rep.marketplace.n1 || {};
-    table(doc, caCols, [
-      caRow('Galeries Lafayette', mk.glTotal, mk1.glTotal), caRow('Printemps', mk.printemps, mk1.printemps),
-      caRow('Place des Tendances', mk.pdt, mk1.pdt), caRow('Lulli EShop', mk.lulli, mk1.lulli), caRow('Total marketplace', mk.total, mk1.total, true),
-    ]);
-  }
-
-  // Acquisition (donut sessions par canal + table)
-  if (rep.channels && rep.channels.n && rep.channels.n.length) {
-    section(doc, 'Acquisition — canaux');
-    donut(doc, rep.channels.n.slice(0, 6).map((x, i) => ({ label: x.canal, value: x.sessions, color: PALETTE[i % PALETTE.length] })));
-    const n1 = {}; (rep.channels.n1 || []).forEach(x => { n1[x.canal] = x; });
-    const cols = [{ label: 'Canal', w: 150 }, { label: 'Sessions', w: 80, align: 'right' }, { label: '% trafic', w: 70, align: 'right' }, { label: 'Conv.', w: 70, align: 'right' }, { label: 'Revenu', w: 90, align: 'right' }, { label: 'Évol.', w: W - 460, align: 'right' }];
-    table(doc, cols, rep.channels.n.slice(0, 8).map(x => { const p = n1[x.canal] || {}; return [cut(x.canal, 26), { text: fInt(x.sessions), align: 'right' }, { text: fPct(x.shareTraffic), align: 'right', color: COL.grey }, { text: fPct(x.convRate), align: 'right' }, { text: fEur(x.revenue), align: 'right' }, Object.assign({ align: 'right' }, dCell(x.revenue, p.revenue))]; }));
-  }
-
-  // Conversion
-  if (rep.gaFunnel && rep.gaFunnel.n) {
-    const g = rep.gaFunnel.n;
-    section(doc, 'Conversion — funnel e-commerce');
-    table(doc, [{ label: 'Étape', w: 250 }, { label: 'Volume', w: 110, align: 'right' }, { label: 'Passage', w: W - 360, align: 'right' }],
-      (g.steps || []).map((s, i) => [s.label, { text: fInt(s.value), align: 'right' }, { text: i === 0 ? '—' : (s.rate != null ? fPct(s.rate) : '—'), align: 'right', color: COL.grey }]));
-  }
-
-  // Offre — barres familles + produits (moins de tableaux)
-  if (rep.famille && rep.famille.length) {
-    section(doc, 'Offre — CA par famille');
-    barChart(doc, rep.famille.slice(0, 8).map(f => ({ label: f.fam, value: f.n })), COL.blue);
-  }
-  if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
-    section(doc, 'Offre — top produits');
-    barChart(doc, rep.produits.topN.slice(0, 8).map(p => ({ label: p.des, value: p.ca })), COL.accent);
-  }
-
-  // Saison
-  if (rep.seasonCompare) {
-    const sc = rep.seasonCompare, sct = sc.counts;
-    section(doc, 'Saison — E26 vs E25');
-    kpiTiles(doc, [
-      { label: 'Modèles E26', value: fInt(sct.modN), delta: dCell(sct.modN, sct.modN1), deltaSuffix: ' vs E25' },
-      { label: 'Saisonniers', value: fInt(sct.saisonniers) }, { label: 'Permanents', value: fInt(sct.permanents) },
-      { label: 'Manquants', value: fInt(sct.manquants) }, { label: 'Non vendus', value: fInt(sct.nonVendus) },
-    ]);
-    if (sc.bests && sc.bests.length) barChart(doc, sc.bests.slice(0, 6).map(b => ({ label: b.name, value: b.ca })), COL.green);
-  }
-
-  // International
-  if (rep.pays && rep.pays.length) {
-    section(doc, 'International — CA par pays');
-    table(doc, [{ label: 'Pays', w: 200 }, { label: 'CA N', w: 100, align: 'right' }, { label: 'CA N-1', w: 100, align: 'right' }, { label: 'Évol.', w: W - 400, align: 'right' }],
-      rep.pays.slice(0, 12).map(p => [cut(p.pays, 34), { text: fEur(p.n.ca), align: 'right' }, { text: p.n1 ? fEur(p.n1.ca) : '—', align: 'right', color: COL.grey }, Object.assign({ align: 'right' }, p.n1 ? dCell(p.n.ca, p.n1.ca) : { text: '—', color: COL.faint })]));
-  }
-
-  // Qualité
-  const cx2 = rep.cancellations && rep.cancellations.n, rt = rep.returns && rep.returns.n;
-  if (cx2 || rt) {
-    section(doc, 'Qualité & pertes');
-    if (cx2) {
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.ink).text('Annulations EShop — avant expédition (OMS)', M, doc.y); doc.moveDown(0.3);
-      table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
-        ['Pièces non expédiées', { text: fInt(cx2.qteAnnulee), align: 'right' }],
-        ['Taux d’annulation (pièces)', { text: fPct(cx2.tauxPieces), align: 'right' }],
-        ['CA annulé (estimé)', { text: fEur(cx2.caAnnuleEstime), align: 'right' }],
-      ]);
-    }
-    if (rt) {
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.ink).text('Retours clients — après livraison', M, doc.y); doc.moveDown(0.3);
-      table(doc, [{ label: 'Indicateur', w: 320 }, { label: 'Valeur', w: W - 320, align: 'right' }], [
-        ['CA retourné', { text: fEur(rt.caRetourne), align: 'right' }],
-        ['Taux de retour', { text: fPct(rep.returns.tauxRetour), align: 'right' }],
-        ['Pièces retournées', { text: fInt(rt.qte), align: 'right' }],
-      ]);
-    }
-  }
+function renderQuotidien(doc, rep) {
+  header(doc, rep, 'Reporting quotidien');
+  secBilan(doc, rep);
+  secFamille(doc, rep);
+  secTopProduits(doc, rep);
+  secTopPays(doc, rep, 8);
+  secGaKpi(doc, rep);
+  secTypeCanal(doc, rep);
+  secAdsKpi(doc, rep);
+  secMarketplace(doc, rep);
+}
+function renderPeriodique(doc, rep) {
+  header(doc, rep, 'Reporting hebdomadaire / mensuel');
+  secBilan(doc, rep);
+  secPilotage(doc, rep);
+  secSuiviTemporel(doc, rep);
+  secFamille(doc, rep);
+  secTopProduits(doc, rep);
+  secTopAReconquerir(doc, rep);
+  secTopPages(doc, rep);
+  secGaKpi(doc, rep);
+  secTypeCanal(doc, rep);
+  secAdsKpi(doc, rep);
+  secAdsCampagnes(doc, rep);
+  secTopFamillesPayant(doc, rep);
+  secTopPays(doc, rep, 5);
+  secFamillesParPays(doc, rep);
+  secAnnulations(doc, rep);
+  secRemboursements(doc, rep);
+  secMarketplace(doc, rep);
+  secCrossCanal(doc, rep);
+  secAnalysesCroisees(doc, rep);
 }
 
 router.get('/pdf', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, type } = req.query;
     const isAll = req.query.isAll === '1';
     const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
     if (rep.empty) return res.status(400).json({ error: rep.message });
+    // Type de reporting : 'quotidien' (1 structure) sinon hebdo/mensuel (structure complète).
+    const isDaily = type ? /quotid|daily|jour/i.test(type) : (rep.meta.from && rep.meta.from === rep.meta.to);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="bi-project-${(rep.meta.from || 'report')}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="bi-project-${isDaily ? 'quotidien' : 'periode'}-${(rep.meta.from || 'report')}.pdf"`);
     const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true });
     doc.pipe(res);
-    renderReport(doc, rep);
+    (isDaily ? renderQuotidien : renderPeriodique)(doc, rep);
     footers(doc);
     doc.end();
   } catch (e) {
