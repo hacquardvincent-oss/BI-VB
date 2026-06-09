@@ -159,7 +159,8 @@ function orderToRows(order) {
   //     en cours, WaitingValidation, PickupStoreProcessed…) → 0. On ne compte jamais une commande en cours.
   // ⚠️ On EXCLUT les annulations DEMANDE (client/blacklist/fraude/impayé/dossier refusé) : pré-livraison,
   //    hors périmètre « non livré » de l'OMS. On garde Cancelled (stock) + CancelledInternal (par le mag).
-  const cstatus = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString().toLowerCase();
+  const rawStatus = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString();
+  const cstatus = rawStatus.toLowerCase();
   const cancelled = /cancel/.test(cstatus) && !/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/.test(cstatus);
   const incomplete = /shippedincomplete|incomplete/.test(cstatus);
   return items.map(it => {
@@ -195,6 +196,7 @@ function orderToRows(order) {
       'Lieu de prise de commande': lieu,
       'Prix Vente': pvUnit * qOrd,
       'Prix Vente Remise': pvrUnit * qOrd,
+      'Statut commande': rawStatus,
     };
   });
 }
@@ -244,7 +246,7 @@ function buildReturnsDataset(orders, from, to) {
 }
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
-const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise'];
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise', 'Statut commande'];
 // 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
 const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
 const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"
