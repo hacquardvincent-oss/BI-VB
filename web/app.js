@@ -125,6 +125,27 @@ function sectionize(layout) {
   return THEME_ORDER.filter(t => byTheme[t]).map(t => ({ theme: t, label: THEME_META[t], blocks: byTheme[t] }));
 }
 
+// ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
+const CARD_LABELS = {
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
+  landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', stockalerts: 'Alertes stock',
+  ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)',
+  campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
+  funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
+};
+const ALL_CARDS = ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const LK = m => 'vbLayout:' + m;
+function defaultLayout(m) { return (MODULES[m] && MODULES[m].layout) || FULL_LAYOUT; }
+function getLayout(m) { try { const o = localStorage.getItem(LK(m)); if (o) { const a = JSON.parse(o); if (Array.isArray(a) && a.length) return a; } } catch (e) { /* localStorage indispo */ } return defaultLayout(m); }
+function isCustomLayout(m) { try { return !!localStorage.getItem(LK(m)); } catch (e) { return false; } }
+function saveLayout(m, arr) { try { localStorage.setItem(LK(m), JSON.stringify(arr)); } catch (e) { /* ignore */ } }
+function resetLayout(m) { try { localStorage.removeItem(LK(m)); } catch (e) { /* ignore */ } }
+
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
@@ -313,6 +334,8 @@ function initModules() {
     renderModuleHint();
     loadReport();
   }));
+  const ev = document.getElementById('editViewBtn'); if (ev && !ev._wired) { ev._wired = true; ev.addEventListener('click', () => openViewEditor()); }
+  const nt = document.getElementById('navToggle'); if (nt && !nt._wired) { nt._wired = true; nt.addEventListener('click', () => { const n = document.getElementById('reportNav'); if (n) n.classList.toggle('open'); }); }
 }
 
 const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace' };
@@ -447,6 +470,8 @@ async function loadReport() {
   renderTimeline2Chart(rep);
   renderCharts(rep);
   wireBilan();
+  buildReportNav();
+  updateViewControls();
 }
 
 function renderReport(rep) {
@@ -1057,22 +1082,125 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
-  const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
+  const layout = getLayout(CURRENT_MODULE);
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
     const a = ana(k, rep);
     if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
     return html;
   };
-  const sections = sectionize(layout);
-  const showBanners = sections.length >= 2;
-  const body = sections.map(s => {
-    const cards = s.blocks.map(card).filter(Boolean).join('\n');
-    if (!cards) return '';
-    return (showBanners ? `<div class="section-head">${s.label}</div>` : '') + cards;
-  }).join('\n');
+  let body;
+  if (isCustomLayout(CURRENT_MODULE)) {
+    // Vue personnalisée : on respecte l'ORDRE exact du layout (drag'n'drop), bannière au changement de thème.
+    let lastTheme = null; const out = [];
+    layout.forEach(k => {
+      const html = card(k); if (!html) return;
+      const t = THEME_OF[k];
+      if (t && t !== lastTheme) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); lastTheme = t; }
+      out.push(html);
+    });
+    body = out.join('\n');
+  } else {
+    const sections = sectionize(layout);
+    const showBanners = sections.length >= 2;
+    body = sections.map(s => {
+      const cards = s.blocks.map(card).filter(Boolean).join('\n');
+      if (!cards) return '';
+      return (showBanners ? `<div class="section-head" id="sec-${s.theme}">${s.label}</div>` : '') + cards;
+    }).join('\n');
+  }
   return buildBilan(rep) + body; // Bilan épinglé en tête (scorecard N/N-1 + signaux auto + synthèse IA)
+}
+
+// ── Sommaire latéral à ancres (navigation dans la longue page Reporting) ──────────
+function buildReportNav() {
+  let nav = document.getElementById('reportNav');
+  if (!nav) {
+    nav = document.createElement('nav'); nav.id = 'reportNav';
+    document.body.appendChild(nav);
+    if (window.innerWidth >= 1400) nav.classList.add('open'); // ouvert par défaut sur grand écran
+  }
+  const report = document.getElementById('report');
+  const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
+  if (heads.length < 2) { nav.innerHTML = ''; nav.classList.remove('open'); return; }
+  const items = heads.map(h => {
+    const id = h.id;
+    const label = id === 'sec-bilan' ? '🎯 Bilan' : (h.textContent || id).trim();
+    return `<a href="#${id}" data-anchor="${id}">${esc(label)}</a>`;
+  }).join('');
+  nav.innerHTML = `<div class="rn-head">Sommaire<span id="rnClose" title="Fermer">✕</span></div><div class="rn-list">${items}</div>`;
+  nav.querySelectorAll('a[data-anchor]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const el = document.getElementById(a.dataset.anchor);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.innerWidth < 1400) nav.classList.remove('open');
+  }));
+  const closeBtn = nav.querySelector('#rnClose'); if (closeBtn) closeBtn.onclick = () => nav.classList.remove('open');
+  // Scroll-spy : surligne la section visible
+  if (window._navObs) window._navObs.disconnect();
+  window._navObs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        nav.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.anchor === en.target.id));
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  heads.forEach(h => window._navObs.observe(h));
+}
+
+// ── Éditeur de vue : cocher / réordonner (drag'n'drop) les tableaux d'une vue ──────
+function openViewEditor() {
+  const mod = CURRENT_MODULE;
+  const modLabel = (MODULES[mod] && MODULES[mod].label) || mod;
+  const cur = getLayout(mod);
+  // Ordre affiché : cartes incluses (dans l'ordre du layout) puis les autres, décochées.
+  const included = cur.filter(k => ALL_CARDS.includes(k));
+  const rest = ALL_CARDS.filter(k => !included.includes(k));
+  const ordered = included.concat(rest);
+  const row = k => `<li class="ve-item" draggable="true" data-key="${k}">
+      <span class="ve-grip" title="Glisser pour déplacer">⠿</span>
+      <label><input type="checkbox" ${included.includes(k) ? 'checked' : ''}> ${esc(CARD_LABELS[k] || k)}</label>
+      <span class="ve-theme">${esc((THEME_META[THEME_OF[k]] || '').replace(/^\S+\s/, ''))}</span>
+    </li>`;
+  const ov = document.createElement('div'); ov.className = 've-overlay';
+  ov.innerHTML = `<div class="ve-modal">
+      <div class="ve-head"><b>✏️ Éditer la vue — ${esc(modLabel)}</b><span class="ve-x" title="Fermer">✕</span></div>
+      <div class="note" style="margin:0 0 8px">Coche les tableaux à inclure, glisse-les (⠿) pour les réordonner. L'ordre coché = l'ordre d'affichage. Enregistré sur ce navigateur.</div>
+      <ul class="ve-list">${ordered.map(row).join('')}</ul>
+      <div class="toolbar" style="margin-top:12px;justify-content:flex-end">
+        <button class="btn" id="veReset" title="Revenir à la vue d'origine">↺ Réinitialiser</button>
+        <button class="btn" id="veCancel">Annuler</button>
+        <button class="btn primary" id="veSave">Enregistrer</button>
+      </div></div>`;
+  document.body.appendChild(ov);
+  const list = ov.querySelector('.ve-list');
+  // Drag'n'drop natif (sans dépendance)
+  let dragEl = null;
+  list.addEventListener('dragstart', e => { dragEl = e.target.closest('.ve-item'); if (dragEl) dragEl.classList.add('dragging'); });
+  list.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; });
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    const after = [...list.querySelectorAll('.ve-item:not(.dragging)')].find(el => {
+      const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2;
+    });
+    if (!dragEl) return;
+    if (after) list.insertBefore(dragEl, after); else list.appendChild(dragEl);
+  });
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('.ve-x').onclick = close;
+  ov.querySelector('#veCancel').onclick = close;
+  ov.querySelector('#veReset').onclick = () => { resetLayout(mod); close(); loadReport(); };
+  ov.querySelector('#veSave').onclick = () => {
+    const arr = [...list.querySelectorAll('.ve-item')].filter(li => li.querySelector('input').checked).map(li => li.dataset.key);
+    if (!arr.length) { alert('Sélectionne au moins un tableau.'); return; }
+    saveLayout(mod, arr); close(); loadReport();
+  };
+}
+
+function updateViewControls() {
+  const note = document.getElementById('customViewNote');
+  if (note) note.innerHTML = isCustomLayout(CURRENT_MODULE) ? '<span class="pill">vue personnalisée</span>' : '';
 }
 
 // ── Bilan en tête : scorecard N vs N-1 + signaux automatiques (règles) ──────────
@@ -1243,7 +1371,7 @@ function buildBilan(rep) {
   const cs = rep.meta && rep.meta.consent;
   let consentNote = '';
   if (cs && cs.n) consentNote = `<div class="note" style="margin-top:6px">🍪 Sessions ajustées du consentement — N : ${Math.round(cs.n * 100)}% d'acceptation (${fInt(cs.sessionsRawN)} GA → <b>${fInt(k.sessions)}</b> réelles)${cs.n1 && cs.sessionsRawN1 != null ? ` · N-1 : ${Math.round(cs.n1 * 100)}% (${fInt(cs.sessionsRawN1)} → ${fInt(k1 && k1.sessions)})` : ''}. Le taux de transfo est recalculé sur cette base.</div>`;
-  return `<div class="card bilan"><h3>🎯 Bilan — ${esc(dimLabel)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
+  return `<div class="card bilan" id="sec-bilan"><h3>🎯 Bilan — ${esc(dimLabel)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
     ${mainCard}${consentNote}${sigHtml}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).

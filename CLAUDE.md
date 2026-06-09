@@ -405,3 +405,73 @@ l'import (jeter les pages brutes) ; PDF WinAnsi (pas de `→`/`Δ`) ; merges via
 - Plan d'action : croisement offre×saison (drops/implantations datées), synthèse rédigée auto enrichie, export PDF/email du plan.
 - Segmentation équipes paramétrable (Trafic Manager, E-Merch, Studio…).
 - Persistance Postgres (`DATABASE_URL`) à activer en prod si pas déjà fait.
+
+---
+
+## 16. Structure de projet recommandée (pour re-développer proprement)
+Le projet actuel est **monolithique plat** (`server/*.js` + `web/*.js`, pas de bundler) — efficace pour un proto/MVP
+mono-client, mais à structurer ainsi pour un vrai produit multi-clients :
+
+```
+/server
+  /connectors      wshop.js, ga4.js, googleads.js, <crm>.js   ← 1 fichier/source, interface commune
+                   (chacun expose: isConfigured(), refresh({from,to,cfrom,cto,slot}), /ping, dataset shape)
+  /core
+    calc/          1 fichier par DOMAINE (ca.js, kpi.js, cancellations.js, returns.js, marketplace.js,
+                   families.js, acquisition.js, season.js) + aliases.js + helpers.js  ← découper calc.js (1245 l.)
+    report.js      buildReport (orchestration → objet rep)
+    season.js      buildSaison
+  /io              ingest.js (upload+anti-PII), store.js, db.js (migrations versionnées)
+  /output          pdf.js, reco.js
+  /http            routes (1 router/domaine), auth.js, rbac.js, jobs.js (runJob générique)
+  config.js        TOUTES les règles métier paramétrables (cf. ci-dessous) — JAMAIS en dur dans le calc
+/web
+  /core            api.js (fetch), state.js, format.js (fEur/fInt/pc/delta…), charts.js (mk + helpers Chart.js)
+  /components      card.js, scorecard.js, timeline.js, growShrink.js, donut.js…  ← découper app.js (2062 l.)
+  /views           modules.js (MODULES/THEME), layout-editor.js, nav.js (sommaire/ancres)
+  app.js           bootstrap
+/config            mapping client : statuts, marketplaces, périmètre, familles… (1 fichier par client)
+/specs             référentiels versionnés (ref produit, implantations)
+/tests             calc.test.js par domaine (les formules sont le cœur → couverture max)
+```
+
+**Principe directeur n°1** : **externaliser toutes les règles métier dans une config** (pas en dur dans le code).
+Un fichier `config/<client>.js` déclare : champ CA, périmètre (instore/mkt + champ discriminant), liste marketplaces +
+règle d'identification, mapping statuts→{annulation/incomplète/en-cours}, encodage démarque, mapping familles, cibles
+(COS), conventions d'affichage. → re-cibler un nouveau client = écrire UNE config, pas toucher au moteur.
+**Principe n°2** : le **moteur de calcul reste pur** (entrées = rows+map+config, sorties = nombres) et **partagé** serveur/
+front/PDF (une seule source de vérité par formule). **Principe n°3** : connecteurs derrière une **interface commune**
+(une nouvelle source = un fichier connector qui émet la même forme de dataset). **Principe n°4** : `buildReport` reste
+la **source unique** consommée par UI + PDF + reco (jamais recalculer côté front ce qui est déjà dans `rep`).
+**Tooling cible** : TypeScript (typer `rep` et les datasets évite 80 % des bugs vus ici), tests sur chaque formule,
+un bundler (Vite) quand le front dépasse ~1500 lignes, migrations DB versionnées.
+
+---
+
+## 17. Expérience utilisateur — règles d'affichage & interface (analyse)
+**Principe UX central** : *« le Bilan répond en 5 s, le détail répond aux pourquoi ».* Le **Bilan épinglé en tête**
+(scorecard 7 KPI N vs N-1 + leviers € + plan d'action) donne la photo instantanée ; les **modules/thèmes** en dessous
+creusent. L'utilisateur cible = responsable e-commerce **et ses équipes** (d'où le plan d'action segmenté + le RBAC par vue).
+
+**Règles d'affichage codifiées (à respecter pour la cohérence) :**
+- **N vs N-1 partout** : chaque chiffre porte son **delta coloré** (`delta`). **Vert = mieux, rouge = moins bien** —
+  **SAUF annulations & COS où c'est inversé** (`deltaInv` : une hausse est rouge). Toujours préciser « vs N-1 ».
+- **Graphes — convention temporelle** : **trait plein = N, pointillé = N-1** ; barres N foncées / N-1 claires.
+- **Barres « croissance/décroissance »** (familles, pays) : la barre atteint `max(N,N-1)`, **cap vert si ça grandit /
+  rouge si ça rétrécit** → on lit l'évolution d'un coup d'œil (vs un simple histogramme N).
+- **France exclue des tableaux/graphes par pays** (≈70 % du CA, écrase l'échelle) — vue International = hors France.
+- **« Ce qui marchait en N-1 et qu'on n'a plus »** est systématiquement surfacé (campagnes manquantes, best-sellers
+  sortis, pages perdues) → c'est le levier d'action n°1.
+- **Couleurs sémantiques** : ambre = CA, bleu = sessions/trafic, violet = ajout panier, vert = TT/hausse, rouge = baisse.
+- **Insight 💡** auto en bas de carte (`ana()`), **leviers triés par impact € signé** (jamais par % seul).
+- **Cartes auto-masquées** quand la donnée manque (pas de carte vide) ; **bannières de thème** seulement si ≥2 sections.
+- **Densité maîtrisée** : tuiles KPI (`.kc`), tables compactes, donuts 110–130 px ; tout en `tabular-nums`.
+- **Anti-frustration data** : messages explicites quand un import manque ou est trop court ; diagnostic `/ping` lisible ;
+  import **complet** vs **delta** clairement distingués ; champ taux d'acceptation cookies pour caler les sessions.
+
+**Limites UX actuelles → pistes (dont la demande en cours) :**
+- La page Reporting est **très longue** → **sommaire latéral à ancres** (navigation rapide) — *en cours*.
+- Les vues sont **figées en dur** → **éditeur de vue** (cocher les tableaux d'une vue) + **drag'n'drop** (réordonner) —
+  *en cours*. Persistance v1 = `localStorage` (par navigateur) ; cible = sauvegarde par compte (RBAC) côté serveur.
+- Pistes : thème clair/sombre, export par carte, favoris, recherche de carte, vues partagées par équipe.
+
