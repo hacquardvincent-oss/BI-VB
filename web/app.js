@@ -631,6 +631,10 @@ function renderReport(rep) {
       const split = `<div class="kgrid" style="margin-top:8px">
         <div class="kc"><div class="l">🏭 Entrepôt (WEBSTORE)</div><div class="v">${fInt(d.entrepot.qte)} pièces</div><div style="font-size:11px">${fEur(d.entrepot.ca)} CA annulé</div></div>
         <div class="kc"><div class="l">🏬 Magasin (ship-from-store)</div><div class="v">${fInt(d.magasin.qte)} pièces</div><div style="font-size:11px">${fEur(d.magasin.ca)} CA annulé</div></div></div>`;
+      // Expéditions incomplètes (ShippedIncomplete) — hors taux d'annulation (la commande a été expédiée)
+      const inc = d.incomplet || (cx.qteIncomplete != null ? { qte: cx.qteIncomplete, ca: cx.caIncomplete } : null);
+      const incHtml = (inc && inc.qte > 0) ? `<div class="kgrid" style="margin-top:8px">
+        <div class="kc"><div class="l">📦 Expéditions incomplètes (hors annulation)</div><div class="v">${fInt(inc.qte)} pièces</div><div style="font-size:11px">${fEur(inc.ca)} non expédié${inc.entrepot ? ` · entrepôt ${fInt(inc.entrepot.qte)} / magasin ${fInt(inc.magasin.qte)}` : ''}</div></div></div>` : '';
       const stores = (d.topStores || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top magasins qui annulent</b></div><table style="font-size:11px"><thead><tr><th>Magasin</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topStores.map(s => `<tr><td>${esc(s.mag)}</td><td>${fInt(s.qte)}</td><td>${fEur(s.ca)}</td></tr>`).join('')}</tbody></table>` : '';
       const prods = (d.topProduits || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top produits annulés</b></div><table style="font-size:11px"><thead><tr><th>Produit</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topProduits.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('')}</tbody></table>` : '';
       // Répartition du non-livré par statut OMS (audit : Cancelled vs ShippedIncomplete vs …)
@@ -639,9 +643,9 @@ function renderReport(rep) {
       // Produits annulés ventilés par canal qui annule (entrepôt vs chaque magasin)
       const byCanal = (d.byCanal || []).length ? `<div class="note" style="margin:14px 0 4px"><b>Produits annulés par canal qui annule</b> — qui a annulé quoi ?</div>
         <div class="grid cols2">${d.byCanal.map(c => `<div style="margin-bottom:6px"><div class="note" style="margin:0 0 3px"><b>${esc(c.canal)}</b> — ${fInt(c.qte)} pièces · ${fEur(c.ca)}</div><table style="font-size:11px"><tbody>${c.top.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td style="text-align:right">${fInt(p.qte)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>` : '';
-      detailHtml = split + byStatut + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>` + byCanal;
+      detailHtml = split + incHtml + byStatut + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>` + byCanal;
     }
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Avant expédition</b> : commandes avec au moins une pièce non livrée (Quantité non livré > 0). <b>Taux d'annulation (commande)</b> = commandes impactées ÷ total commandes. Détail des pièces annulées par canal ci-dessous. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes annulées (source OMS / WSHOP)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Annulations</b> = commandes au statut <b>Annulée</b> (Cancelled : stock, interne…). <b>Taux d'annulation</b> = commandes annulées ÷ total commandes. Les <b>expéditions incomplètes</b> (ShippedIncomplete) sont comptées <b>à part</b> (la commande a été expédiée, juste partiellement) et n'entrent pas dans le taux. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. ℹ️ Le statut WSHOP est <b>live</b> : il peut différer légèrement d'un export OMS figé (annulations survenues depuis). À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
 
   // Retours
