@@ -718,13 +718,14 @@ function calcCancellations(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type;
   if (qni === undefined) return null;
   let qteAnnulee = 0, qteCmd = 0, caAnnule = 0, caPaye = 0;
-  const ordersImpacted = new Set();
+  const ordersImpacted = new Set(), allOrders = new Set();
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
     const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
     const prix = fN(r[pi]);
     qteCmd += cmd; caPaye += prix;
+    if (ni !== undefined && r[ni]) allOrders.add(r[ni]);
     if (nonLivre > 0) {
       qteAnnulee += nonLivre;
       if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
@@ -735,10 +736,10 @@ function calcCancellations(rows, map) {
   return {
     qteAnnulee, qteCmd, caAnnuleEstime: caAnnule, caNonLivre: caAnnule, caPaye,
     caCommande: caPaye, caLivre: caPaye - caAnnule,
-    commandesImpactees: ordersImpacted.size,
+    commandes: allOrders.size, commandesImpactees: ordersImpacted.size,
+    // Taux d'annulation = commandes avec au moins une pièce non livrée ÷ total commandes.
+    tauxCommande: allOrders.size > 0 ? ordersImpacted.size / allOrders.size : null,
     tauxPieces: qteCmd > 0 ? qteAnnulee / qteCmd : null,
-    // CA payé = Prix de vente payé = unit × quantité COMMANDÉE → inclut déjà la valeur non livrée.
-    // Taux d'annulation CA = CA non livré ÷ CA commandé (et non ÷ (annulé + payé), qui double-comptait).
     tauxCA: caPaye > 0 ? caAnnule / caPaye : null,
     tauxCAEstime: caPaye > 0 ? caAnnule / caPaye : null,
   };
