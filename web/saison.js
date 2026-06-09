@@ -300,6 +300,21 @@ function pollJob(btns, note, onSuccess) {
   setTimeout(poll, 1500);
 }
 
+const merchBtn = document.getElementById('merchApi');
+if (merchBtn) merchBtn.addEventListener('click', async () => {
+  const note = document.getElementById('merchNote');
+  const btns = [merchBtn, document.getElementById('loadBtn')];
+  btns.forEach(b => { b.disabled = true; });
+  note.textContent = 'Import stock + retours WSHOP…';
+  try {
+    const q = new URLSearchParams(period()).toString();
+    const r = await fetch('/api/wshop/saison-merch?' + q, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
+  pollJob(btns, note,
+    res => `✓ Stock : ${fInt(res.stockRefs)} réfs · Retours N : ${fInt(res.retoursN)}${res.retoursN1 ? ` · N-1 : ${fInt(res.retoursN1)}` : ''}`);
+});
+
 document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
   const btns = [document.getElementById('wshoprefresh'), document.getElementById('loadBtn')];
