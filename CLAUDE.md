@@ -1,159 +1,407 @@
-# CLAUDE.md — Mémoire opérationnelle du projet BI-VB
+# CLAUDE.md — Mémoire opérationnelle complète du projet BI-VB
 
-> **À recharger en début de chaque session.** Ce fichier capitalise les **formules de calcul**,
-> les **schémas des sources**, les **anomalies résolues** (et pourquoi), et les **conventions**.
-> Objectif : re-développer ce type de projet beaucoup plus vite, sans refaire les mêmes erreurs.
+> **À RECHARGER EN DÉBUT DE CHAQUE SESSION.** Document de référence exhaustif (audit front+back du 09/06/2026).
+> Objectif : pouvoir **re-développer ce type d'outil pour une autre entreprise sans refaire aucune erreur**.
 > Compléments : `CONTEXT.md` (vision produit), `STATUS.md` (roadmap), `README.md`.
+>
+> **Sommaire** : 1. Architecture · 2. Jeux de données · 3. Connecteurs (WSHOP/GA4/Google Ads) ·
+> 4. Ingestion & anti-PII · 5. **Définitions du CA & périmètre** · 6. **Moteur de calcul (formules)** ·
+> 7. Structure de l'objet `rep` · 8. Plan d'action / pilotage · 9. **Frontend : cartes & graphiques** ·
+> 10. PDF · 11. Reco IA · 12. **Journal d'anomalies résolues** · 13. Conventions · 14. **Checklist re-dev**.
 
 ---
 
-## 1. Vue d'ensemble
+## 1. Architecture
 
-Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module (Pilotage, Suivi temporel,
-E-Store, Acquisition, International, Marketplace, Analyses croisées, Offre/Merch). Déployé sur
-**Render** (lit la branche `main`). Backend **Node.js/Express**, frontend **vanilla JS + Chart.js**,
-PDF via **pdfkit**. Données persistées en mémoire, ou **Postgres si `DATABASE_URL`** (sinon perdues
-au redeploy → toujours conseiller de configurer `DATABASE_URL`).
+Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déployé sur **Render** (lit la branche `main`).
+- **Backend** Node.js/Express. **Frontend** vanilla JS + **Chart.js**. **PDF** via **pdfkit**.
+- **Persistance** : `store.js` = `Map` en RAM (lectures synchrones pour `calc`). Si **`DATABASE_URL`** (Postgres/Neon) :
+  `db.js` crée `datasets(source,period,data jsonb)`, `objectives`, `users`; `store.hydrate()` recharge au boot;
+  écritures write-through (upsert). **Sans DB → données perdues au redeploy** (toujours conseiller `DATABASE_URL`).
+- **Auth** (`auth.js`) : scrypt + `timingSafeEqual`. Admin bootstrap par env `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+  (marche sans DB). Comptes équipe en DB (`users`, rôle admin/user, `allowed_views` jsonb = **RBAC par vue**).
+  `cookie-session` 7 j (`SESSION_SECRET`). Middlewares `requireAuth`/`requireAdmin`/`requireDb`.
+- **Montage des routes** (`index.js`) : `/healthz`; `/auth`; `/api/ingest`; `/api/report` (**reports.js ET pdf.js**);
+  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/reco`; `/api/objectives`; statique `web/` (no-cache html/js/css).
+  Au boot : ouvre le port → `db.init()` → `store.hydrate()` → `objectives.hydrate()` → `loadSpecs()` auto-charge
+  les fichiers versionnés de `specs/` (`ref` N = "Referentiel produit.xlsx", `impl` N/N1 = "Implantation E26/E25.xlsx").
 
 ### Fichiers clés
 | Fichier | Rôle |
 |---|---|
-| `server/wshop.js` | Connecteur WSHOP API (OMS, retours, stock, back-in-stock). `orderToRows` = mapping commande→ligne OMS. `/ping` diagnostic. |
-| `server/ga4.js` | Connecteur GA4 (sessions, canaux, campagnes, pages, items, heure×canal). |
-| `server/calc.js` | **Tout le moteur de calcul** (KPI, CA, annulations, retours, marketplace, familles, COS/ROAS…). + alias de colonnes. |
-| `server/reports.js` | `buildReport` : orchestre les datasets → objet `rep` consommé par le front et le PDF. |
-| `server/ingest.js` | Import fichiers (projection colonnes canoniques, anti-PII). |
-| `server/pdf.js` | Export PDF (sections par type quotidien/hebdo). |
-| `web/app.js` | Frontend (rendu cartes, graphes, plan d'action, handlers boutons). |
-| `web/app.html` | Structure UI. |
+| `server/wshop.js` (756 l.) | Connecteur WSHOP. `orderToRows` = commande→ligne OMS. `collectRange`, `refresh`, `syncIncremental`, `/ping`, audit CA. |
+| `server/ga4.js` (376 l.) | Connecteur GA4. ~13 fetchers → jeux `ga`, `gasess`, `gacampaigns`, `gacampdaily`, `gaemailhour`… |
+| `server/googleads.js` (183 l.) | Connecteur Google Ads (GAQL, cost_micros, impression share). |
+| `server/calc.js` (1245 l.) | **Tout le moteur de calcul** (pur, sans DOM, partagé serveur/front/PDF) + alias colonnes. |
+| `server/reports.js` (1007 l.) | `buildReport` (objet `rep`) + `buildSaison`. Source unique pour UI, PDF, reco. |
+| `server/ingest.js` (199 l.) | Upload fichiers (projection colonnes canoniques, **anti-PII**). |
+| `server/pdf.js` (401 l.) | Export PDF (sections par type quotidien/hebdo, pdfkit). |
+| `server/reco.js` (187 l.) | Reco IA (Anthropic) + endpoint `/context` (gratuit, prompt à coller dans Claude.ai). |
+| `server/store.js`/`db.js`/`auth.js`/`objectives.js`/`index.js` | Persistance, RBAC, objectifs, montage. |
+| `web/app.js` (2062 l.) | Frontend central (cartes, graphes, bilan, plan d'action, handlers). |
+| `web/saison.js`/`saison.html` | Page « Analyse de saison » (à part, période longue). |
 
-### Composition d'un rapport (front)
-`MODULES[module].layout` (liste de clés cartes) → `THEME_OF` (thème par carte) → `sectionize`
-(groupe par `THEME_ORDER`, **préserve l'ordre du layout dans chaque thème**) → bannières `THEME_META`.
-Pour **réordonner** des cartes d'un même thème : changer l'ordre dans le `layout`.
-
----
-
-## 2. Sources de données & schémas
-
-### WSHOP API (`/api/v1/...`)
-- Auth : `POST /authenticate` → JWT 1h. `apiPost` gère retries + refresh jeton.
-- `POST /orders/get` : `created_from`/`created_to` (date création) ou `begin`/`end` (date modif, pour le delta).
-  Plafond ~10000 résultats → on découpe la fenêtre en récursif (`collectRange`).
-- Commande : `orderId`, `orderDate`, `orderTotal`, `orderCustomerStatus` ⭐, `orderStatus`,
-  `orderStoreStatus`, `payment_method.label`, `storeItems.label` (NOM MAGASIN, ex. "ENTREPOT"/"WEBSTORE"),
-  `orderOrigin` (in-store/out-store), `orderLocation` (Instore si rempli), `orderItems[]`, `orderRefund[]`,
-  `orderSplitIndex` ("1/2"), `shippingAddress.countryCode`.
-- **orderItems n'ont AUCUN champ statut.** Champs : `ean, title, reference, color, size, category,
-  compareAtPrice, originalUnitPrice, originalUnitPriceNet, originalDiscountedUnitPrice,
-  originalDiscountedUnitPriceNet, unitPrice, quantityOrdered, quantityShipped, quantityOffered, …`.
-  ⚠️ **`quantityOffered` = quantité OFFERTE (cadeau), PAS « à expédier »** (piège classique, voir §4).
-- `orderCustomerStatus` (enum 22 états, **calque les libellés OMS** "Annulée (Stock)", "Expédiée Incomplète"…) :
-  `Waiting, Controlling, WaitingDocumentation, CancelledCustomer, CancelledBlacklistUnpaid,
-  CancelledBlacklistFraud, CancelledBlacklistDoubtful, Preparation, Late, Shipped, ShippedIncomplete,
-  Cancelled, WaitingPayment, CancelledFileDenied, PreparationPartial, ShippedPartial, CancelledInternal,
-  ReturnPreparation, PickupStoreProcessed, WaitingValidation, Preorder, SubscriptionRenew`.
-  `orderStatus` (8 états back-office : Waiting/Processing/Processed/Cancelled…) **n'a ni Shipped ni
-  ShippedIncomplete** → inutilisable pour le détail OMS. **Toujours utiliser `orderCustomerStatus`.**
-- Autres endpoints : `/inventory/get` (stock), `/returns/get` (retours produit, `orderItems[].refund`,
-  `ean`→ref via inventaire), `/back-in-stock-subscriptions/get` (demande sur ruptures).
-- Diagnostic : **`/ping`** expose `statusDistinct`, sondes par statut, `simNonLivrePieces`. ⚠️ Appels WSHOP
-  lents (~2 s) → **toujours paralléliser (`Promise.all`) + garde-fou timeout (`Promise.race` ~9 s)** sinon 504 du proxy.
-
-### GA4 API
-- `runReport`. Jeu principal `ga` = `date×channel×device×country` (sessions, addToCarts, revenue…).
-  ⚠️ **Ce jeu SUR-COMPTE les sessions** (somme multi-dimension). → jeu **`gasess`** (`date×pays`, faible cardinalité)
-  pour le **KPI sessions** ET le **TT/jour** (sinon courbes fausses/vides).
-- Jeux dédiés : `gacampaigns` (campagne×pays), `gacampdaily` (date×campagne → timeline campagnes),
-  `gaemailhour` (heure×canal → heure d'envoi email), `galanding`, `gapagesrc`, `gacampcat`
-  (campagne×catégorie = thème payant), `gaitems`/`saisongaitem` (funnel produit).
-
-### Y2 (Marketplace / ERP) & OMS upload
-- Y2 : `Total TTC ligne`, `Etablissement ligne doc`, `Commercial du doc`, `Reference interne doc`, `Code article`.
-  ⚠️ **Exclure `Total TTC ≤ 0`** (= retours/avoirs) du CA, sinon CA famille négatif.
-- OMS colonnes canoniques (cf. `OMS_ALIASES` / `OMS_HDRS`) : Date, Prix de vente paye, Pays livraison,
-  NOM MAGASIN, Type Paiement, Numeros, Designation produit, quantites commandees, **Quantité non livré**,
-  Ref. externe, Lieu de prise de commande, Prix Vente, Prix Vente Remise, **Statut commande**.
+### Pipeline de rendu front
+`loadReport()` → `GET /api/report?…` → `renderReport(rep)` construit une string HTML de cartes →
+`MODULES[module].layout` (clés cartes) → `THEME_OF` (thème/carte) → `sectionize` (groupe par `THEME_ORDER`,
+**préserve l'ordre du layout dans chaque thème**) → bannières `THEME_META` (affichées si ≥2 sections).
+Après `innerHTML` : `renderObjectives`, `renderDailyChart`, `renderTimelineChart`, `renderTimeline2Chart`,
+`renderCharts`, puis `wireBilan()`. **Pour réordonner des cartes d'un même thème : changer l'ordre du `layout`.**
 
 ---
 
-## 3. Formules de calcul (le cœur)
+## 2. Jeux de données (dataset keys, source-period)
 
-### Périmètre & CA
-- **Périmètre EShop = Outstore** (exclut Instore = vente vendeur en magasin via `Lieu de prise de commande`).
-- **Marketplaces exclus du CA EShop** par le **type de paiement** (`isMkt` : gl.com, printemps, la redoute, 24s) —
-  on ne touche PAS aux magasins (ship-from-store = corners physiques, gardés dans le CA).
-- **CA = « Prix de vente payé » = `unitPrice × quantityOrdered`** (champ confirmé = PVP de l'export OMS).
-- **Full price vs Off price (démarque)** : off price si `Prix Vente Remisé (originalDiscountedUnitPrice)`
-  ≠ 0 **ET** ≠ `Prix Vente (originalUnitPrice)`. Sinon full price. (WSHOP encode la démarque dans
-  `originalDiscountedUnitPrice`.)
-- **CA Global EShop** = FR + International, hors tous marketplaces. **Omnicanal** = Entrepôt (WEBSTORE) + Ship-from-store.
+Clé store = `${source}-${period}`, `period ∈ {N, N1}`. Forme dataset : `{hdrs, rows, map, row_count, date_min, date_max, uploaded_by, uploaded_at}`.
 
-### Annulations (⚠️ historique douloureux, voir §4)
-- **Signal = `orderCustomerStatus`** (orderItems sans statut).
-- **Taux d'annulation = commandes ANNULÉES ÷ total commandes** (à la commande, pas à la pièce).
-- **Comptées comme annulation** (`/cancel/` et **PAS** `/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/`) :
-  `Cancelled` (Annulée Stock), `CancelledInternal` (Annulée par le mag). Non livré = `commandé − expédié`.
-- **EXCLUES du taux** : annulations *demande* (CancelledCustomer, CancelledBlacklist\*, CancelledFileDenied)
-  = pré-livraison, hors « non livré » OMS.
-- **`ShippedIncomplete` comptée À PART** (ligne « expéditions incomplètes ») : la commande a été expédiée,
-  juste partielle ; WSHOP l'applique très largement (splits, partiels en cours) ≠ OMS « Expédiée Incomplète » (reliquat abandonné).
-- ⚠️ **WSHOP = statut LIVE ≠ export OMS figé** : ne JAMAIS viser le match au pixel avec une photo OMS.
+| Source | Origine | Contenu |
+|---|---|---|
+| `oms` | WSHOP `orderToRows` / upload | Lignes commande EShop (le cœur). 15 colonnes (cf §3.1). |
+| `ret` | WSHOP `orderRefund` / upload | Retours niveau remboursement (montant, raison, date). |
+| `retprod` | WSHOP `/returns/get` (N seul) | Retours niveau **produit** (1 ligne/article) → top produits retournés. |
+| `bis` | WSHOP back-in-stock | Demande sur ruptures (« prévenez-moi »). |
+| `y2` | upload ERP/Marketplace | `Total TTC ligne`, `Etablissement`, `Commercial`, `Reference interne`, `Code article`. |
+| `ref` | upload / `specs/` | Référentiel produit : ref_ext → **famille/regroupement/saison**. |
+| `impl` | upload / `specs/` | Implantation catalogue saison (E26 N / E25 N1). |
+| `ads` | Google Ads API / upload | Campagne×jour : coût, impressions, clics, conversions, valeur conv. |
+| `adsis` | Google Ads API | Impression share (search IS, lost budget/rank). |
+| `ga` | GA4 API | **date×canal×device×pays** (sur-compte les sessions — cf §12). |
+| `gasess` | GA4 API | **date×pays** (faible cardinalité) → **KPI sessions + TT/jour fiables**. |
+| `gacampaigns`/`gacampnr`/`gacampcat`/`gacampaignland` | GA4 | campagne×pays / new-vs-returning / campagne×catégorie / campagne×landing. |
+| `gacampdaily` | GA4 | date×campagne → courbes campagnes (timeline2). |
+| `gaemailhour` | GA4 | heure×canal → heure d'envoi email (`emailPeakHour`). |
+| `galanding`/`gapages`/`gapagesrc`/`gaitems` | GA4 | landing×pays / pages / pages×source / funnel produit (itemName). |
+| `saison*` (`saisonoms`,`saisony2`,`saisonref`,`saisonstock`,`saisonret`,`saisonbis`,`saisongaitem`) | WSHOP slot/upload | Jeux dédiés période longue de la page Saison (n'écrasent pas l'OMS courte). |
 
-### Retours (distinct des annulations — APRÈS livraison)
-- Source `ret` (orderRefund : montant, raison via refundType, date) → `calcReturns` (CA retourné, taux, raisons, destinations).
-- Source produit `retprod` (`/returns/get`, 1 ligne/article, date filtrable) → top produits retournés + raisons (`topReturnedProducts`).
-- Taux de retour = CA retourné / CA EShop période.
+---
+
+## 3. Connecteurs
+
+### 3.1 WSHOP (`wshop.js`)
+**Env** : `WSHOP_INSTANCE` (→ `https://{instance}.wshop.cloud`), `WSHOP_PREPROD`, `WSHOP_API_BASE` (override),
+`WSHOP_USER`/`WSHOP_PWD`, `WSHOP_MONTHS` (défaut 24), `WSHOP_PAGE` (1000), `WSHOP_MAX_WINDOW` (`RESULT_CAP` 10000).
+**Auth** : `POST /api/v1/authenticate` → JWT 1h, caché ~55 min ; `_authP` dédoublonne les auth concurrentes (N & N-1
+partagent une auth). `apiPost` : Bearer ; **401/403 → refresh forcé + 1 retry** ; `≥500` → backoff ; 4xx → throw.
+`wfetch` = `fetch` + `AbortController` (timeout, sinon le proxy Render renvoie un 502 opaque).
+
+**`orderToRows(order)`** — 1 ligne par `orderItems`. Champs commande : `pays`=`countryName(shippingAddress.countryCode)`,
+`mag` (NOM MAGASIN)=`storeItems.label || website.name || orderOrigin`, `pay`=`payment_method.label`,
+`lieu`=`orderLocation` rempli ? `INSTORE` : `OUTSTORE`, `num`=`orderId||mainOrderId`.
+**Non-livré** (le cœur, cf §12) : `cstatus = orderCustomerStatus || orderStatus || status` ;
+`cancelled = /cancel/ && !/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/` ;
+`incomplete = /shippedincomplete|incomplete/`. `qShipKnown` = `quantityShipped` ou null (`qShip` retombe sur `qOrd`).
+`cancelled → max(0, qOrd − (qShipKnown ?? 0))` ; `incomplete → max(0, qOrd − (qShipKnown ?? qOrd))` ; sinon **0**.
+⚠️ **`quantityOffered` n'est PAS utilisé** (= quantité offerte/cadeau, piège). Coloris ajouté à la désignation.
+**Colonnes `OMS_HDRS` (15)** : `Date, Heure, Prix de vente paye (=unitPrice×qOrd), Pays livraison, NOM MAGASIN,
+Type Paiement, Numeros, Designation produit, quantites commandees, Quantité non livré, Ref. externe (=reference||ean),
+Lieu de prise de commande, Prix Vente (=originalUnitPrice×qOrd), Prix Vente Remise (=originalDiscountedUnitPrice×qOrd),
+Statut commande (=orderCustomerStatus brut)`.
+**Retours** : `orderRetRowObjs` → `RET_HDRS` (Date creation, Montant rembourse, Numero de retour, Raison [refundType:
+manual→"Remboursement manuel", return→"Retour client"], Pays, Nb colisages, Numeros). `returnsProductDataset`
+(`retprod`, 1 ligne/article remboursé) : Date, Designation, Nb retournes, Montant, Raison. `bisDataset` (back-in-stock).
+
+**Pagination** `collectRange(from,to,onCount,extra,guard)` : pagine `orders/get` (`created_from/to`), dédup par orderId,
+convertit au fil de l'eau + **jette la page brute** (mémoire bornée) ; **si `got ≥ RESULT_CAP` → découpe la fenêtre de
+dates en deux récursivement** ; `guard=true` ne garde que les commandes créées ∈ [from,to] (sécurité delta `begin/end`).
+**`refresh`** (import COMPLET) : N et N-1 **en parallèle** (`Promise.all`) → `oms`/`ret`, puis best-effort `bis` + `retprod`.
+**`syncIncremental`** (delta) : `begin/end` = date de **modification** depuis `.sync.since`, `mergeDelta` remplace les
+lignes des commandes ré-importées (clé `Numeros`). **Ne recalcule PAS le passé / N-1 / bis / retprod** → après un
+changement de règle, **exiger un import complet**.
+**`/ping`** : auth + **5 `orders/get` en parallèle** chacune sous `withTimeout(p,9000)` (anti-504, réponse partielle) :
+échantillon + sondes `Cancelled`/`ShippedIncomplete`/`CancelledCustomer`/`CancelledInternal`. Renvoie `statusDistinct`,
+`orderStatusDistinct`, `simNonLivrePieces/ByStatus`, `probe*` ({commandes, piecesNonLivre, statutRenvoye}), champs
+prix/statut/coloris. **Anti-PII** (email masqué, aucun champ client). Audit CA (`newCAAudit`/`auditCARange`) : rejoue les
+commandes et somme tous les champs prix plausibles pour caler la formule CA (`pvpOf = unitPrice × quantityOrdered`).
+**Jobs** : `runJob` répond 202, le client poll `GET /job` (`jobSnapshot`). Routes : `/status`, `/ping`, `/refresh`,
+`/saison-merch`, `/sync`, `/ca-audit`, `/job`.
+
+**`orderCustomerStatus` (enum 22 états, calque les libellés OMS)** : `Waiting, Controlling, WaitingDocumentation,
+CancelledCustomer, CancelledBlacklistUnpaid, CancelledBlacklistFraud, CancelledBlacklistDoubtful, Preparation, Late,
+Shipped, ShippedIncomplete, Cancelled, WaitingPayment, CancelledFileDenied, PreparationPartial, ShippedPartial,
+CancelledInternal, ReturnPreparation, PickupStoreProcessed, WaitingValidation, Preorder, SubscriptionRenew`.
+`orderStatus` (8 états back-office, **sans Shipped ni ShippedIncomplete**) → inutilisable pour le détail OMS.
+
+### 3.2 GA4 (`ga4.js`)
+**Env** : `GA4_SA_KEY` (JSON ou base64) ou `/etc/secrets/ga4.json` ou `GOOGLE_APPLICATION_CREDENTIALS` ; `GA4_PROPERTY_ID`.
+`post()` : `google-auth-library` JWT (scope `analytics.readonly`) → `runReport`. Retries 5xx/réseau, pas sur 4xx.
+**Fetchers (dimensions → métriques → jeu)** :
+| Jeu | Dimensions | Métriques |
+|---|---|---|
+| `ga` (`fetchGA4`) | date, sessionDefaultChannelGroup, deviceCategory, country | sessions, activeUsers, newUsers, keyEvents, totalRevenue, engagedSessions, engagementRate, addToCarts, checkouts, ecommercePurchases |
+| `gasess` | date, country | sessions |
+| `galanding` | landingPage, country | sessions, ecommercePurchases, totalRevenue |
+| `gaitems`/`saisongaitem` | itemName | itemsViewed, itemsAddedToCart, itemsPurchased |
+| `gapages` | pagePath, country | screenPageViews |
+| `gapagesrc` | landingPage, channelGroup, country | sessions, totalRevenue, ecommercePurchases, screenPageViews |
+| `gacampaigns` | sessionCampaignName, country | sessions, ecommercePurchases, totalRevenue, addToCarts |
+| `gacampnr` | sessionCampaignName, newVsReturning, country | sessions, ecommercePurchases, totalRevenue |
+| `gacampcat` | sessionCampaignName, itemCategory | itemRevenue, itemsPurchased |
+| `gacampaignland` | sessionCampaignName, landingPage, country | sessions, ecommercePurchases |
+| `gacampdaily` | date, sessionCampaignName | sessions, totalRevenue, ecommercePurchases |
+| `gaemailhour` | hour, sessionDefaultChannelGroup | sessions |
+⚠️ **`gasess` existe parce que `ga` SUR-COMPTE les sessions** (somme multi-dimension non seuillée). `gasess` colle au
+total plateforme → l'utiliser pour le KPI sessions et le TT/jour. `refresh` : `fetchGA4` essentiel (awaité), le reste
+sous `safe()` (un 502 secondaire n'interrompt pas l'import). `gacampcat` = N seul. Routes : `/status`, `/refresh`, `/saison-items`.
+
+### 3.3 Google Ads (`googleads.js`)
+**Env** : `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`/`CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`,
+`GOOGLE_ADS_CUSTOMER_ID` (10 chiffres), `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (MCC, optionnel), `GOOGLE_ADS_API_VERSION`.
+OAuth2 refresh_token → access token. `search(gaql)` sur `…/{ver}/customers/{id}/googleAds:searchStream` ; **sur 404 →
+essaie la version d'API suivante** (`v21,v20,v19,v18`, la 1ʳᵉ qui répond est cachée). `ADS_HDRS` : Campagne, Jour, Coût
+(`cost_micros/1e6`), Impressions, Clics, Conversions, Valeur de conversion → jeu `ads`. `fetchImpressionShare` → `adsis`.
+Routes : `/status`, `/ping` (probe `SELECT campaign.id … LIMIT 1`), `/refresh`.
+
+---
+
+## 4. Ingestion & anti-PII (`ingest.js`)
+`UPLOAD_MAX_MB` (300). `SOURCES = oms,y2,ga,ads,ref,ret,impl,saison*`. `ANONYMIZE = {oms,ret,saisonoms,saisonret}`.
+**`OMS_CANON`** = colonnes canoniques conservées à l'import projeté (le reste, dont PII, jeté).
+**`PII_DENY` (ADR-005, privacy by design)** : `nom client, prenom client, prenom, email, mail, adresse, telephone,
+code postal, ville livraison, numero de suivi, id transaction, n tva, responsable`. `ingestOmsProjected` (saisonoms)
+projette ligne par ligne → PII naturellement exclue. Parsing : Ads (`buildAdsTable` localise la vraie ligne d'en-tête),
+GA (`parseGAcsv`, saute les `#`), XLSX (1ʳᵉ feuille), CSV `;` latin1. Routes `POST/GET/DELETE /:source/:period`.
+
+---
+
+## 5. Définitions du CA & périmètre (⭐ référence métier)
+- **Parser money** : `fN` (FR `1 234,56`), `fGA` (US), `numAds` (tolérant FR/US + symboles).
+- **`isMkt(type)`** = type de paiement ∈ `['gl.com','printemps','la redoute','24s']` (`MKT_ALL`). **L'exclusion marketplace
+  se fait TOUJOURS par le TYPE DE PAIEMENT, jamais par le magasin** (ship-from-store = corners physiques, gardés en CA).
+- **Périmètre EShop = Outstore** (`filterOutstore` exclut Instore via `Lieu de prise de commande` ; no-op si colonne absente).
+- **Prisme `dim`** : `global` (FR+Inter) / `fr` / `inter` (`filterDim` sur `pays`). GA : `filterGADim` (null si pas de pays).
+
+**`calcOMS(rows,map)` — toutes les définitions de CA** (`p = fN(Prix de vente payé)`) :
+| Champ | Définition |
+|---|---|
+| `total` | Σ p (TOUTES lignes, marketplaces inclus) |
+| `caGlob` | Σ p où `!isMkt` = **CA Global EShop** (FR+Inter, hors **les 4** marketplaces) |
+| `caMkt` | Σ p où `isMkt` |
+| `caFR` / `caInt` | (hors mkt) `pays === 'france'` / sinon |
+| `caEnt` / `caSFS` | (hors mkt) `NOM MAGASIN === 'webstore eur'` (Entrepôt) / sinon (Ship-from-store) |
+| `caFP` / `caOP` | (hors mkt) **Full price** si `pvr === 0 || |pvr−pv| < 0.01`, sinon **Off price** (démarque) |
+| `caEShop` | `caFR + caInt` · `caOmni` | `caEnt + caSFS` |
+- **CA = « Prix de vente payé » = `unitPrice × quantityOrdered`** (champ OMS confirmé par audit CA).
+- **Full/Off** : la démarque est encodée par WSHOP dans `originalDiscountedUnitPrice` (Prix Vente Remisé).
+
+---
+
+## 6. Moteur de calcul (`calc.js`) — formules par domaine
+
+**Détection colonnes** : `norm` (minuscule, sans accents) + `autoMap` (match exact prioritaire, sinon **plus longue
+sous-chaîne d'alias** = la plus spécifique gagne). Alias : `OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES,
+REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES`. `ensureRefExtIdx` garantit `_refExt` pour les familles.
+
+### KPI EShop — `calcKPIEShop(rows,map,sessions)` (hors mkt)
+`ca`=Σ prix · `pieces`=Σ qte · `commandes`=|num distincts| · `pm`=ca/commandes · `tt`=commandes/sessions (TT) · `caFP/caOP`.
+
+### Annulations — `calcCancellations` / `calcCancellationsDetail` (hors mkt, cf §12)
+- **Taux d'annulation = `commandesImpactees ÷ commandes`** (à la **commande**, pas à la pièce). `tauxPieces`, `tauxCA` aussi.
+- **Annulation** = lignes `Quantité non livré > 0` au statut **Cancelled\*** (ou statut absent). `unit = prix/cmd` (prorata).
+- **`ShippedIncomplete` comptée À PART** (`/incomplete/ && !/cancel/`) → `qteIncomplete`/`caIncomplete`/`commandesIncompletes`,
+  **hors du taux** (la commande a été expédiée, juste partielle). WSHOP l'applique très largement (splits/partiels) ≠ OMS.
+- `Detail` : `entrepot`/`magasin` (webstore vs ship-from-store), `incomplet{entrepot,magasin}`, `topStores`, `topProduits`,
+  `byCanal` (qui a annulé quoi), **`byStatut`** (audit Cancelled vs ShippedIncomplete, comparaison au pivot OMS).
+
+### Retours — distinct des annulations (APRÈS livraison)
+`calcReturns` (caRetourne, qte, nbRetours, `reasons`, `countries`, `destinations`). `topReturnedProducts` (retprod, top 10
++ raisons par produit). `returnsByRef`/`salesByRef`/`productProfitability` (caNet = caVendu − caRetourné, tauxRetour =
+qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
+
+### Marketplace
+- **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours) :
+  `glY2` (etab `gl ac haussmann` + commercial `674sfs`), `pdt` (`place des tendances` + `686001`),
+  `lulli` (`lulli` + `610lulli` + ref `005…`). `glTotal = glOMS+glY2`, `total` = somme des 5.
+- **`calcMarketplaceCancelRefund`** : annulations OMS (lignes mkt non livrées par enseigne) + remboursements Y2 (**`ttc < 0`**).
+- **`calcCrossChannel`** (`ccAccumulate`, `omsChannelOf`=EShop/GL/Printemps, `y2ChannelOf`=PDT/Lulli/GL) :
+  `channels` (ordre `EShop,GL,Printemps,PDT,Lulli`), `familles` (famille×canal), `topByMarketplace` (top 5/enseigne),
+  **`arbitrage`** (produit fort sur un canal/faible sur l'autre ; seuil 300€ & 15% ; **on ne SOMME jamais EShop+mkt**),
+  `recos`. ⚠️ **Toujours exclure les lignes Y2 `ttc ≤ 0`** (sinon CA famille négatif).
+
+### Familles
+`buildRefMap` (ref_ext → famille ; **`regroupement` prioritaire sur `famille`**). `calcCAFamille`, `calcFamilleDetail`
+(ca+qte), `calcFamilleParPays` (top 5 pays), `calcFullOffByFamille`/`ByProduct` (`fullOffSplit` = même règle FP/OP).
 
 ### GA / acquisition
-- **Sessions KPI = `gasess`** (date×pays), pas la ventilation. **Taux de transfo (TT) = commandes / sessions(gasess)**.
-- Taux d'ajout panier = addToCarts / sessions. **`dailySeries(rows, map, ga, sessByDay)`** : passer `sessByDay`
-  issu de `getGADaily(gasess)` pour un TT/jour fiable.
-- `channelTypes` = regroupement Paid/Direct/CRM/Social/SEO/Referral (`channelType()`).
-- COS = dépense / CA ; ROAS = CA / dépense. Cible COS configurable (champ UI).
+- **`getTotalSessions` SUR-COMPTE** → KPI sessions via **`gasess`**. `getGADaily`/`gaDailyMetrics` → `{ISO:{sessions,carts}}`.
+- **`dailySeries(rows,map,ga,sessByDay)`** : CA+commandes OMS/jour × sessions/paniers GA → `{tt, addRate}`. **Passer
+  `sessByDay` issu de `getGADaily(gasess)`** pour un TT/jour fiable (sinon courbes fausses/vides).
+- `calcGA` (agrège par canal, gère 1-ligne ou date×canal), `calcByCountry`, `calcByDevice`, `calcChannelTypes`
+  (`channelType` → Paid/Direct/CRM/Social/SEO/Referral/Autre), `channelPerf`, `ttByCountry` (jointure GA pays↔OMS pays
+  via `normCountry`), `campaignDailySeries` (top 3 campagnes, exclut direct/organic/referral), `emailPeakHour`, `hourlySeries`.
+- **Ads** : `calcAds` → `ctr, cpc, cpa, convRate, roasGA`. **COS = dépense / CA · ROAS = CA / dépense · CPA = coût/conv.**
+  Cible COS configurable (champ UI, défaut 30%).
 
-### Plan d'action / pilotage (`actionPlan`, calculé SERVEUR = source unique UI+PDF+copie)
-- `bilanSignals` (front) : leviers classés par **impact € (signé)**, triés par |€|. Canal d'acquisition
-  pinpointé (type qui recule le plus + thème payant via `gacampcat`).
-- `actionPlan.teams` (serveur) : to-do par équipe **Acquisition / Merch / CRM / Ops**.
-- Détection « ce qui a changé vs N-1 » : `newCampaigns`/`missingCampaigns` (gacampaigns N vs N1),
-  `offerChanges` (best-sellers entrants/sortants via topProdMap, étiquetés famille), cadence email
-  (jours via timeline `email`/`emailN1` + heure via `gaemailhour`/`emailPeakHour`).
+### Saison / produits
+`buildTopProdMap` (par désignation), `topList`/`topListQte`, `productGap` (à reconquérir : `perte = caN1 − caN`, garde
+perte>0), `buildSeasonMap`/`calcBySeason`, `calcSeasonCompare` (E26 vs E25 : counts, familles, bests, manquants,
+nonVendus ; `baseRef` = modèle, `isSeasonal` = drop `P\d`), `demarque` (détection auto des périodes de démarque).
 
 ---
 
-## 4. Anomalies résolues & pièges (NE PAS refaire)
+## 7. Structure de l'objet `rep` (`buildReport`)
+Source **unique** consommée par `/api/report`, le **PDF**, et la **reco**. Clés principales :
+`meta` (preset, from/to, isAll, cf/ct, dim, gaDimUnavailable, has*, scope, consent) · `kpiEShop{n,n1}` · `ca{n,n1}` ·
+`marketplace{n,n1,cancelRefund}` · `pays[]` · `saison[]` · `seasonCompare` · `crossChannel` · `cancellations{n,n1,detail}` ·
+`returns{n,n1,tauxRetour,topProduits}` · `famille[]` · `produits{topN,topN1,manquants,topVendus,topRetournes}` ·
+`topProduits{n,n1}` · `topProduitsQte` · `familleDetail` · `familleParPays` · `fullOffFamille`/`fullOffProduits` ·
+`funnel{n,n1}` · `channels{n,n1}` · `channelTypes{n,n1}` · `device{n,n1}` · `daily`/`dailyN1` ·
+`timeline[]` (28 j, voir ci-dessous) · `timeline2{campN,campN1}` · `stockAlerts[]` · `hourly{n,n1}` · `gaFunnel{n,n1}` ·
+`ttPays[]` · `landingPages` · `itemFunnel` · `topPages`/`lostPages`/`newPages` · `campaigns`/`campaignsTotals` ·
+`lostCampaigns`/`newCampaigns` · `actionPlan` (voir §8) · `campaignLanding` · `topPagesBySource`/`lostPagesBySource` ·
+`ga`/`gaN1` · `ads`.
+- **`timeline`** : fenêtre **28 jours** indépendante de la période (`tlEnd`=to ou `omsN.dateMax`, `tlStart=−27 j`). CA/jour +
+  TT + ajout panier (via `dailySeries`). **Jour email** : pic du canal Email GA (`/e-?mail|mailing|newsletter|crm/i`),
+  seuil `max(médiane×1.5, 10)`. N-1 = même fenêtre **−364 j** → `caN1, ttN1, addN1, email, emailN1, emailVol, emailVolN1`.
+- **`timeline2`** : `campaignDailySeries` top 3, `campN` (shift 0) + `campN1` (shift −364) alignées sur l'axe 28 j.
+- **`ads`** : `roas/cos/cac` + `campaigns[]` (caGA, roas, cos, cpa, IS, newShare…), `top/flop/saturated/imbalanced/
+  budgetLimited/lowNew`, `categories` (thèmes payants via gacampcat), `cosTarget`.
+- **`buildSaison`** (route `/saison`) : rapport saison période longue (réconciliation WSHOP eshop/instore/mkt, sell-through,
+  couverture, taux retour, full/off, **démarque auto**, demande back-in-stock).
 
+---
+
+## 8. Plan d'action / pilotage (calculé SERVEUR = source unique UI + PDF + copie)
+- **`bilanSignals` (front)** : leviers classés par **impact € signé**, triés par |€|, seuils ~1000€ : familles (Δ CA),
+  canal d'acquisition (type qui recule le plus, + thème payant via `ads.categories`), annulations (si taux>2%), produits
+  à reconquérir, marketplace (pire enseigne), TT (`(tt−tt1)×sessions×pm`). Puis opportunité International (hors classement €).
+- **`actionPlan.teams` (serveur)** : to-do par équipe **Acquisition / Merch / CRM / Ops** (mêmes seuils ; cadence email =
+  jours via timeline `email`/`emailN1`, heure via `emailHour`). Rendu identique carte UI / `actionPlanText` (copie) / PDF `secPlanAction`.
+- **« Ce qui a changé vs N-1 »** : `newCampaigns`/`missingCampaigns` (gacampaigns N vs N1), `offerChanges`
+  (best-sellers entrants/sortants via `topProdMap`, seuil 300€, étiquetés famille via `desFam`), `emailHour`.
+
+---
+
+## 9. Frontend (`app.js`) — cartes & graphiques
+
+### Modules / thèmes
+`MODULE_ORDER` (barre de vues, filtrée RBAC). Thèmes `THEME_ORDER = [P,T,ES,AQ,IN,MP,CR,OF,Z]` (`THEME_META` = bannières).
+Modules notables : `full` (layout exhaustif : kpi, actionplan, timeline, timeline2, daily, famille, produits, …,
+ga, channels, canaltype, ads, campaigns, …, marketplace, crosschannel, …, saisoncompare, saison, renta, ca) ;
+`acquisition` (ga, **channels, canaltype**, ads, campaigns — ordre KPI→détail→récap, choix métier) ; `international`
+(dim `inter`) ; `marketplace`, `saisonprod`, `croisees`, etc. `card(k)` injecte une `ana()` (insight 💡) en fin de carte.
+
+### Cartes (clé → contenu)
+`kpi` (Pilotage 360 : mini-panels top 5 pays/familles/produits CA & Qté/canaux/campagnes) · `actionplan` (leviers €,
+to-do par équipe, écarts vs N-1, bouton Copier) · `ca` (vide, fusionné dans Bilan) · `funnel`/`gafunnel` (entonnoirs) ·
+`daily` (suivi période, granularité heure/jour/semaine) · `timeline`/`timeline2` (4 semaines) · `channels` (table + 2
+donuts N/N-1) · `canaltype` (récap par type) · `device` · `marketplace` (donut + table + cancel/refund) · `crosschannel`
+(barres empilées + arbitrage) · `pays` (barres croissance/décroissance) · `ttpays` · `fampays` · `saison`/`saisoncompare` ·
+`annulations` (tuiles delta **inversé**, entrepôt/magasin, **incomplètes à part**, byStatut, byCanal) · `retours` (tuiles,
+top produits + raisons, raisons N vs N-1) · `stockalerts` (top 10) · `produits`/`itemfunnel`/`renta` · `pages`/`landing`/
+`pagesrc`/`lostpages`/`campaignland` · `famille` (barres croissance/décroissance) · `ga` · `campaigns` · `ads`.
+
+### Graphiques (Chart.js) — comment ils sont construits
+Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. Couleurs : `--a #f5a623` (CA/ambre), `--b #4a9eff`
+(sessions/bleu), `--g #22c55e` (vert=hausse/TT), `--r #ef4444` (rouge=baisse/retours), `#a78bfa` (violet=ajout panier).
+`PALETTE` (8). **Convention courbes : trait plein = N, pointillé = N-1.**
+- **`growShrink(id,items)`** (famChart, paysChart) — **barres horizontales empilées « croissance/décroissance »** :
+  base bleue = `min(N,N1)`, cap = `|N−N1|` **vert si N≥N1 (grandit) / rouge si rétrécit** → la barre atteint `max(N,N1)`.
+- **`#tlChart`** (timeline 4 sem., mixte) : barres CA/jour N (ambre foncé) + N-1 (ambre clair) sur axe `y` ; courbes TT% et
+  ajout panier % (N plein / N-1 pointillé) sur `y1` ; croix ✉️ Email N (`crossRot`) et N-1 (`cross`).
+- **`#tl2Chart`** : barres CA N/N-1 + 1 courbe/campagne (campN plein, campN1 pointillé), axe `y1` Sessions.
+- **`renderDailyChart`** (`#dailyChart` barres CA N/N-1 ; `#trafChart` sessions+ajout panier N plein/N-1 pointillé ;
+  `#ttChart` TT N rempli vert / N-1 pointillé gris). Granularité `aggDaily` (jour / semaine `Sxx` / heure).
+- Donuts Bilan : `segDonut` (Intl, Omni, Démarque FP/OP, Marketplace). Autres : `#funnelChart`, `#saisonChart`,
+  `#retoursChart`, `#crossStack` (empilé famille×canal), `#prodChart`.
+
+### Bilan / scorecard / helpers
+`buildBilan` → `renderScorecard` (7 tuiles : CA Global EShop, Commandes, TT, Panier moyen, **Taux annulation (inversé)**,
+Sessions, **COS (inversé)**) + donuts détail. `bilanTile(…,invert)` : `invert` → une hausse est **rouge** (annulation/COS).
+Boutons (`wireBilan`) : `#bilanCopy` (contexte Claude.ai, `/api/reco/context`, 0€), `#planCopy` (plan d'action texte),
+`#bilanIA` (`/api/reco`, payant). Formatters : `fEur, fInt, fPct, f2, pc, sgn, delta, deltaInv, esc, cut, isFrance`
+(France ≈70% du CA → **exclue des tableaux/graphes par pays**).
+
+### UI chargement / diagnostic
+Boîtes API masquées tant que `/status` ≠ configured. WSHOP : `#wshoprefresh` (import complet, poll `/job`), `#wshopsync`
+(delta), `#wshopping` (rend les blocs « Diagnostic règle CA » + « Diagnostic annulations » : statusDistinct, sondes),
+`#wshopcaaudit` (audit CA jour, surlignage du candidat le plus proche du TTC cible). GA4/Ads : refresh + ping. Import
+manuel (oms/y2/ads, N & N-1). Champs : 🍪 taux d'acceptation cookies (`consentN/N1` → sessions réelles = GA ÷ taux),
+🎯 cible COS, bouton PDF (`type=quotidien|periode`). RBAC : `me()` → `ALLOWED_VIEWS` filtre la barre de vues.
+
+---
+
+## 10. PDF (`pdf.js`)
+pdfkit A4. ⚠️ **WinAnsi : pas de `→`, pas de `Δ`, pas d'espaces fines** (`sp()` les remplace ; deltas en `+/-%`, email `✉`).
+Primitives : `section, kpiTiles, table, barChart, donut, header, footers`. **`renderQuotidien`** : header, secBilan,
+**secPlanAction**, secFamille, secTopProduits, secTopPays(8), secGaKpi, secTypeCanal, secAdsKpi, secMarketplace.
+**`renderPeriodique`** : + secPilotage, secSuiviTemporel, secTopAReconquerir, secTopPages, secAdsCampagnes,
+secTopFamillesPayant, secFamillesParPays, secAnnulations, secRemboursements, secCrossCanal, secAnalysesCroisees.
+Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
+
+## 11. Reco IA (`reco.js`)
+`/api/reco/context` (**gratuit, sans clé**) : renvoie `BRIEF + PASTE_TAIL + distill(rep)` à coller dans Claude.ai (Pro/Max).
+`/api/reco` (payant, `ANTHROPIC_API_KEY`) : `SYSTEM` (JSON strict `{synthese,court,moyen,long}`, `cache_control:ephemeral`),
+`distill(rep)` compacte le rapport, cache SHA-1 en RAM, `callClaude` (max_tokens 4000, retries 429/5xx).
+
+---
+
+## 12. Journal d'anomalies résolues (cause racine → fix)
 | Symptôme | Cause racine | Fix |
 |---|---|---|
-| **Taux d'annulation aberrant (76 %, puis 68 vs 7, puis 20 vs 7)** | (1) `commandé − expédié` comptait les commandes EN ATTENTE d'expé. (2) `quantityOffered` ≠ « à expédier » mais « offert/cadeau » (≈0) → formule = commandé−expédié. (3) lecture de `orderStatus` au lieu de `orderCustomerStatus`. (4) toutes les variantes Cancelled comptées (incl. client/fraude). (5) ShippedIncomplete trop large. | Statut = **`orderCustomerStatus`**, denylist demande, **ShippedIncomplete à part**, **taux = Cancelled seul**. Accepter écart live≠OMS. |
-| **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte. | Jeu **`gasess`** (date×pays) pour le KPI et le TT. |
-| **TT / ajout panier vides** | TT calculé sur les sessions ventilées (sur-comptées/mal alignées). | `dailySeries` accepte `sessByDay` issu de `gasess`. |
-| **CA marketplace famille négatif** | Lignes Y2 `Total TTC ≤ 0` (retours) comptées. | Exclure `ttc ≤ 0` dans `ccAccumulate` / `calcMarketplace`. |
-| **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + bouton import période large. |
-| **Test connexion / import en 504** | Appels WSHOP lents en série, ou échantillon trop gros (300 cmd). | **Parallèle + timeout race**, échantillons réduits. |
-| **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (la démarque est dans `originalDiscountedUnitPrice`). |
+| **Taux d'annulation 76 % puis 68 vs 7 puis 20 vs 7** | (1) `commandé−expédié` comptait les commandes EN ATTENTE. (2) `quantityOffered` ≠ « à expédier » mais « offert/cadeau » (≈0). (3) lecture de `orderStatus` (8 états, sans Shipped/Incomplete) au lieu de **`orderCustomerStatus`** (22 états). (4) toutes les variantes Cancelled comptées (client/fraude incluses). (5) `ShippedIncomplete` (statut live, splits) bien plus large côté WSHOP que côté OMS. | Statut = **`orderCustomerStatus`** ; **denylist demande** (`customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment`) ; **`ShippedIncomplete` comptée à part** ; **taux = Cancelled seul** (choix métier). Colonne `Statut commande` stockée + carte `byStatut` pour auditer. **WSHOP = live ≠ photo OMS figée** : ne JAMAIS viser le match au pixel. |
+| **0 annulation après le fix** | `/ping` n'affichait pas les nouveaux champs ; et l'API n'expose pas les libellés FR mais l'enum EN (`Cancelled`/`ShippedIncomplete`). | Sondes API filtrées par statut + affichage front du bloc diagnostic. |
+| **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte (données non seuillées). | Jeu **`gasess`** (date×pays) pour le KPI **et** le TT (`dailySeries(sessByDay)`). |
+| **TT / ajout panier vides** | TT calculé sur les sessions ventilées. | `dailySeries` accepte `sessByDay` issu de `gasess`. |
+| **CA marketplace famille négatif** | Lignes Y2 `Total TTC ≤ 0` (retours/avoirs) comptées. | Exclure `ttc ≤ 0` (`calcMarketplace`, `ccAccumulate`) ; `ttc < 0` = signal remboursement. |
+| **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
+| **Test connexion / import en 504** | Appels WSHOP lents **en série** (auth + 5 sondes ≈ 8 s) ou échantillon 300 cmd. | **`Promise.all` (parallèle) + `Promise.race` (timeout 9 s)** → réponse partielle ; échantillons réduits. |
+| **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (démarque dans `originalDiscountedUnitPrice`). |
+| **Données OMS pas mises à jour après changement de règle** | « Synchroniser le delta » ne recalcule pas le passé. | Exiger **« Importer OMS depuis WSHOP » (import complet)**. |
+| **Conflits de merge à répétition** | Branche = sur-ensemble de `main` (squash-merges). | Résoudre `git checkout --ours <fichier>`, vérifier (`node -c`, `grep`), push, re-merge. |
 
 ---
 
-## 5. Conventions de travail (IMPÉRATIF)
-
-- **Brancher** sur la branche de feature désignée ; **jamais** push direct sur `main` sans accord.
-- **Shipper chaque évolution comme une PR puis squash-merge** vers `main` (Render lit `main`).
-- **Conflits de merge** : cette branche est un **sur-ensemble** de `main` (à cause des squash-merges) →
-  résoudre avec **`git checkout --ours <fichier>`**, vérifier (`node -c`, `grep`), puis push.
+## 13. Conventions de travail (IMPÉRATIF)
+- **Brancher** sur la branche de feature ; **jamais** push direct sur `main` sans accord. **Render lit `main`.**
+- **Shipper chaque évolution comme une PR puis squash-merge** vers `main`.
+- **Conflits** : `git checkout --ours <fichier>` (branche = sur-ensemble), vérifier (`node -c`, `grep`), push, re-merge.
 - **Identité modèle** : ne JAMAIS l'écrire dans commits / PR / code (chat uniquement).
-- **OMS anonymisé à l'ingestion** : aucune PII client (noms/emails/adresses retirés).
-- **MCP GitHub restreint** au repo autorisé.
-- **Footer commit & PR** : `https://claude.ai/code/session_<id>`.
-- **Toujours `node -c`** sur les fichiers modifiés avant commit ; tester les fonctions `calc` en `node -e`.
-- Ré-import : **« Importer OMS depuis WSHOP » = import COMPLET** (recalcule tout). **« Synchroniser le delta »**
-  ne recalcule PAS le passé (juste les commandes modifiées) → après un changement de règle, exiger un import complet.
+- **OMS anonymisé à l'ingestion** : aucune PII client (cf `PII_DENY`, ADR-005).
+- **MCP GitHub restreint** au repo autorisé. **Footer commit & PR** : `https://claude.ai/code/session_<id>`.
+- **Toujours `node -c`** sur les fichiers modifiés ; tester les fonctions `calc` en `node -e` (cf `calc.test.js`).
+- **`actionPlan.teams`, `offerChanges`, `emailHour` calculés côté SERVEUR** (source unique UI/PDF/copie — ne pas dupliquer).
+- **Sessions : toujours préférer `gasess`** à la ventilation `ga`. **Exclusion mkt : toujours par type de paiement.**
 
 ---
 
-## 6. Idées / pistes ouvertes
-- Plan d'action : décalage email horaire plus fin, croisement offre×saison (drops/implantations datées),
-  synthèse rédigée auto (bouton IA), export du plan en PDF/email.
-- Segmentation équipes du plan d'action paramétrable (Trafic Manager, E-Merch, Studio…).
-- Persistance Postgres (`DATABASE_URL`) à activer en prod.
+## 14. Checklist « re-développer ce projet ailleurs sans erreur »
+Pour refaire cet outil pour une autre entreprise, demander/cadrer **dès le début** :
+
+**A. Accès & secrets**
+- OMS/commandes : **API** (auth, endpoint, pagination/plafond, champ **statut détaillé par commande** ⭐) ou export CSV/XLSX ?
+- GA4 : `property_id` + **service account** (Secret File Render). Confirmer que le **revenu e-commerce** et `addToCarts` sont trackés.
+- Google Ads : developer token (MCC validé), OAuth (client id/secret/refresh), customer id (+ login MCC).
+- ERP/Marketplace (équiv. Y2) : quelles enseignes, quels identifiants (établissement/commercial/préfixe réf.) par enseigne.
+- DB : **provisionner Postgres (`DATABASE_URL`) AVANT la prod** (sinon données perdues au redeploy).
+
+**B. Règles métier à figer noir sur blanc (sources d'erreurs n°1)**
+- **Définition du CA** : quel champ exact = « prix payé » ? TTC/HT ? port inclus ? (faire un **audit CA** qui somme tous les
+  champs prix et compare au CA de référence — cf `newCAAudit`).
+- **Périmètre EShop** : qu'exclut-on ? (Instore, marketplaces — **par quel champ ?** paiement vs magasin).
+- **Marketplaces** : liste exacte + **comment les identifier** (type de paiement) + retours = `TTC ≤ 0` à exclure.
+- **Statuts de commande** : **récupérer l'énumération complète** + leur **mapping vers les libellés du reporting de référence**.
+  Distinguer **annulation** (échec fulfillment : stock/interne) vs **annulation demande** (client/fraude/impayé, à exclure)
+  vs **expédition incomplète** (à compter à part). ⚠️ **Statut API = live ≠ export figé** : ne pas viser le match au pixel.
+- **Full price vs Off price** : où est encodée la démarque ? (ici `originalDiscountedUnitPrice`).
+- **Familles/regroupements** : référentiel ref→famille (priorité regroupement) + saisons + implantations datées (drops).
+- **Sessions GA** : **toujours un jeu date×pays dédié** pour le KPI (la ventilation multi-dimension sur-compte).
+
+**C. Données de comparaison & calibration**
+- Un **export de référence figé** (le « pivot » Excel du client) pour chaque KPI sensible (annulations, retours, CA par
+  famille…), **avec sa période et son périmètre exacts**, pour calibrer — et accepter l'écart live/figé.
+- Le **taux d'acceptation cookies** (ajuste les sessions GA).
+
+**D. Produit / affichage**
+- Modules & vues souhaités, segmentation des équipes du plan d'action (Acquisition/Merch/CRM/Ops ou autre).
+- Conventions visuelles (N plein / N-1 pointillé ; barres croissance/décroissance ; delta inversé pour annulation/COS).
+- Persistance des graphiques : Chart.js, registre `_charts`, détruire avant recréer.
+
+**E. Pièges techniques confirmés (cf §12)** : proxy 504 sur appels lents → **paralléliser + timeout** ; mémoire bornée à
+l'import (jeter les pages brutes) ; PDF WinAnsi (pas de `→`/`Δ`) ; merges via `--ours` ; import complet vs delta.
+
+---
+
+## 15. Idées / pistes ouvertes
+- Plan d'action : croisement offre×saison (drops/implantations datées), synthèse rédigée auto enrichie, export PDF/email du plan.
+- Segmentation équipes paramétrable (Trafic Manager, E-Merch, Studio…).
+- Persistance Postgres (`DATABASE_URL`) à activer en prod si pas déjà fait.
