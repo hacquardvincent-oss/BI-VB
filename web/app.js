@@ -1060,17 +1060,23 @@ function renderScorecard(title, pack, showDetails) {
   if (showDetails) {
     const ca = n.ca || {}, ca1 = n1.ca || {}, mk = n.mkt || {}, mk1 = n1.mkt || {};
     const t = (l, v, v1) => bilanTile(l, fEur(v), v, v1);
-    // Découpe = camembert (canvas, rempli par renderCharts) + tuiles (valeurs + Δ N-1).
-    const block = (label, donutId, rows) => rows ? `<div><div class="note" style="margin:0 0 4px"><b>${label}</b></div><div class="grid cols2" style="align-items:center"><div style="height:150px"><canvas id="${donutId}"></canvas></div><div class="kgrid">${rows}</div></div></div>` : '';
-    const intl = block('🌍 International', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt));
-    const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS));
-    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP)) : '';
+    // Bloc compact : petit camembert + tuiles côte à côte (hauteur homogène → pas de trous).
+    const block = (label, donutId, rows, donutPx, tilesRow) => rows ? `<div style="background:var(--s2);border-radius:10px;padding:10px">
+      <div class="note" style="margin:0 0 6px"><b>${label}</b></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="height:${donutPx}px;width:${donutPx}px;flex:0 0 auto"><canvas id="${donutId}"></canvas></div>
+        <div style="${tilesRow ? 'display:flex;gap:8px;flex-wrap:wrap' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px'};flex:1 1 160px">${rows}</div>
+      </div></div>` : '';
+    const intl = block('🌍 International', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt), 110);
+    const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS), 110);
+    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP), 110) : '';
     let mp = '';
     if (mk.total > 0) {
       const mr = [['CA Marketplace', mk.total, mk1.total], ['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]].filter(([, v]) => v > 0).map(([l, v, v1]) => t(l, v, v1)).join('');
-      mp = block('🛍️ Marketplace', 'binDonutMP', mr);
+      mp = block('🛍️ Marketplace', 'binDonutMP', mr, 130, true); // une seule ligne : camembert + KPIs
     }
-    details = `<div class="grid cols2" style="margin-top:10px">${intl}${omni}${dem}${mp}</div>`;
+    // International / Omnicanal / Démarque alignés (grille responsive), Marketplace sur sa propre ligne.
+    details = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:10px">${intl}${omni}${dem}</div>${mp ? `<div style="margin-top:12px">${mp}</div>` : ''}`;
   }
   return `<div class="section-head" style="margin-top:12px">${title}</div><div class="kgrid">${tiles}</div>${details}`;
 }
