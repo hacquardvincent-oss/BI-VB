@@ -405,6 +405,35 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
   const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
   const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f) : null;
+  // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
+  // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
+  const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
+  const timeline = (() => {
+    if (!tlEnd || !/^\d{4}-\d{2}-\d{2}$/.test(tlEnd)) return null;
+    const tlStart = isoShiftDays(tlEnd, -27);
+    const tlRows = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, tlStart, tlEnd, false), omsN.map, dim), omsN.map);
+    const serie = calc.dailySeries(tlRows, omsN.map, gaNf);
+    if (!serie || !serie.length) return null;
+    // Jours d'envoi email : pic de sessions du canal « Email » GA4 (≥ 1,5× la médiane)
+    const emailByDay = {};
+    if (gaNf && gaNf.rows && gaNf.hdrs) {
+      const gm = gaNf.map && Object.keys(gaNf.map).length ? gaNf.map : calc.autoMap(gaNf.hdrs, calc.GA_ALIASES);
+      const di = gaNf.hdrs.findIndex(h => { const n = calc.norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
+      const ci = gm.canal, si = gm.sessions;
+      if (di >= 0 && ci !== undefined && si !== undefined) {
+        gaNf.rows.forEach(r => {
+          if (!/e-?mail|mailing|newsletter|crm/i.test((r[ci] || '').toString())) return;
+          const raw = (r[di] || '').toString().trim();
+          const iso = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null);
+          if (iso) emailByDay[iso] = (emailByDay[iso] || 0) + (parseInt(r[si]) || 0);
+        });
+      }
+    }
+    const vals = Object.values(emailByDay).filter(v => v > 0).sort((a, b) => a - b);
+    const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+    const thr = Math.max(med * 1.5, 10);
+    return serie.map(d => ({ ...d, email: (emailByDay[d.date] || 0) >= thr }));
+  })();
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
@@ -535,6 +564,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     device,
     daily,
     dailyN1,
+    timeline,
     hourly,
     gaFunnel,
     ttPays,
