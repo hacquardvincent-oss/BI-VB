@@ -581,7 +581,9 @@ function gaDailyMetrics(ga) {
 }
 
 // ── Série quotidienne : CA + commandes (OMS) × sessions/paniers (GA) → TT & taux d'ajout panier ──
-function dailySeries(rows, map, ga) {
+// sessByDay (optionnel) : map { 'YYYY-MM-DD': sessions } issue du jeu « sessions propres » (date×pays,
+// non surcomptées) → fiabilise le TT/jour. À défaut, on retombe sur les sessions de la ventilation `ga`.
+function dailySeries(rows, map, ga, sessByDay) {
   const di = map.date, pi = map.prix, ni = map.num, ti = map.type;
   const byDay = {};
   rows.forEach(r => {
@@ -593,11 +595,13 @@ function dailySeries(rows, map, ga) {
     if (ni !== undefined && r[ni]) byDay[iso].orders.add(r[ni]);
   });
   const gm = ga ? (gaDailyMetrics(ga) || {}) : {};
-  const days = [...new Set([...Object.keys(byDay), ...Object.keys(gm)])].sort();
+  const sb = sessByDay || {};
+  const days = [...new Set([...Object.keys(byDay), ...Object.keys(gm), ...Object.keys(sb)])].sort();
   return days.map(d => {
     const ca = byDay[d] ? byDay[d].ca : 0;
     const commandes = byDay[d] ? byDay[d].orders.size : 0;
-    const m = gm[d] || {}; const sessions = m.sessions || 0, carts = m.carts || 0;
+    const m = gm[d] || {}; const carts = m.carts || 0;
+    const sessions = (sb[d] != null) ? sb[d] : (m.sessions || 0);
     return { date: d, ca, commandes, sessions, carts, tt: sessions > 0 ? commandes / sessions : null, addRate: sessions > 0 ? carts / sessions : null };
   });
 }

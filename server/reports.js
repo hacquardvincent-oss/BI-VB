@@ -404,8 +404,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
   }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
-  const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
-  const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f) : null;
+  // Sessions « propres » par jour (date×pays) → TT/jour fiable (sinon repli ventilation).
+  const sessByDayN = calc.getGADaily(sessSrcN) || undefined;
+  const sessByDayN1 = calc.getGADaily(sessSrcN1) || undefined;
+  const daily = calc.dailySeries(rowsN, omsN.map, gaNf, sessByDayN);
+  const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f, sessByDayN1) : null;
   // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
   // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
   const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
@@ -413,7 +416,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     if (!tlEnd || !/^\d{4}-\d{2}-\d{2}$/.test(tlEnd)) return null;
     const tlStart = isoShiftDays(tlEnd, -27);
     const tlRows = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, tlStart, tlEnd, false), omsN.map, dim), omsN.map);
-    const serie = calc.dailySeries(tlRows, omsN.map, gaNf);
+    const serie = calc.dailySeries(tlRows, omsN.map, gaNf, sessByDayN);
     if (!serie || !serie.length) return null;
     // Jours d'envoi email : pic de sessions du canal « Email » GA4 (≥ 1,5× la médiane)
     const emailByDay = {};
@@ -436,7 +439,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     // N-1 : même fenêtre décalée de 364 j (CA/TT/ajouts panier) → courbes en pointillé.
     const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
     const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
-    const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f).forEach(e => { byDate1[e.date] = e; });
+    const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
     return serie.map(d => { const e1 = byDate1[isoShiftDays(d.date, -364)]; return { ...d, email: (emailByDay[d.date] || 0) >= thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
   const hourly = {
