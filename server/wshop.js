@@ -150,22 +150,21 @@ function orderToRows(order) {
   const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
-  // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées,
-  // c.-à-d. lignes au statut ANNULÉE (annul/cancel/refus) ou EXPÉDIÉE INCOMPLÈTE (incompl) uniquement.
-  // Toutes les commandes EN COURS (en attente, préparation, en retard, à récupérer, validée) ET les
-  // commandes expédiées/livrées → 0. On ne compte JAMAIS une commande en attente d'expédition.
-  // (Ancienne règle « commandé − expédié [− offert] / par âge » abandonnée : elle comptait à tort
-  //  les commandes non encore expédiées. quantityOffered = quantité offerte/cadeau, pas « à expédier ».)
-  const ostatus = (o.status || o.orderStatus || o.statusLabel || o.orderStatusLabel || o.deliveryStatus || o.shippingStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString().toLowerCase();
+  // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées.
+  // Signal = orderCustomerStatus (enum API à 22 états, calque les libellés OMS) ; orderItems sans statut.
+  //   • ANNULÉE  : Cancelled / CancelledCustomer / CancelledInternal / CancelledFileDenied /
+  //                CancelledBlacklist*  → /cancel/         → non livré = commandé − expédié
+  //   • EXPÉDIÉE INCOMPLÈTE : ShippedIncomplete           → /incomplete/  → non livré = commandé − expédié
+  //   • TOUT LE RESTE (Waiting, Preparation, Late, Shipped, ShippedPartial/PreparationPartial = split
+  //     en cours, WaitingValidation, PickupStoreProcessed…) → 0. On ne compte jamais une commande en cours.
+  const cstatus = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString().toLowerCase();
+  const cancelled = /cancel/.test(cstatus);
+  const incomplete = /shippedincomplete|incomplete/.test(cstatus);
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
     const qShipRaw = it.quantityShipped;
     const qShipKnown = qShipRaw != null ? (parseInt(qShipRaw) || 0) : null;
     const qShip = qShipKnown != null ? qShipKnown : qOrd; // expédié inconnu → considéré livré (prix/livré)
-    // Statut de la ligne (sinon de la commande). Libellés OMS : Annulée, Expédiée Incomplète, En attente…
-    const stRaw = (it.status || it.lineStatus || it.itemStatus || it.deliveryStatus || it.shippingStatus || it.statusLabel || ostatus || '').toString().toLowerCase();
-    const cancelled = /annul|cancel|refus|rejet/.test(stRaw);
-    const incomplete = /incompl/.test(stRaw);
     let nonLivre = 0;
     if (cancelled) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : 0));      // annulée : tout le non-expédié
     else if (incomplete) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : qOrd)); // expédiée incomplète : le reste
@@ -498,25 +497,27 @@ router.get('/ping', requireAuth, async (req, res) => {
     const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 300 });
     const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
-    // Diagnostic « annulation » : valeurs DISTINCTES de statut + simulation de la règle non-livré
-    // (compte les pièces non livrées avec la nouvelle règle : statut Annulée / Expédiée Incomplète).
+    // Diagnostic « annulation » : valeurs DISTINCTES de orderCustomerStatus (le champ qui calque
+    // les libellés OMS) + simulation de la règle non-livré (Cancelled* / ShippedIncomplete).
     try {
-      const statusVals = {}; let nlPieces = 0, nlLines = 0; const nlByStatus = {};
-      const bump = (m, k) => { if (k != null && k !== '') m[k] = (m[k] || 0) + 1; };
+      const csVals = {}, osVals = {}; let nlPieces = 0, nlLines = 0; const nlByStatus = {};
+      const bump = (m, k) => { m[k == null || k === '' ? '(vide)' : k] = (m[k == null || k === '' ? '(vide)' : k] || 0) + 1; };
       arr.forEach(o => {
-        const ost = (o.status || o.orderStatus || o.statusLabel || o.orderStatusLabel || o.deliveryStatus || o.shippingStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString();
+        const cs = (o.orderCustomerStatus || '').toString();
+        bump(csVals, cs); bump(osVals, (o.orderStatus || '').toString());
+        const s = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString().toLowerCase();
+        const cancelled = /cancel/.test(s), incomplete = /shippedincomplete|incomplete/.test(s);
         (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
-          const st = (it.status || it.lineStatus || it.itemStatus || it.deliveryStatus || it.shippingStatus || it.statusLabel || ost || '').toString();
-          bump(statusVals, st || '(vide)');
           const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
           const qsk = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : null;
-          const s = st.toLowerCase(); let nl = 0;
-          if (/annul|cancel|refus|rejet/.test(s)) nl = Math.max(0, qOrd - (qsk != null ? qsk : 0));
-          else if (/incompl/.test(s)) nl = Math.max(0, qOrd - (qsk != null ? qsk : qOrd));
-          if (nl > 0) { nlPieces += nl; nlLines += 1; bump(nlByStatus, st); }
+          let nl = 0;
+          if (cancelled) nl = Math.max(0, qOrd - (qsk != null ? qsk : 0));
+          else if (incomplete) nl = Math.max(0, qOrd - (qsk != null ? qsk : qOrd));
+          if (nl > 0) { nlPieces += nl; nlLines += 1; bump(nlByStatus, cs); }
         });
       });
-      out.statusDistinct = statusVals;       // toutes les valeurs de statut rencontrées (+ nb de lignes)
+      out.statusDistinct = csVals;            // valeurs de orderCustomerStatus (+ nb de commandes)
+      out.orderStatusDistinct = osVals;       // valeurs de orderStatus (pour comparaison)
       out.simNonLivrePieces = nlPieces;       // total pièces non livrées (nouvelle règle) sur l'échantillon
       out.simNonLivreLines = nlLines;
       out.simNonLivreByStatus = nlByStatus;   // détail par statut qui a généré du non-livré
