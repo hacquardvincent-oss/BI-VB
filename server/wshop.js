@@ -171,6 +171,11 @@ function orderToRows(order) {
     // si remisé == 0 ou == prix vente, sinon off price.
     const pvUnit = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
     const pvrUnit = Number(it.originalDiscountedUnitPrice || 0) || 0;
+    // Coloris (best-effort selon le schéma WSHOP) → ajouté à la désignation produit.
+    const v = it.variant || {};
+    const color = (it.color || it.colour || it.colorLabel || it.couleur || it.colorName || v.color || v.colour || v.colorLabel || v.label || '').toString().trim();
+    const titre = (it.title || it.name || '').toString().trim();
+    const designation = color && !titre.toLowerCase().includes(color.toLowerCase()) ? `${titre} - ${color}` : titre;
     return {
       'Date': date, 'Heure': time,
       'Prix de vente paye': unit * qOrd,
@@ -178,7 +183,7 @@ function orderToRows(order) {
       'NOM MAGASIN': mag,
       'Type Paiement': pay,
       'Numeros': num,
-      'Designation produit': it.title || it.name || '',
+      'Designation produit': designation,
       'quantites commandees': qOrd,
       'Quantité non livré': nonLivre,
       'Ref. externe': it.reference || it.ean || '',
@@ -340,7 +345,27 @@ async function refresh(opts = {}, cb = {}) {
     if (dsN1.rows.length) { store.setDataset(omsSrc, 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
     store.setDataset(retSrc, 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
   }
-  return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
+  // Alertes stock (back-in-stock) sur la période — best-effort, agrégées par produit (titre + coloris).
+  let alerts = 0;
+  if (!opts.slot) {
+    try {
+      if (cb.phase) cb.phase('Alertes stock (back-in-stock)…');
+      const subs = await fetchBackInStock(from, to);
+      const by = {};
+      subs.forEach(s => {
+        const it = s.item || {};
+        const name = [(it.title || '').toString().trim(), (it.color || '').toString().trim()].filter(Boolean).join(' - ') || (it.ean || '').toString();
+        if (!name) return;
+        const e = by[name] || (by[name] = { name, count: 0, waiting: 0, last: '' });
+        e.count += 1; if ((s.status || '') === 'subscribed') e.waiting += 1;
+        const d = (s.subscriptionDate || '').toString().slice(0, 10); if (d > e.last) e.last = d;
+      });
+      const rows = Object.values(by).map(v => [v.name, String(v.count), String(v.waiting), v.last]);
+      store.setDataset('bis', 'N', { hdrs: ['Produit', 'Abonnements', 'En attente', 'Dernier'], rows, map: { name: 0, count: 1, waiting: 2, last: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
+      alerts = subs.length;
+    } catch (e) { /* best-effort */ }
+  }
+  return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length, alerts };
 }
 
 // Fusionne un delta dans un dataset existant : retire les lignes des commandes ré-importées
@@ -479,6 +504,10 @@ router.get('/ping', requireAuth, async (req, res) => {
       const pickSt = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (ST.test(k)) r[k] = obj[k]; }); return r; };
       out.orderStatusFields = pickSt(o0);
       out.itemStatusFields = items[0] ? pickSt(items[0]) : {};
+      // Champs coloris/variante (pour caler l'ajout du coloris à la désignation)
+      const CL = /(color|colour|couleur|variant|declin|libdim|size|taille)/i;
+      const pickCl = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (CL.test(k)) r[k] = obj[k]; }); return r; };
+      out.itemColorFields = items[0] ? pickCl(items[0]) : {};
     }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
   res.json(out);

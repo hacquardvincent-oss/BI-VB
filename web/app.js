@@ -28,7 +28,7 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'timeline', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'timeline', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -109,7 +109,7 @@ const THEME_OF = {
   kpi: 'P',
   daily: 'T', timeline: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
-  itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES',
+  itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
@@ -648,6 +648,15 @@ function renderReport(rep) {
       <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
+  // Suivi des alertes stock (back-in-stock) : produits les plus attendus
+  let stockAlertsCard = '';
+  if (rep.stockAlerts && rep.stockAlerts.length) {
+    const ar = rep.stockAlerts.map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Alertes stock — produits attendus (back-in-stock)</h3>
+      <table><thead><tr><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
+      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur la période → signal de demande sur les ruptures. « En attente » = pas encore notifiés (toujours en rupture). Source : back-in-stock WSHOP.</div></div>`;
+  }
+
   // Top produits N vs N-1 + reconquête
   const P = rep.produits;
   let produitsCard = '', rentaCard = '';
@@ -952,12 +961,12 @@ function renderReport(rep) {
     kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
-    retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'gafunnel', 'timeline', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'gafunnel', 'timeline', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
