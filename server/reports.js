@@ -63,6 +63,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
   const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
+  const retProdN = await loadDataset('retprod', 'N');
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
   const adsN = await loadDataset('ads', 'N'), adsN1 = await loadDataset('ads', 'N1');
 
@@ -77,6 +78,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
   const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadDataset('gasess', 'N1');
+  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadDataset('gacampdaily', 'N1');
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;
   const sessSrcN1 = calc.filterGADim(gaSessN1, dim) || gaN1f;
 
@@ -403,8 +405,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
   }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
-  const daily = calc.dailySeries(rowsN, omsN.map, gaNf);
-  const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f) : null;
+  // Sessions « propres » par jour (date×pays) → TT/jour fiable (sinon repli ventilation).
+  const sessByDayN = calc.getGADaily(sessSrcN) || undefined;
+  const sessByDayN1 = calc.getGADaily(sessSrcN1) || undefined;
+  const daily = calc.dailySeries(rowsN, omsN.map, gaNf, sessByDayN);
+  const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f, sessByDayN1) : null;
   // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
   // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
   const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
@@ -412,7 +417,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     if (!tlEnd || !/^\d{4}-\d{2}-\d{2}$/.test(tlEnd)) return null;
     const tlStart = isoShiftDays(tlEnd, -27);
     const tlRows = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, tlStart, tlEnd, false), omsN.map, dim), omsN.map);
-    const serie = calc.dailySeries(tlRows, omsN.map, gaNf);
+    const serie = calc.dailySeries(tlRows, omsN.map, gaNf, sessByDayN);
     if (!serie || !serie.length) return null;
     // Jours d'envoi email : pic de sessions du canal « Email » GA4 (≥ 1,5× la médiane)
     const emailByDay = {};
@@ -432,8 +437,24 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const vals = Object.values(emailByDay).filter(v => v > 0).sort((a, b) => a - b);
     const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
     const thr = Math.max(med * 1.5, 10);
-    return serie.map(d => ({ ...d, email: (emailByDay[d.date] || 0) >= thr }));
+    // N-1 : même fenêtre décalée de 364 j (CA/TT/ajouts panier) → courbes en pointillé.
+    const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
+    const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
+    const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
+    return serie.map(d => { const e1 = byDate1[isoShiftDays(d.date, -364)]; return { ...d, email: (emailByDay[d.date] || 0) >= thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
+  // 2e suivi temporel : CA N/N-1 (repris de la timeline) + sessions des meilleures campagnes N & N-1.
+  const timeline2 = (timeline && timeline.length) ? (() => {
+    const days = timeline.map(d => d.date);
+    const d0 = days[0], dN = days[days.length - 1];
+    const curves = (ds, shift) => {
+      const tops = calc.campaignDailySeries(ds, isoShiftDays(d0, shift), isoShiftDays(dN, shift), false, 3);
+      if (!tops || !tops.length) return [];
+      return tops.map(t => ({ campaign: t.campaign, total: t.total, data: days.map(d => { const v = t.byDay[isoShiftDays(d, shift)]; return v != null ? v : null; }) }));
+    };
+    const campN = curves(gaCampDailyN, 0), campN1 = curves(gaCampDailyN1, -364);
+    return (campN.length || campN1.length) ? { campN, campN1 } : null;
+  })() : null;
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
@@ -480,6 +501,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
+    // Top produits retournés (source produit /returns/get, filtré sur la période).
+    if (retProdN) {
+      const rpRows = calc.filterRows(retProdN.rows, retProdN.map, from, to, isAll);
+      returns.topProduits = calc.topReturnedProducts(rpRows, retProdN.map, 10);
+    }
   }
 
   // ── Analyses produits (Lot B) ──
@@ -542,7 +568,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
-    marketplace: { n: mktN, n1: mktN1 },
+    marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {}) },
     pays,
     saison,
     seasonCompare,
@@ -572,7 +598,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     device,
     daily,
     dailyN1,
-    timeline,
+    timeline, timeline2,
     stockAlerts,
     hourly,
     gaFunnel,

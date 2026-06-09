@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'timeline', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -107,7 +107,7 @@ const THEME_META = {
 const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P',
-  daily: 'T', timeline: 'T',
+  daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
@@ -444,6 +444,7 @@ async function loadReport() {
   renderObjectives(rep);
   renderDailyChart(rep);
   renderTimelineChart(rep);
+  renderTimeline2Chart(rep);
   renderCharts(rep);
   wireBilan();
 }
@@ -534,6 +535,15 @@ function renderReport(rep) {
        <div class="note">Barres = CA/jour · courbes = taux de transfo (TT) et taux d'ajout panier · ✉️ = jour avec envoi email (détecté via un pic du canal Email GA4).</div></div>`
     : `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
        <div class="note">⚠️ Ce graphe affiche les <b>28 derniers jours</b> de l'OMS — or l'OMS chargé ne couvre que ${tlDays} jour(s). Lance « <b>Importer OMS depuis WSHOP</b> » sur une <b>période large</b> (ex. preset « 30 j » ou un mois) : les données s'accumulent et ce suivi (CA/jour + TT + ajouts panier + croix ✉️ email) s'affichera, quelle que soit la période d'analyse choisie ensuite.</div></div>`;
+
+  // 2e suivi temporel : CA N/N-1 + sessions des meilleures campagnes d'acquisition (N & N-1)
+  const t2 = rep.timeline2;
+  const hasT2 = tlDays > 1 && t2 && ((t2.campN && t2.campN.length) || (t2.campN1 && t2.campN1.length));
+  const timeline2Card = hasT2
+    ? `<div class="card"><h3>📡 Suivi temporel — CA & meilleures campagnes (4 semaines)</h3>
+       <div style="height:260px"><canvas id="tl2Chart"></canvas></div>
+       <div class="note">Barres = CA/jour (N) · ligne pointillée or = CA/jour N-1 · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = N, pointillé = N-1). Permet de relier les pics de CA aux campagnes.</div></div>`
+    : '';
 
   // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
@@ -641,20 +651,23 @@ function renderReport(rep) {
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    const tp = rep.returns.topProduits || [];
+    const topProdTable = tp.length ? `<div style="margin-top:12px"><h3>Top produits retournés</h3><table><thead><tr><th>#</th><th>Produit</th><th>Pièces</th><th>Montant</th><th>Raison principale</th></tr></thead><tbody>${tp.map((x, i) => `<tr><td>${i + 1}</td><td title="${esc(x.des)}">${esc((x.des || '').slice(0, 40))}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td><td>${esc(x.raison)}</td></tr>`).join('')}</tbody></table></div>` : '';
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
+      ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
         <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
-      <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
+      <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Top produits retournés = source produit (/returns/get), filtré sur la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
-    const ar = rep.stockAlerts.map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
-    stockAlertsCard = `<div class="card"><h3>🔔 Alertes stock — produits attendus (back-in-stock)</h3>
+    const ar = rep.stockAlerts.slice(0, 10).map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Top 10 alertes stock — produits attendus (back-in-stock)</h3>
       <table><thead><tr><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
       <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur la période → signal de demande sur les ruptures. « En attente » = pas encore notifiés (toujours en rupture). Source : back-in-stock WSHOP.</div></div>`;
   }
@@ -805,10 +818,24 @@ function renderReport(rep) {
     ? `<div class="card"><h3>Pilotage 360 — Tops — ${dimLabel}</h3><div class="grid cols2">${pilotPanels}</div></div>`
     : '';
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
+  // Détail commandes annulées (WSHOP) et remboursées (Y2) par enseigne marketplace
+  let mktCRhtml = '';
+  const mcr = rep.marketplace && rep.marketplace.cancelRefund;
+  if (mcr && ((mcr.cancellations.byChannel.length) || (mcr.refunds.byChannel.length))) {
+    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="3" style="color:var(--t3)">Aucune annulation</td></tr>';
+    const rRows = mcr.refunds.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.count)}</td><td class="dn">${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="3" style="color:var(--t3)">Aucun remboursement</td></tr>';
+    mktCRhtml = `<div class="grid cols2" style="margin-top:12px">
+        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
+        <div><h3>Remboursements / avoirs (Y2)</h3><table><thead><tr><th>Enseigne</th><th>Nb</th><th>Montant</th></tr></thead><tbody>${rRows}</tbody></table></div>
+      </div>
+      <div class="note">Annulations = pièces marketplace non livrées (source WSHOP OMS, CA estimé au prorata). Remboursements = lignes Y2 à Total TTC négatif (retours/avoirs), exclues du CA marketplace ci-dessus.</div>`;
+  }
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
+      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
   // International : performance par famille pour le top 5 pays
@@ -960,7 +987,7 @@ function renderReport(rep) {
   }
   const C = {
     fulloff: fullOffCard,
-    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, ca: caCard,
+    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -968,7 +995,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'gafunnel', 'timeline', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -1382,7 +1409,15 @@ function renderCharts(rep) {
   }
   if (rep.famille && rep.famille.length) {
     const f = rep.famille.slice(0, 8);
-    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets: [{ data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+    const hasN1f = f.some(x => x.n1 != null);
+    const diff = f.map(x => x.n1 != null ? Math.round(x.n - x.n1) : null);
+    const datasets = [{ label: 'CA N', data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }];
+    if (hasN1f) datasets.push({
+      label: 'Δ vs N-1', data: diff,
+      backgroundColor: diff.map(v => (v == null ? 'rgba(148,163,184,.3)' : (v >= 0 ? 'rgba(34,197,94,.6)' : 'rgba(239,68,68,.6)'))),
+      borderColor: diff.map(v => (v == null ? '#94a3b8' : (v >= 0 ? '#22c55e' : '#ef4444'))), borderWidth: 1, borderRadius: 3,
+    });
+    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets }, options: Object.assign({}, barOpts, { plugins: Object.assign({}, barOpts.plugins, { legend: { display: hasN1f, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }) }) });
   }
   if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
     const p = rep.produits.topN.slice(0, 8);
@@ -1416,18 +1451,25 @@ function renderTimelineChart(rep) {
   const tl = rep.timeline;
   const labels = tl.map(d => (d.date || d.label || '').slice(5));
   const ca = tl.map(d => Math.round(d.ca || 0));
+  const caN1 = tl.map(d => d.caN1 != null ? Math.round(d.caN1) : null);
   const tt = tl.map(d => d.tt != null ? +(d.tt * 100).toFixed(2) : null);
+  const ttN1 = tl.map(d => d.ttN1 != null ? +(d.ttN1 * 100).toFixed(2) : null);
   const atc = tl.map(d => d.addRate != null ? +(d.addRate * 100).toFixed(2) : null);
-  const maxCa = Math.max(1, ...ca);
+  const atcN1 = tl.map(d => d.addN1 != null ? +(d.addN1 * 100).toFixed(2) : null);
+  const hasN1 = caN1.some(v => v != null);
+  const maxCa = Math.max(1, ...ca, ...caN1.filter(v => v != null));
   const emailPts = tl.map(d => d.email ? maxCa * 1.06 : null);
   const el = document.getElementById('tlChart'); if (!el) return;
   if (_charts.tlChart) _charts.tlChart.destroy();
   _charts.tlChart = new Chart(el.getContext('2d'), {
     data: {
       labels, datasets: [
-        { type: 'bar', label: 'CA/jour', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
-        { type: 'line', label: 'TT %', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-        { type: 'line', label: 'Ajouts panier %', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
+        ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: 'TT % N', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#22c55e', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#a78bfa', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
         { type: 'line', label: '✉️ Email envoyé', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
       ],
     },
@@ -1438,6 +1480,36 @@ function renderTimelineChart(rep) {
         x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
         y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
         y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+function renderTimeline2Chart(rep) {
+  const t2 = rep && rep.timeline2, tl = rep && rep.timeline;
+  const has = tl && tl.length >= 2 && t2 && ((t2.campN && t2.campN.length) || (t2.campN1 && t2.campN1.length));
+  const el = document.getElementById('tl2Chart');
+  if (!has || !el) { if (_charts.tl2Chart) { _charts.tl2Chart.destroy(); _charts.tl2Chart = null; } return; }
+  const labels = tl.map(d => (d.date || '').slice(5));
+  const ca = tl.map(d => Math.round(d.ca || 0));
+  const caN1 = tl.map(d => d.caN1 != null ? Math.round(d.caN1) : null);
+  const hasN1 = caN1.some(v => v != null);
+  const CAMP_COLORS = ['#4a9eff', '#22c55e', '#a78bfa'];
+  const datasets = [
+    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.5)', borderColor: '#f5a623', borderWidth: 1 },
+    ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+  ];
+  (t2.campN || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
+  (t2.campN1 || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
+  if (_charts.tl2Chart) _charts.tl2Chart.destroy();
+  _charts.tl2Chart = new Chart(el.getContext('2d'), {
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y1: { position: 'right', title: { display: true, text: 'Sessions', color: '#64748b', font: { size: 9 } }, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { drawOnChartArea: false } },
       },
     },
   });
