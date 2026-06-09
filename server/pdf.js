@@ -325,9 +325,27 @@ function secAnalysesCroisees(doc, rep) {
     cl.slice(0, 10).map(x => [cut(x.campaign, 30), cut(x.landing, 36), { text: fInt(x.sessions), align: 'right' }]));
 }
 
+function secPlanAction(doc, rep) {
+  const t = rep.actionPlan && rep.actionPlan.teams; if (!t) return;
+  const blocks = [['Acquisition / Media', t.acq], ['Merch / Offre', t.merch], ['CRM / Email', t.crm], ['Ops / Logistique', t.ops]].filter(b => b[1] && b[1].length);
+  if (!blocks.length) return;
+  section(doc, 'Plan d’action — to-do par équipe (vs N-1)');
+  blocks.forEach(([title, items]) => {
+    ensureSpace(doc, 30);
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COL.accent).text(sp(title), M, doc.y); doc.moveDown(0.2);
+    items.forEach(it => {
+      ensureSpace(doc, 16);
+      doc.font('Helvetica').fontSize(8.2).fillColor(COL.ink).text('•  ' + sp(it), M + 8, doc.y, { width: W - 16 });
+      doc.moveDown(0.15);
+    });
+    doc.moveDown(0.3);
+  });
+}
+
 function renderQuotidien(doc, rep) {
   header(doc, rep, 'Reporting quotidien');
   secBilan(doc, rep);
+  secPlanAction(doc, rep);
   secFamille(doc, rep);
   secTopProduits(doc, rep);
   secTopPays(doc, rep, 8);
@@ -339,6 +357,7 @@ function renderQuotidien(doc, rep) {
 function renderPeriodique(doc, rep) {
   header(doc, rep, 'Reporting hebdomadaire / mensuel');
   secBilan(doc, rep);
+  secPlanAction(doc, rep);
   secPilotage(doc, rep);
   secSuiviTemporel(doc, rep);
   secFamille(doc, rep);

@@ -848,8 +848,14 @@ function renderReport(rep) {
     const WD = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
     const emailWd = key => { const c = {}; (rep.timeline || []).forEach(d => { if (d[key] && d.date) { const wd = new Date(d.date + 'T00:00:00').getDay(); c[wd] = (c[wd] || 0) + 1; } }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([w]) => WD[w]); };
     const wdN = emailWd('email'), wdN1 = emailWd('emailN1');
-    const emailBlock = (wdN.length || wdN1.length) ? `<div class="note" style="margin:8px 0 4px"><b>📧 Cadence d'envoi email</b> — N : ${wdN.length ? wdN.join('/') : '—'} · N-1 : ${wdN1.length ? wdN1.join('/') : '—'}${(wdN.join() !== wdN1.join() && wdN1.length) ? ' → <b>cadence/jours modifiés</b> vs N-1' : ''}</div>` : '';
+    const eh = ap && ap.emailHour;
+    const hourTxt = (eh && eh.n && eh.n.peakHour != null) ? ` · heure de pic Email ~${eh.n.peakHour}h${(eh.n1 && eh.n1.peakHour != null) ? ` (N-1 ~${eh.n1.peakHour}h)` : ''}` : '';
+    const emailBlock = (wdN.length || wdN1.length) ? `<div class="note" style="margin:8px 0 4px"><b>📧 Cadence d'envoi email</b> — N : ${wdN.length ? wdN.join('/') : '—'} · N-1 : ${wdN1.length ? wdN1.join('/') : '—'}${(wdN.join() !== wdN1.join() && wdN1.length) ? ' → <b>cadence/jours modifiés</b> vs N-1' : ''}${hourTxt}</div>` : '';
     if (!ap && !leviers && !emailBlock) return '';
+    // Synthèse rédigée par équipe métier (to-do priorisée) — calculée côté serveur (actionPlan.teams)
+    const T = (ap && ap.teams) || { acq: [], merch: [], crm: [], ops: [] };
+    const teamBlock = (icon, title, items) => items.length ? `<div style="margin-bottom:8px"><div class="note" style="margin:0 0 3px"><b>${icon} ${title}</b></div><ul style="margin:0 0 0 16px;padding:0;font-size:12px;line-height:1.6">${items.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+    const synthHtml = `<div style="margin:10px 0">${teamBlock('🎯', 'Acquisition / Média', T.acq)}${teamBlock('👗', 'Merch / Offre', T.merch)}${teamBlock('📧', 'CRM / Email', T.crm)}${teamBlock('📦', 'Ops / Logistique', T.ops)}</div>`;
     const campTbl = (arr, cols, fmt) => arr && arr.length ? `<table style="font-size:11px"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${arr.map(fmt).join('')}</tbody></table>` : '<div class="note" style="margin:2px 0">—</div>';
     const nc = ap && ap.newCampaigns || [], mc = ap && ap.missingCampaigns || [];
     const oin = (ap && ap.offerChanges && ap.offerChanges.entrants) || [], oout = (ap && ap.offerChanges && ap.offerChanges.sortants) || [];
@@ -860,8 +866,11 @@ function renderReport(rep) {
       <div><div class="note" style="margin:6px 0 3px"><b>📉 Offre sortie (best-sellers N-1 disparus)</b></div>${campTbl(oout, ['Produit', 'CA N-1', 'Qté N-1'], p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 30))}</td><td style="text-align:right">${fEur(p.caN1)}</td><td style="text-align:right">${fInt(p.qteN1)}</td></tr>`)}</div>
     </div>`;
     return `<div class="card"><h3>🧭 Plan d'action — leviers € & ce qui a changé vs N-1</h3>
-      <div class="note" style="margin-bottom:6px">Priorités classées par impact monétaire, puis les écarts d'exécution vs N-1 (campagnes, cadence email, offre produit) → base d'un plan d'action pour les équipes.</div>
-      ${leviers}${emailBlock}${changes}
+      <div class="note" style="margin-bottom:6px">Priorités classées par impact monétaire, puis to-do par équipe et les écarts d'exécution vs N-1 (campagnes, cadence email, offre produit).</div>
+      ${leviers}
+      <h3 style="margin-top:12px">📋 To-do par équipe</h3>${synthHtml}
+      <h3 style="margin-top:6px">🔍 Écarts détectés vs N-1</h3>${emailBlock}${changes}
+      <div class="toolbar" style="margin-top:10px"><button class="btn" id="planCopy">📋 Copier le plan d'action</button></div>
       <div class="note" style="margin-top:8px">⚠️ « Campagnes manquantes » et « offre sortie » = ce qui marchait en N-1 et qu'on n'a plus → à challenger en priorité. Sources : OMS + GA4 (campagnes). Marge non disponible.</div></div>`;
   })();
   // Détail commandes annulées (WSHOP) et remboursées (Y2) par enseigne marketplace
@@ -1145,6 +1154,22 @@ function bilanSignals(rep) {
   }
   return out;
 }
+// Version texte du plan d'action (presse-papier / diffusion équipes).
+// teams = rep.actionPlan.teams (calculé côté serveur, source unique partagée avec le PDF).
+function actionPlanText(rep) {
+  const strip = s => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  const T = (rep.actionPlan && rep.actionPlan.teams) || { acq: [], merch: [], crm: [], ops: [] };
+  const lines = [];
+  lines.push(`PLAN D'ACTION — ${(rep.meta && rep.meta.from) || ''} → ${(rep.meta && rep.meta.to) || ''} (vs N-1)`, '');
+  const sec = (title, items) => { if (items && items.length) { lines.push(title); items.forEach(x => lines.push('  • ' + x)); lines.push(''); } };
+  sec('ACQUISITION / MÉDIA', T.acq);
+  sec('MERCH / OFFRE', T.merch);
+  sec('CRM / EMAIL', T.crm);
+  sec('OPS / LOGISTIQUE', T.ops);
+  const sigs = bilanSignals(rep).slice(0, 6);
+  if (sigs.length) { lines.push('LEVIERS PRIORITAIRES (impact €)'); sigs.forEach(s => lines.push('  • ' + strip(s.txt))); }
+  return lines.join('\n');
+}
 // Scorecard réutilisable (Bilan période / Cumul mensuel / Cumul saison).
 // pack = { n: {kpi, ca, mkt, cancel, cos}, n1: {...} } ; showDetails = sous-blocs détaillés.
 function renderScorecard(title, pack, showDetails) {
@@ -1234,6 +1259,15 @@ function wireBilan() {
         : `<div class="note" style="margin-top:8px">Copie automatique indisponible — sélectionne tout le texte ci-dessous (Ctrl/Cmd+A puis C) et colle-le dans ${link} :</div><textarea readonly onclick="this.select()" style="width:100%;height:160px;margin-top:6px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:8px;padding:8px;font-size:11px;font-family:monospace">${esc(j.prompt)}</textarea>`;
     } catch (e) { o.innerHTML = `<div class="note" style="margin-top:8px">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; }
     finally { cp.disabled = false; }
+  });
+  // Copier le plan d'action (texte par équipe) — 100% client.
+  const pcp = document.getElementById('planCopy');
+  if (pcp) pcp.addEventListener('click', async () => {
+    const txt = actionPlanText(LAST_REP);
+    let ok = false;
+    try { await navigator.clipboard.writeText(txt); ok = true; } catch (e) { /* presse-papier indisponible */ }
+    if (ok) { const o = pcp.textContent; pcp.textContent = '✓ Plan copié'; setTimeout(() => { pcp.textContent = o; }, 2000); }
+    else { const ta = document.createElement('textarea'); ta.value = txt; ta.readOnly = true; ta.style.cssText = 'width:100%;height:160px;margin-top:6px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:8px;padding:8px;font-size:11px;font-family:monospace'; ta.onclick = () => ta.select(); pcp.parentNode.appendChild(ta); ta.select(); }
   });
   // Synthèse IA (API payante) — réutilise /api/reco, n'affiche que la synthèse.
   const b = document.getElementById('bilanIA');
