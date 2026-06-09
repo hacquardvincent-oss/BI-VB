@@ -150,27 +150,25 @@ function orderToRows(order) {
   const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
-  // « Quantité non livrée » (annulation) = commandé − expédié, mais UNIQUEMENT sur les commandes
-  // FINALISÉES. L'API WSHOP n'expose pas de statut → on considère une commande finalisée si son
-  // statut le dit (si présent), sinon si elle date de plus de WSHOP_FINALIZE_DAYS jours (défaut 14).
-  // Ainsi une commande d'hier (encore en préparation, expédié = 0) → 0 (pas une annulation), et une
-  // commande ancienne non expédiée → comptée (vraie annulation).
-  const st = (o.status || o.orderStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString().toLowerCase();
-  const statusFinal = st ? (/(ship|exped|deliver|livr|clos|complet|cancel|annul|refus|return|remb)/.test(st) ? true
-    : (/(pending|process|prepar|attente|en cours|nouveau|new|created|waiting|valid|paid|confirm)/.test(st) ? false : null)) : null;
-  const finalizeDays = parseInt(process.env.WSHOP_FINALIZE_DAYS || '14', 10) || 14;
-  const tOrd = Date.parse((o.orderDate || '').toString().replace(' ', 'T'));
-  const ageDays = isNaN(tOrd) ? 999 : (Date.now() - tOrd) / 86400000;
-  const isFinal = statusFinal != null ? statusFinal : (ageDays >= finalizeDays);
+  // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées,
+  // c.-à-d. lignes au statut ANNULÉE (annul/cancel/refus) ou EXPÉDIÉE INCOMPLÈTE (incompl) uniquement.
+  // Toutes les commandes EN COURS (en attente, préparation, en retard, à récupérer, validée) ET les
+  // commandes expédiées/livrées → 0. On ne compte JAMAIS une commande en attente d'expédition.
+  // (Ancienne règle « commandé − expédié [− offert] / par âge » abandonnée : elle comptait à tort
+  //  les commandes non encore expédiées. quantityOffered = quantité offerte/cadeau, pas « à expédier ».)
+  const ostatus = (o.status || o.orderStatus || o.statusLabel || o.orderStatusLabel || o.deliveryStatus || o.shippingStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString().toLowerCase();
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
     const qShipRaw = it.quantityShipped;
-    const qShip = qShipRaw != null ? (parseInt(qShipRaw) || 0) : qOrd; // expédié inconnu → considéré livré
-    // quantityOffered = quantité encore À EXPÉDIER (non annulée). Donc annulé = commandé − expédié − offert.
-    // Commande en cours → offered > 0 → 0 annulé ; commande annulée → offered = 0 & expédié = 0 → comptée.
-    // Repli (champ absent) : finalisation par statut/âge.
-    const qOff = it.quantityOffered != null ? (parseInt(it.quantityOffered) || 0) : null;
-    const nonLivre = qOff != null ? Math.max(0, qOrd - qShip - qOff) : (isFinal ? Math.max(0, qOrd - qShip) : 0);
+    const qShipKnown = qShipRaw != null ? (parseInt(qShipRaw) || 0) : null;
+    const qShip = qShipKnown != null ? qShipKnown : qOrd; // expédié inconnu → considéré livré (prix/livré)
+    // Statut de la ligne (sinon de la commande). Libellés OMS : Annulée, Expédiée Incomplète, En attente…
+    const stRaw = (it.status || it.lineStatus || it.itemStatus || it.deliveryStatus || it.shippingStatus || it.statusLabel || ostatus || '').toString().toLowerCase();
+    const cancelled = /annul|cancel|refus|rejet/.test(stRaw);
+    const incomplete = /incompl/.test(stRaw);
+    let nonLivre = 0;
+    if (cancelled) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : 0));      // annulée : tout le non-expédié
+    else if (incomplete) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : qOrd)); // expédiée incomplète : le reste
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
     // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
     // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price
@@ -497,9 +495,32 @@ router.get('/ping', requireAuth, async (req, res) => {
   try {
     const to = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
     const iso = d => d.toISOString().slice(0, 10);
-    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 1 });
+    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 300 });
     const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
+    // Diagnostic « annulation » : valeurs DISTINCTES de statut + simulation de la règle non-livré
+    // (compte les pièces non livrées avec la nouvelle règle : statut Annulée / Expédiée Incomplète).
+    try {
+      const statusVals = {}; let nlPieces = 0, nlLines = 0; const nlByStatus = {};
+      const bump = (m, k) => { if (k != null && k !== '') m[k] = (m[k] || 0) + 1; };
+      arr.forEach(o => {
+        const ost = (o.status || o.orderStatus || o.statusLabel || o.orderStatusLabel || o.deliveryStatus || o.shippingStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString();
+        (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+          const st = (it.status || it.lineStatus || it.itemStatus || it.deliveryStatus || it.shippingStatus || it.statusLabel || ost || '').toString();
+          bump(statusVals, st || '(vide)');
+          const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
+          const qsk = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : null;
+          const s = st.toLowerCase(); let nl = 0;
+          if (/annul|cancel|refus|rejet/.test(s)) nl = Math.max(0, qOrd - (qsk != null ? qsk : 0));
+          else if (/incompl/.test(s)) nl = Math.max(0, qOrd - (qsk != null ? qsk : qOrd));
+          if (nl > 0) { nlPieces += nl; nlLines += 1; bump(nlByStatus, st); }
+        });
+      });
+      out.statusDistinct = statusVals;       // toutes les valeurs de statut rencontrées (+ nb de lignes)
+      out.simNonLivrePieces = nlPieces;       // total pièces non livrées (nouvelle règle) sur l'échantillon
+      out.simNonLivreLines = nlLines;
+      out.simNonLivreByStatus = nlByStatus;   // détail par statut qui a généré du non-livré
+    } catch (e) { out.statusDiagErr = e.message; }
     out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
     // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
     // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
