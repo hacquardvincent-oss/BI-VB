@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'timeline', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -107,7 +107,7 @@ const THEME_META = {
 const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P',
-  daily: 'T', timeline: 'T',
+  daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
@@ -444,6 +444,7 @@ async function loadReport() {
   renderObjectives(rep);
   renderDailyChart(rep);
   renderTimelineChart(rep);
+  renderTimeline2Chart(rep);
   renderCharts(rep);
   wireBilan();
 }
@@ -534,6 +535,15 @@ function renderReport(rep) {
        <div class="note">Barres = CA/jour · courbes = taux de transfo (TT) et taux d'ajout panier · ✉️ = jour avec envoi email (détecté via un pic du canal Email GA4).</div></div>`
     : `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
        <div class="note">⚠️ Ce graphe affiche les <b>28 derniers jours</b> de l'OMS — or l'OMS chargé ne couvre que ${tlDays} jour(s). Lance « <b>Importer OMS depuis WSHOP</b> » sur une <b>période large</b> (ex. preset « 30 j » ou un mois) : les données s'accumulent et ce suivi (CA/jour + TT + ajouts panier + croix ✉️ email) s'affichera, quelle que soit la période d'analyse choisie ensuite.</div></div>`;
+
+  // 2e suivi temporel : CA N/N-1 + sessions des meilleures campagnes d'acquisition (N & N-1)
+  const t2 = rep.timeline2;
+  const hasT2 = tlDays > 1 && t2 && ((t2.campN && t2.campN.length) || (t2.campN1 && t2.campN1.length));
+  const timeline2Card = hasT2
+    ? `<div class="card"><h3>📡 Suivi temporel — CA & meilleures campagnes (4 semaines)</h3>
+       <div style="height:260px"><canvas id="tl2Chart"></canvas></div>
+       <div class="note">Barres = CA/jour (N) · ligne pointillée or = CA/jour N-1 · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = N, pointillé = N-1). Permet de relier les pics de CA aux campagnes.</div></div>`
+    : '';
 
   // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
@@ -977,7 +987,7 @@ function renderReport(rep) {
   }
   const C = {
     fulloff: fullOffCard,
-    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, ca: caCard,
+    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -985,7 +995,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'gafunnel', 'timeline', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -1470,6 +1480,36 @@ function renderTimelineChart(rep) {
         x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
         y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
         y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+function renderTimeline2Chart(rep) {
+  const t2 = rep && rep.timeline2, tl = rep && rep.timeline;
+  const has = tl && tl.length >= 2 && t2 && ((t2.campN && t2.campN.length) || (t2.campN1 && t2.campN1.length));
+  const el = document.getElementById('tl2Chart');
+  if (!has || !el) { if (_charts.tl2Chart) { _charts.tl2Chart.destroy(); _charts.tl2Chart = null; } return; }
+  const labels = tl.map(d => (d.date || '').slice(5));
+  const ca = tl.map(d => Math.round(d.ca || 0));
+  const caN1 = tl.map(d => d.caN1 != null ? Math.round(d.caN1) : null);
+  const hasN1 = caN1.some(v => v != null);
+  const CAMP_COLORS = ['#4a9eff', '#22c55e', '#a78bfa'];
+  const datasets = [
+    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.5)', borderColor: '#f5a623', borderWidth: 1 },
+    ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+  ];
+  (t2.campN || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
+  (t2.campN1 || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
+  if (_charts.tl2Chart) _charts.tl2Chart.destroy();
+  _charts.tl2Chart = new Chart(el.getContext('2d'), {
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y1: { position: 'right', title: { display: true, text: 'Sessions', color: '#64748b', font: { size: 9 } }, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { drawOnChartArea: false } },
       },
     },
   });

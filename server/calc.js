@@ -580,6 +580,30 @@ function gaDailyMetrics(ga) {
   return by;
 }
 
+// Suivi temporel des meilleures campagnes : à partir du jeu date×campagne (gacampdaily),
+// retient les top N campagnes (par sessions sur la période) et renvoie leur série quotidienne.
+function campaignDailySeries(ds, fromISO, toISO, isAll, topN = 3) {
+  if (!ds || !ds.rows || !ds.hdrs) return null;
+  const di = ds.hdrs.findIndex(h => norm(h) === 'date');
+  const ci = ds.hdrs.findIndex(h => { const n = norm(h); return n === 'campagne' || n === 'campaign'; });
+  const si = ds.hdrs.findIndex(h => norm(h) === 'sessions');
+  if (di < 0 || ci < 0 || si < 0) return null;
+  const toIso = raw => /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null);
+  const inR = iso => isAll || (iso >= fromISO && iso <= toISO);
+  const skip = c => /not set|^\(.*\)$|direct|organic|referral/i.test(c);
+  const totals = {}, byCampDay = {};
+  ds.rows.forEach(r => {
+    const iso = toIso((r[di] || '').trim()); if (!iso || !inR(iso)) return;
+    const camp = (r[ci] || '').trim(); if (!camp || skip(camp)) return;
+    const s = parseInt(r[si]) || 0;
+    totals[camp] = (totals[camp] || 0) + s;
+    const bd = byCampDay[camp] || (byCampDay[camp] = {});
+    bd[iso] = (bd[iso] || 0) + s;
+  });
+  const top = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, topN).map(([c]) => c);
+  return top.map(c => ({ campaign: c, total: totals[c], byDay: byCampDay[c] }));
+}
+
 // ── Série quotidienne : CA + commandes (OMS) × sessions/paniers (GA) → TT & taux d'ajout panier ──
 // sessByDay (optionnel) : map { 'YYYY-MM-DD': sessions } issue du jeu « sessions propres » (date×pays,
 // non surcomptées) → fiabilise le TT/jour. À défaut, on retombe sur les sessions de la ventilation `ga`.
@@ -1161,7 +1185,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
+  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, hourlySeries,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,

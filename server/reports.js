@@ -78,6 +78,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
   const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadDataset('gasess', 'N1');
+  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadDataset('gacampdaily', 'N1');
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;
   const sessSrcN1 = calc.filterGADim(gaSessN1, dim) || gaN1f;
 
@@ -442,6 +443,18 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
     return serie.map(d => { const e1 = byDate1[isoShiftDays(d.date, -364)]; return { ...d, email: (emailByDay[d.date] || 0) >= thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
+  // 2e suivi temporel : CA N/N-1 (repris de la timeline) + sessions des meilleures campagnes N & N-1.
+  const timeline2 = (timeline && timeline.length) ? (() => {
+    const days = timeline.map(d => d.date);
+    const d0 = days[0], dN = days[days.length - 1];
+    const curves = (ds, shift) => {
+      const tops = calc.campaignDailySeries(ds, isoShiftDays(d0, shift), isoShiftDays(dN, shift), false, 3);
+      if (!tops || !tops.length) return [];
+      return tops.map(t => ({ campaign: t.campaign, total: t.total, data: days.map(d => { const v = t.byDay[isoShiftDays(d, shift)]; return v != null ? v : null; }) }));
+    };
+    const campN = curves(gaCampDailyN, 0), campN1 = curves(gaCampDailyN1, -364);
+    return (campN.length || campN1.length) ? { campN, campN1 } : null;
+  })() : null;
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
@@ -585,7 +598,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     device,
     daily,
     dailyN1,
-    timeline,
+    timeline, timeline2,
     stockAlerts,
     hourly,
     gaFunnel,
