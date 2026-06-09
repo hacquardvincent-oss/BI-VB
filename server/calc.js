@@ -1031,7 +1031,17 @@ function calcCrossChannel(omsN, omsMapN, y2N, y2MapN, famByRef, omsN1, omsMapN1,
       .filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca).slice(0, 5);
     return { channel: ch, top: arr };
   }).filter(x => x.top.length);
-  return { channels, totals, familles, topByMarketplace, recos: buildCrossRecos(products, channels) };
+  // Arbitrage cross-canal : produits forts sur un canal et faibles/absents sur l'autre
+  // (on n'additionne PAS les canaux — clients EShop vs marketplaces trop différents).
+  const mpChannels = channels.filter(c => c !== 'EShop');
+  const arbitrage = Object.entries(A.byRef).map(([ref, v]) => {
+    const eshop = v.byChannel['EShop'] || 0;
+    const mkt = mpChannels.reduce((s, c) => s + (v.byChannel[c] || 0), 0);
+    return { name: v.name || nameOf[ref] || ref, famille: fam(ref), eshop, mkt, byChannel: v.byChannel };
+  }).filter(x => (x.eshop > 300 && x.mkt < x.eshop * 0.15) || (x.mkt > 300 && x.eshop < x.mkt * 0.15))
+    .map(x => ({ ...x, sens: x.eshop >= x.mkt ? 'eshop' : 'mkt', gap: Math.abs(x.eshop - x.mkt) }))
+    .sort((a, b) => b.gap - a.gap).slice(0, 15);
+  return { channels, totals, familles, topByMarketplace, arbitrage, recos: buildCrossRecos(products, channels) };
 }
 
 // ── Top produits ────────────────────────────────────────────────────────────

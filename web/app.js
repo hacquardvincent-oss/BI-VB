@@ -840,20 +840,30 @@ function renderReport(rep) {
     const ch = cc.channels;
     const naC = '<span class="na">—</span>';
     const totRow = cc.totals.map(t => `<div class="kc"><div class="l">${esc(t.channel)}</div><div class="v">${fEur(t.ca)}</div><div style="font-size:10px">${delta(t.ca, t.caN1)} vs N-1</div></div>`).join('');
-    // Familles × canal (EShop / GL / Printemps / PDT / Lulli) — Δ N-1 sur le total
-    const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}<th>Total</th><th>Δ N-1</th>`;
-    const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}<td><b>${fEur(f.total)}</b></td><td>${delta(f.total, f.totalN1)}</td></tr>`).join('');
+    // Familles × canal (EShop / GL / Printemps / PDT / Lulli) — SANS somme ni Δ (canaux non additionnables)
+    const famHead = `<th>Famille</th>${ch.map(c => `<th>${esc(c)}</th>`).join('')}`;
+    const famRowsCC = cc.familles.map(f => `<tr><td>${esc(f.famille)}</td>${ch.map(c => `<td>${f.byChannel[c] ? fEur(f.byChannel[c]) : naC}</td>`).join('')}</tr>`).join('');
     // Top 5 produits par marketplace (GL / Printemps / PDT / Lulli)
     const mpTop = (cc.topByMarketplace || []).map(x => `<div><div class="note" style="margin:0 0 4px"><b>${esc(x.channel)}</b></div><table style="font-size:11px"><tbody>${x.top.map(t => `<tr><td title="${esc(t.name)}">${esc((t.name || '').slice(0, 28))}</td><td style="text-align:right">${fEur(t.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('');
-    const recos = (cc.recos && cc.recos.length) ? `<div class="insight">💡 ${cc.recos.map(esc).join('<br>💡 ')}</div>` : '';
+    // Arbitrage : produits forts sur un canal, faibles sur l'autre
+    const arb = (cc.arbitrage || []).map(x => `<tr>
+        <td title="${esc(x.name)}">${esc((x.name || '').slice(0, 30))}</td>
+        <td>${esc(x.famille)}</td>
+        <td>${x.eshop ? fEur(x.eshop) : naC}</td>
+        <td>${x.mkt ? fEur(x.mkt) : naC}</td>
+        <td>${x.sens === 'eshop' ? '🛒 Fort EShop, absent/faible marketplace → <b>à lister en marketplace</b>' : '🏬 Fort marketplace, faible EShop → <b>à pousser sur l\'EShop</b>'}</td>
+      </tr>`).join('');
+    const arbCard = arb ? `<h3 style="margin-top:14px">⚖️ Produits déséquilibrés entre canaux</h3>
+      <div style="overflow-x:auto"><table><thead><tr><th>Produit</th><th>Famille</th><th>CA EShop</th><th>CA Marketplaces</th><th>Constat</th></tr></thead><tbody>${arb}</tbody></table></div>
+      <div class="note">On <b>n'additionne pas</b> les canaux (clients EShop ≠ GL/Printemps/PDT/Lulli). Objectif : repérer un produit qui cartonne sur un canal et pas sur l'autre → opportunités de listing / mise en avant.</div>` : '';
     crossChannelCard = `<div class="card"><h3>🔀 Performance cross-canal — EShop vs Marketplaces</h3>
       <div class="kgrid">${totRow}</div>
-      <h3 style="margin-top:14px">Familles par canal (CA) — N vs N-1</h3>
+      <h3 style="margin-top:14px">Familles par canal (CA, sans cumul)</h3>
       <div style="height:240px;margin-bottom:8px"><canvas id="crossStack"></canvas></div>
       <div style="overflow-x:auto"><table><thead><tr>${famHead}</tr></thead><tbody>${famRowsCC}</tbody></table></div>
       ${mpTop ? `<h3 style="margin-top:14px">🏆 Top 5 produits par marketplace</h3><div class="grid cols2">${mpTop}</div>` : ''}
-      ${recos}
-      <div class="note">EShop = entrepôt + ship-from-store (boutiques) regroupés (la distinction est une méthode d'expédition, pas un canal). Comparaison EShop / GL / Printemps / PDT / Lulli par famille. Réf. unifiée OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2.</div></div>`;
+      ${arbCard}
+      <div class="note">EShop = entrepôt + ship-from-store regroupés. Les CA par canal ne se somment pas (clients différents) ; on les compare. Réf. unifiée OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2.</div></div>`;
   }
 
   // Google Ads — coût & ROAS (croisé CA EShop) + efficacité par campagne
