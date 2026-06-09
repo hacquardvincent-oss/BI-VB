@@ -79,6 +79,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
   const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadDataset('gasess', 'N1');
   const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadDataset('gacampdaily', 'N1');
+  const gaEmailHourN = await loadDataset('gaemailhour', 'N'), gaEmailHourN1 = await loadDataset('gaemailhour', 'N1');
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;
   const sessSrcN1 = calc.filterGADim(gaSessN1, dim) || gaN1f;
 
@@ -448,7 +449,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
     const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
     const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
-    return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
+    return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, emailVol: eN.by[d.date] || 0, emailVolN1: eN1.by[dShift] || 0, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
   // 2e suivi temporel : CA N/N-1 (repris de la timeline) + sessions des meilleures campagnes N & N-1.
   const timeline2 = (timeline && timeline.length) ? (() => {
@@ -567,13 +568,60 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // ── Plan d'action / pilotage : qu'est-ce qui a CHANGÉ vs N-1 (offre produit + campagnes) ──
   const offerChanges = (() => {
     const TH = 300, r2 = x => Math.round(x * 100) / 100, inP = [], outP = [];
+    // Désignation → famille (via réf. externe → référentiel) pour étiqueter les entrants/sortants.
+    const desFam = (rows, mp) => {
+      const di = mp.des, ri = mp.ref_ext !== undefined ? mp.ref_ext : mp._refExt, out = {};
+      if (di === undefined || ri === undefined) return out;
+      rows.forEach(r => { const d = (r[di] || '').trim(); if (!d || out[d]) return; const f = refMap[(r[ri] || '').trim()]; if (f) out[d] = f; });
+      return out;
+    };
+    const famN = desFam(rowsN, omsN.map), famN1 = (rowsN1 && rowsN1.length) ? desFam(rowsN1, mapN1) : {};
     if (topN1obj) {
-      Object.entries(topNobj).forEach(([des, v]) => { const b = topN1obj[des]; if (v.ca >= TH && (!b || b.ca < v.ca * 0.2)) inP.push({ des, ca: r2(v.ca), qte: v.qte }); });
-      Object.entries(topN1obj).forEach(([des, v]) => { const a = topNobj[des]; if (v.ca >= TH && (!a || a.ca < v.ca * 0.2)) outP.push({ des, caN1: r2(v.ca), qteN1: v.qte }); });
+      Object.entries(topNobj).forEach(([des, v]) => { const b = topN1obj[des]; if (v.ca >= TH && (!b || b.ca < v.ca * 0.2)) inP.push({ des, ca: r2(v.ca), qte: v.qte, fam: famN[des] || '' }); });
+      Object.entries(topN1obj).forEach(([des, v]) => { const a = topNobj[des]; if (v.ca >= TH && (!a || a.ca < v.ca * 0.2)) outP.push({ des, caN1: r2(v.ca), qteN1: v.qte, fam: famN1[des] || '' }); });
     }
     return { entrants: inP.sort((a, b) => b.ca - a.ca).slice(0, 10), sortants: outP.sort((a, b) => b.caN1 - a.caN1).slice(0, 10) };
   })();
-  const actionPlan = { newCampaigns, missingCampaigns: lostCampaigns, offerChanges };
+  const emailHour = { n: calc.emailPeakHour(gaEmailHourN), n1: calc.emailPeakHour(gaEmailHourN1) };
+  // Plan d'action rédigé, segmenté par équipe (source unique : carte UI, copie texte et PDF).
+  const teams = (() => {
+    const eur = v => Math.round(Math.abs(v)).toLocaleString('fr-FR') + ' €';
+    const pcS = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : Math.round((n - n1) / n1 * 100);
+    const sgnS = p => p == null ? '—' : (p >= 0 ? '+' : '') + p + '%';
+    const T = { acq: [], merch: [], crm: [], ops: [] };
+    if (channelTypes && channelTypes.n && channelTypes.n1) {
+      const m1 = {}; channelTypes.n1.forEach(x => { m1[x.type] = x; });
+      channelTypes.n.map(c => { const p = m1[c.type]; return p ? { t: c.type, d: (c.revenue || 0) - (p.revenue || 0), ps: pcS(c.sessions, p.sessions) } : null; })
+        .filter(x => x && x.d < -1000).sort((a, b) => a.d - b.d).slice(0, 2)
+        .forEach(x => T.acq.push(`Relancer le canal ${x.t} : ${eur(x.d)} de revenu perdu vs N-1 (sessions ${sgnS(x.ps)}).`));
+    }
+    (lostCampaigns || []).slice(0, 3).forEach(c => T.acq.push(`Relancer/remplacer la campagne manquante « ${c.campaign} » (≈ ${eur(c.revenueN1)} de CA en N-1, absente en N).`));
+    (newCampaigns || []).slice(0, 2).forEach(c => T.acq.push(`Évaluer puis scaler la nouvelle campagne « ${c.campaign} » (${eur(c.revenueN)} en N).`));
+    if (famille) famille.filter(f => f.n1 != null).map(f => ({ fam: f.fam, d: f.n - f.n1 })).filter(x => x.d < -1500).sort((a, b) => a.d - b.d).slice(0, 2)
+      .forEach(x => T.merch.push(`Relancer la famille ${x.fam} : ${eur(x.d)} de CA perdu vs N-1 (offre, mise en avant, réassort).`));
+    const manq = produits && produits.manquants;
+    if (manq && manq.length) T.merch.push(`Reconquérir ${manq.length} produits forts en N-1 en retrait (${eur(manq.reduce((s, x) => s + x.perte, 0))}), à commencer par « ${manq[0].produit} ».`);
+    offerChanges.sortants.slice(0, 2).forEach(p => T.merch.push(`Best-seller N-1 disparu : ${(p.des || '').slice(0, 32)}${p.fam ? ' (' + p.fam + ')' : ''} — réassort/remplacement (${eur(p.caN1)} en N-1).`));
+    offerChanges.entrants.slice(0, 1).forEach(p => T.merch.push(`Capitaliser sur le nouveau best-seller ${(p.des || '').slice(0, 32)}${p.fam ? ' (' + p.fam + ')' : ''} (${eur(p.ca)} en N).`));
+    const WD = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const ewd = key => { const c = {}; (timeline || []).forEach(d => { if (d[key] && d.date) { const w = new Date(d.date + 'T00:00:00').getUTCDay(); c[w] = (c[w] || 0) + 1; } }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([w]) => WD[w]); };
+    const wdN = ewd('email'), wdN1 = ewd('emailN1');
+    if (wdN.length || wdN1.length) {
+      if (wdN1.length && wdN.join() !== wdN1.join()) T.crm.push(`Cadence d'envoi email modifiée vs N-1 (N : ${wdN.join('/') || '—'} · N-1 : ${wdN1.join('/') || '—'}) → vérifier l'impact CA des jours concernés.`);
+      else if (wdN.length) T.crm.push(`Cadence email stable (${wdN.join('/')}) → tester un créneau additionnel sur les jours faibles.`);
+    }
+    if (emailHour.n && emailHour.n.peakHour != null) {
+      const hN = emailHour.n.peakHour, hN1 = emailHour.n1 && emailHour.n1.peakHour;
+      if (hN1 != null && Math.abs(hN - hN1) >= 2) T.crm.push(`Heure d'envoi décalée : pic Email ~${hN}h en N vs ~${hN1}h en N-1 → recaler sur le créneau performant.`);
+      else T.crm.push(`Pic de trafic Email ~${hN}h → concentrer les envois sur ce créneau.`);
+    }
+    const cx = cancellations && cancellations.n;
+    if (cx && cx.tauxCommande > 0.02) T.ops.push(`Réduire les annulations : ${Math.round(cx.tauxCommande * 100)}% des commandes (${eur(cx.caNonLivre || cx.caAnnuleEstime || 0)} non expédié) → fiabiliser stock/préparation.`);
+    if (returns && returns.n && returns.n.reasons && returns.n.reasons.length) { const r0 = returns.n.reasons[0]; if (r0 && r0.count >= 3) T.ops.push(`Traiter la 1re cause de retour « ${r0.reason} » (${r0.count} retours) → fiches produit/qualité/tailles.`); }
+    if (stockAlerts && stockAlerts.length) T.ops.push(`Réassortir les ${Math.min(stockAlerts.length, 10)} top produits en alerte stock (demande « prévenez-moi » non servie).`);
+    return T;
+  })();
+  const actionPlan = { newCampaigns, missingCampaigns: lostCampaigns, offerChanges, emailHour, teams };
 
   return {
     empty: false,

@@ -562,6 +562,24 @@ function calcByDevice(ga) {
 }
 
 // Métriques GA par jour : sessions + ajouts panier (pour le taux d'ajout panier)
+// Heure de pic du canal Email (jeu heure×canal) → estimation de l'heure d'envoi des emails.
+function emailPeakHour(ds) {
+  if (!ds || !ds.rows || !ds.hdrs) return null;
+  const hi = ds.hdrs.findIndex(h => { const n = norm(h); return n === 'heure' || n === 'hour'; });
+  const ci = ds.hdrs.findIndex(h => { const n = norm(h); return n.includes('canau') || n.includes('channel'); });
+  const si = ds.hdrs.findIndex(h => norm(h) === 'sessions');
+  if (hi < 0 || ci < 0 || si < 0) return null;
+  const byHour = {};
+  ds.rows.forEach(r => {
+    if (!/e-?mail|mailing|newsletter|crm/i.test((r[ci] || '').toString())) return;
+    const h = parseInt(r[hi]); if (isNaN(h)) return;
+    byHour[h] = (byHour[h] || 0) + (parseInt(r[si]) || 0);
+  });
+  const entries = Object.entries(byHour).map(([h, s]) => ({ hour: +h, sessions: s })).sort((a, b) => b.sessions - a.sessions);
+  if (!entries.length) return null;
+  return { peakHour: entries[0].hour, top: entries.slice(0, 3), total: entries.reduce((s, x) => s + x.sessions, 0) };
+}
+
 function gaDailyMetrics(ga) {
   if (!ga || !ga.rows || !ga.hdrs) return null;
   const di = ga.hdrs.findIndex(h => { const n = norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
@@ -1194,7 +1212,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, hourlySeries,
+  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,
