@@ -494,11 +494,18 @@ router.get('/ping', requireAuth, async (req, res) => {
   try {
     const to = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
     const iso = d => d.toISOString().slice(0, 10);
-    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 80 });
-    const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
+    const win = { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59` };
+    const getArr = r => (r && r.__err) ? [] : (Array.isArray(r) ? r : (r && (r.data || r.orders || r.results)) || []);
+    // Les 3 requêtes EN PARALLÈLE (sinon ~4 appels en série → timeout 504 du proxy) : échantillon
+    // générique + 2 sondes filtrées par statut. Les sondes échouent en douceur (capture d'erreur).
+    const [resp, respCancel, respInc] = await Promise.all([
+      apiPost('/api/v1/orders/get', Object.assign({ page: 1, limit: 40 }, win)),
+      apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'Cancelled', page: 1, limit: 30 }, win)).catch(e => ({ __err: e.message })),
+      apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'ShippedIncomplete', page: 1, limit: 30 }, win)).catch(e => ({ __err: e.message })),
+    ]);
+    const arr = getArr(resp);
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
-    // Diagnostic « annulation » : valeurs DISTINCTES de orderCustomerStatus (le champ qui calque
-    // les libellés OMS) + simulation de la règle non-livré (Cancelled* / ShippedIncomplete).
+    // Diagnostic « annulation » : valeurs DISTINCTES de orderCustomerStatus + simulation de la règle.
     try {
       const csVals = {}, osVals = {}; let nlPieces = 0, nlLines = 0; const nlByStatus = {};
       const bump = (m, k) => { m[k == null || k === '' ? '(vide)' : k] = (m[k == null || k === '' ? '(vide)' : k] || 0) + 1; };
@@ -516,30 +523,24 @@ router.get('/ping', requireAuth, async (req, res) => {
           if (nl > 0) { nlPieces += nl; nlLines += 1; bump(nlByStatus, cs); }
         });
       });
-      out.statusDistinct = csVals;            // valeurs de orderCustomerStatus (+ nb de commandes)
-      out.orderStatusDistinct = osVals;       // valeurs de orderStatus (pour comparaison)
-      out.simNonLivrePieces = nlPieces;       // total pièces non livrées (nouvelle règle) sur l'échantillon
-      out.simNonLivreLines = nlLines;
-      out.simNonLivreByStatus = nlByStatus;   // détail par statut qui a généré du non-livré
+      out.statusDistinct = csVals;
+      out.orderStatusDistinct = osVals;
+      out.simNonLivrePieces = nlPieces; out.simNonLivreLines = nlLines; out.simNonLivreByStatus = nlByStatus;
     } catch (e) { out.statusDiagErr = e.message; }
-    // Sondes ciblées : interroge l'API filtrée par statut pour CONFIRMER que les commandes annulées /
-    // expédiées incomplètes existent sur la période et sont bien détectées (échantillon page 1 = tout Shipped).
-    try {
-      const probe = async (status) => {
-        const r = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, orderCustomerStatus: status, page: 1, limit: 50 });
-        const a = Array.isArray(r) ? r : (r && (r.data || r.orders || r.results)) || [];
-        let pieces = 0;
-        a.forEach(o => (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
-          const qo = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
-          const qs = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : 0;
-          pieces += Math.max(0, qo - qs);
-        }));
-        return { commandes: a.length, piecesNonLivre: pieces, statutRenvoye: a[0] ? (a[0].orderCustomerStatus || '(vide)') : '(0 cmd)' };
-      };
-      out.probeCancelled = await probe('Cancelled');
-      out.probeShippedIncomplete = await probe('ShippedIncomplete');
-    } catch (e) { out.probeErr = e.message; }
-    out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
+    // Résultat des sondes ciblées (confirme que les annulées / incomplètes existent et sont détectées).
+    const probeOf = (r, status) => {
+      if (r && r.__err) return 'KO: ' + r.__err;
+      const a = getArr(r); let pieces = 0;
+      a.forEach(o => (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+        const qo = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
+        const qs = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : 0;
+        pieces += Math.max(0, qo - qs);
+      }));
+      return { commandes: a.length, piecesNonLivre: pieces, statutRenvoye: a[0] ? (a[0].orderCustomerStatus || '(vide)') : '(0 cmd)' };
+    };
+    out.probeCancelled = probeOf(respCancel, 'Cancelled');
+    out.probeShippedIncomplete = probeOf(respInc, 'ShippedIncomplete');
+    out.sampleKeys = arr[0] ? Object.keys(arr[0]) : '[] (0 commande sur 30 j)';
     // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
     // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
     const o0 = arr[0];
