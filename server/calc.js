@@ -800,11 +800,14 @@ function calcBySeason(rows, omsMap, seasonMap) {
 }
 
 // ── Annulations (OMS) : pièces non expédiées (Quantité non livré ≥ 1) ───────
+// Taux d'annulation = commandes ANNULÉES (statut Cancelled*) uniquement. Les expéditions
+// incomplètes (ShippedIncomplete) sont comptées à part (la commande a été expédiée, juste partielle).
 function calcCancellations(rows, map) {
-  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type;
+  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
   let qteAnnulee = 0, qteCmd = 0, caAnnule = 0, caPaye = 0;
-  const ordersImpacted = new Set(), allOrders = new Set();
+  let qteIncomplete = 0, caIncomplete = 0;
+  const ordersImpacted = new Set(), allOrders = new Set(), ordersIncomplete = new Set();
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
@@ -813,17 +816,25 @@ function calcCancellations(rows, map) {
     qteCmd += cmd; caPaye += prix;
     if (ni !== undefined && r[ni]) allOrders.add(r[ni]);
     if (nonLivre > 0) {
-      qteAnnulee += nonLivre;
-      if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
-      const unit = cmd > 0 ? prix / cmd : prix;          // CA annulé estimé (prorata du prix payé)
-      caAnnule += unit * nonLivre;
+      const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
+      const unit = cmd > 0 ? prix / cmd : prix;          // CA non livré estimé (prorata du prix payé)
+      // Expédition incomplète = comptée à part. Tout le reste (Cancelled*, ou statut absent) = annulation.
+      if (/incomplete/.test(st) && !/cancel/.test(st)) {
+        qteIncomplete += nonLivre; caIncomplete += unit * nonLivre;
+        if (ni !== undefined && r[ni]) ordersIncomplete.add(r[ni]);
+      } else {
+        qteAnnulee += nonLivre; caAnnule += unit * nonLivre;
+        if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
+      }
     }
   });
   return {
     qteAnnulee, qteCmd, caAnnuleEstime: caAnnule, caNonLivre: caAnnule, caPaye,
     caCommande: caPaye, caLivre: caPaye - caAnnule,
     commandes: allOrders.size, commandesImpactees: ordersImpacted.size,
-    // Taux d'annulation = commandes avec au moins une pièce non livrée ÷ total commandes.
+    // Expéditions incomplètes (ShippedIncomplete) — hors taux d'annulation.
+    qteIncomplete, caIncomplete: caIncomplete, commandesIncompletes: ordersIncomplete.size,
+    // Taux d'annulation = commandes annulées (Cancelled) ÷ total commandes.
     tauxCommande: allOrders.size > 0 ? ordersImpacted.size / allOrders.size : null,
     tauxPieces: qteCmd > 0 ? qteAnnulee / qteCmd : null,
     tauxCA: caPaye > 0 ? caAnnule / caPaye : null,
@@ -837,6 +848,7 @@ function calcCancellationsDetail(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
   const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
+  const incompletEnt = { qte: 0, ca: 0 }, incompletMag = { qte: 0, ca: 0 };
   const byStore = {}, byProd = {}, byCanal = {}, byStatut = {};
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
@@ -847,6 +859,15 @@ function calcCancellationsDetail(rows, map) {
     const caAnn = unit * nonLivre;
     const mag = (r[mi] || '').trim();
     const isEnt = mag.toLowerCase().includes('webstore');
+    const st = (si !== undefined ? (r[si] || '').trim() : '') || '(statut absent)';
+    // Répartition par statut OMS (audit : Cancelled vs ShippedIncomplete vs …) — TOUTES lignes non livrées.
+    const bs = byStatut[st] || (byStatut[st] = { statut: st, qte: 0, ca: 0 }); bs.qte += nonLivre; bs.ca += caAnn;
+    // Expéditions incomplètes (ShippedIncomplete) : comptées à part, PAS dans les annulations.
+    const sl = st.toLowerCase();
+    if (/incomplete/.test(sl) && !/cancel/.test(sl)) {
+      const b = isEnt ? incompletEnt : incompletMag; b.qte += nonLivre; b.ca += caAnn;
+      return;
+    }
     const bucket = isEnt ? entrepot : magasin;
     bucket.qte += nonLivre; bucket.ca += caAnn;
     if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
@@ -857,14 +878,12 @@ function calcCancellationsDetail(rows, map) {
     const c = byCanal[canal] || (byCanal[canal] = { canal, qte: 0, ca: 0, prods: {} });
     c.qte += nonLivre; c.ca += caAnn;
     const cp = c.prods[des] || (c.prods[des] = { des, qte: 0, ca: 0 }); cp.qte += nonLivre; cp.ca += caAnn;
-    // Répartition par statut OMS (audit : Cancelled vs ShippedIncomplete vs …).
-    const st = (si !== undefined ? (r[si] || '').trim() : '') || '(statut absent)';
-    const bs = byStatut[st] || (byStatut[st] = { statut: st, qte: 0, ca: 0 }); bs.qte += nonLivre; bs.ca += caAnn;
   });
   const r2 = x => Math.round(x * 100) / 100;
   return {
     entrepot: { qte: entrepot.qte, ca: r2(entrepot.ca) },
     magasin: { qte: magasin.qte, ca: r2(magasin.ca) },
+    incomplet: { entrepot: { qte: incompletEnt.qte, ca: r2(incompletEnt.ca) }, magasin: { qte: incompletMag.qte, ca: r2(incompletMag.ca) }, qte: incompletEnt.qte + incompletMag.qte, ca: r2(incompletEnt.ca + incompletMag.ca) },
     topStores: Object.values(byStore).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 8),
     topProduits: Object.values(byProd).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 10),
     byCanal: Object.values(byCanal).map(c => ({
