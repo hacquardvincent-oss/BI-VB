@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca', 'funnel'],
+    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -597,10 +597,9 @@ function renderReport(rep) {
   let cancellationsCard = '';
   if (cx) {
     const tiles = [
-      ['Pièces non livrées', fInt(cx.qteAnnulee), cx.qteAnnulee, cx1.qteAnnulee],
       ['Commandes impactées', fInt(cx.commandesImpactees), cx.commandesImpactees, cx1.commandesImpactees],
-      ['Taux annulation (CA)', fPct(cx.tauxCA), cx.tauxCA, cx1.tauxCA],
-      ['Taux annulation (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
+      ['Commandes (total)', fInt(cx.commandes), cx.commandes, cx1.commandes],
+      ['Taux d\'annulation (commande)', fPct(cx.tauxCommande), cx.tauxCommande, cx1.tauxCommande],
       ['CA non livré', fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime), cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime, cx1.caNonLivre != null ? cx1.caNonLivre : cx1.caAnnuleEstime],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
     // Détail : entrepôt vs magasin + top magasins qui annulent + top produits annulés
@@ -614,7 +613,7 @@ function renderReport(rep) {
       const prods = (d.topProduits || []).length ? `<div class="note" style="margin:10px 0 4px"><b>Top produits annulés</b></div><table style="font-size:11px"><thead><tr><th>Produit</th><th>Pièces</th><th>CA annulé</th></tr></thead><tbody>${d.topProduits.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.ca)}</td></tr>`).join('')}</tbody></table>` : '';
       detailHtml = split + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>`;
     }
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Avant expédition</b> : pièces commandées mais non livrées (Quantité non livré > 0 : rupture, annulation, contrôle). <b>CA non livré</b> = Σ (prix unitaire × quantité non livrée). <b>Taux annulation (CA)</b> = CA non livré ÷ CA commandé. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes non expédiées (source OMS)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Avant expédition</b> : commandes avec au moins une pièce non livrée (Quantité non livré > 0). <b>Taux d'annulation (commande)</b> = commandes impactées ÷ total commandes. Détail des pièces annulées par canal ci-dessous. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. À ne pas confondre avec les retours clients ci-après.</div></div>`;
   }
 
   // Retours
@@ -938,7 +937,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'funnel', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -985,7 +984,7 @@ function bilanSignals(rep) {
   }
   // Annulations (pièces non expédiées)
   const cx = rep.cancellations && rep.cancellations.n;
-  if (cx && cx.tauxPieces != null && cx.tauxPieces > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `Annulation — <b>${fPct(cx.tauxPieces)}</b> de pièces non expédiées (${fInt(cx.qteAnnulee)}) → fiabiliser stock/préparation.` });
+  if (cx && cx.tauxCommande != null && cx.tauxCommande > 0.05) out.push({ tone: 'dn', icon: '⛔', txt: `Annulation — <b>${fPct(cx.tauxCommande)}</b> des commandes impactées (${fInt(cx.commandesImpactees)}) → fiabiliser stock/préparation.` });
   // International : que faire sur les pays #2/#3/#4 par CA (hors France)
   if (rep.pays && rep.pays.length) {
     const foreign = rep.pays.filter(p => (p.pays || '').trim().toLowerCase() !== 'france' && p.n && p.n.ca > 0).slice(0, 3);
@@ -1025,8 +1024,8 @@ function renderScorecard(title, pack, showDetails) {
   if (!pack || !pack.n || !pack.n.kpi) return '';
   const n = pack.n, n1 = pack.n1 || {};
   const k = n.kpi, k1 = n1.kpi || {};
-  const ann = n.cancel ? (n.cancel.tauxCA != null ? n.cancel.tauxCA : n.cancel.tauxPieces) : null;
-  const ann1 = n1.cancel ? (n1.cancel.tauxCA != null ? n1.cancel.tauxCA : n1.cancel.tauxPieces) : null;
+  const ann = n.cancel ? n.cancel.tauxCommande : null;
+  const ann1 = n1.cancel ? n1.cancel.tauxCommande : null;
   const cosD = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
   const tiles = [
     bilanTile('CA Global EShop', fEur(k.ca), k.ca, k1.ca),
