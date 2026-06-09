@@ -224,6 +224,20 @@ async function fetchCampaignLanding(propertyId, startDate, endDate) {
   }));
 }
 
+// ── Sessions « propres » : date × pays uniquement (faible cardinalité) ───────
+// La ventilation date×canal×device×pays surcompte le total (données non seuillées
+// de l'API) ; ce rapport date×pays colle au total de la plateforme GA4.
+async function fetchSessionsDaily(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'country' }],
+    metrics: [{ name: 'sessions' }],
+    limit: 100000,
+  });
+  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.dimensionValues[1].value, r.metricValues[0].value]);
+  return { hdrs: ['Date', 'Pays', 'Sessions'], rows };
+}
+
 function toDataset(parsed, startDate, endDate) {
   const map = calc.autoMap(parsed.hdrs, calc.GA_ALIASES);
   return {
@@ -259,6 +273,7 @@ async function refresh(opts = {}) {
 
   const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
   store.setDataset('ga', 'N', toDataset(dataN, nStart, nEnd));
+  await safe('sessions N', async () => store.setDataset('gasess', 'N', toDataset(await fetchSessionsDaily(propertyId, nStart, nEnd), nStart, nEnd)));
   await safe('pages N', async () => store.setDataset('gapages', 'N', { rows: await fetchPages(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('pagesrc N', async () => store.setDataset('gapagesrc', 'N', { rows: await fetchPagesBySource(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('landing N', async () => store.setDataset('galanding', 'N', { rows: await fetchLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
@@ -270,6 +285,7 @@ async function refresh(opts = {}) {
   let n1Count = null;
   if (n1) {
     await safe('GA N-1', async () => { const dataN1 = await fetchGA4(propertyId, n1.start, n1.end); store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end)); n1Count = dataN1.rows.length; });
+    await safe('sessions N-1', async () => store.setDataset('gasess', 'N1', toDataset(await fetchSessionsDaily(propertyId, n1.start, n1.end), n1.start, n1.end)));
     await safe('pages N-1', async () => store.setDataset('gapages', 'N1', { rows: await fetchPages(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('pagesrc N-1', async () => store.setDataset('gapagesrc', 'N1', { rows: await fetchPagesBySource(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('landing N-1', async () => store.setDataset('galanding', 'N1', { rows: await fetchLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
