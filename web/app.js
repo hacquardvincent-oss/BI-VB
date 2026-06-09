@@ -641,20 +641,23 @@ function renderReport(rep) {
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    const tp = rep.returns.topProduits || [];
+    const topProdTable = tp.length ? `<div style="margin-top:12px"><h3>Top produits retournés</h3><table><thead><tr><th>#</th><th>Produit</th><th>Pièces</th><th>Montant</th><th>Raison principale</th></tr></thead><tbody>${tp.map((x, i) => `<tr><td>${i + 1}</td><td title="${esc(x.des)}">${esc((x.des || '').slice(0, 40))}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td><td>${esc(x.raison)}</td></tr>`).join('')}</tbody></table></div>` : '';
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
+      ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
         <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
-      <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
+      <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Top produits retournés = source produit (/returns/get), filtré sur la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
-    const ar = rep.stockAlerts.map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
-    stockAlertsCard = `<div class="card"><h3>🔔 Alertes stock — produits attendus (back-in-stock)</h3>
+    const ar = rep.stockAlerts.slice(0, 10).map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Top 10 alertes stock — produits attendus (back-in-stock)</h3>
       <table><thead><tr><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
       <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur la période → signal de demande sur les ruptures. « En attente » = pas encore notifiés (toujours en rupture). Source : back-in-stock WSHOP.</div></div>`;
   }
@@ -805,10 +808,24 @@ function renderReport(rep) {
     ? `<div class="card"><h3>Pilotage 360 — Tops — ${dimLabel}</h3><div class="grid cols2">${pilotPanels}</div></div>`
     : '';
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
+  // Détail commandes annulées (WSHOP) et remboursées (Y2) par enseigne marketplace
+  let mktCRhtml = '';
+  const mcr = rep.marketplace && rep.marketplace.cancelRefund;
+  if (mcr && ((mcr.cancellations.byChannel.length) || (mcr.refunds.byChannel.length))) {
+    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="3" style="color:var(--t3)">Aucune annulation</td></tr>';
+    const rRows = mcr.refunds.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.count)}</td><td class="dn">${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="3" style="color:var(--t3)">Aucun remboursement</td></tr>';
+    mktCRhtml = `<div class="grid cols2" style="margin-top:12px">
+        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
+        <div><h3>Remboursements / avoirs (Y2)</h3><table><thead><tr><th>Enseigne</th><th>Nb</th><th>Montant</th></tr></thead><tbody>${rRows}</tbody></table></div>
+      </div>
+      <div class="note">Annulations = pièces marketplace non livrées (source WSHOP OMS, CA estimé au prorata). Remboursements = lignes Y2 à Total TTC négatif (retours/avoirs), exclues du CA marketplace ci-dessus.</div>`;
+  }
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table></div>`;
+      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
   // International : performance par famille pour le top 5 pays
@@ -1382,7 +1399,15 @@ function renderCharts(rep) {
   }
   if (rep.famille && rep.famille.length) {
     const f = rep.famille.slice(0, 8);
-    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets: [{ data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+    const hasN1f = f.some(x => x.n1 != null);
+    const diff = f.map(x => x.n1 != null ? Math.round(x.n - x.n1) : null);
+    const datasets = [{ label: 'CA N', data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.55)', borderColor: '#4a9eff', borderWidth: 1, borderRadius: 3 }];
+    if (hasN1f) datasets.push({
+      label: 'Δ vs N-1', data: diff,
+      backgroundColor: diff.map(v => (v == null ? 'rgba(148,163,184,.3)' : (v >= 0 ? 'rgba(34,197,94,.6)' : 'rgba(239,68,68,.6)'))),
+      borderColor: diff.map(v => (v == null ? '#94a3b8' : (v >= 0 ? '#22c55e' : '#ef4444'))), borderWidth: 1, borderRadius: 3,
+    });
+    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets }, options: Object.assign({}, barOpts, { plugins: Object.assign({}, barOpts.plugins, { legend: { display: hasN1f, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }) }) });
   }
   if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
     const p = rep.produits.topN.slice(0, 8);

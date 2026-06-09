@@ -321,6 +321,45 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
   return { glOMS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
 }
 
+// Détail des commandes annulées (WSHOP OMS : lignes marketplace non livrées) et remboursées
+// (Y2 : Total TTC < 0 = retours/avoirs) par enseigne marketplace.
+function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
+  const round2 = x => Math.round(x * 100) / 100;
+  const mktLabel = t => { const s = (t || '').toLowerCase(); if (s.includes('gl.com')) return 'GL.com'; if (s.includes('printemps')) return 'Printemps'; if (s.includes('la redoute')) return 'La Redoute'; if (s.includes('24s')) return '24S'; return t || 'Marketplace'; };
+  const cancel = {}; let cancelQte = 0, cancelCA = 0;
+  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type;
+  if (qni !== undefined) {
+    (omsRows || []).forEach(r => {
+      const type = (r[ti] || '').trim();
+      if (!isMkt(type)) return;
+      const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
+      if (nonLivre <= 0) return;
+      const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+      const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
+      const ch = mktLabel(type);
+      const e = cancel[ch] || (cancel[ch] = { qte: 0, ca: 0 });
+      e.qte += nonLivre; e.ca += unit * nonLivre;
+      cancelQte += nonLivre; cancelCA += unit * nonLivre;
+    });
+  }
+  const refund = {}; let refundCA = 0, refundCount = 0;
+  if (y2Rows && y2Map && y2Map.ttc !== undefined) {
+    const tci = y2Map.ttc, ei = y2Map.etab;
+    y2Rows.forEach(r => {
+      const ttc = fN(r[tci]);
+      if (ttc >= 0) return; // uniquement les retours/avoirs (négatifs)
+      const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
+      const e = refund[ch] || (refund[ch] = { ca: 0, count: 0 });
+      e.ca += ttc; e.count += 1;
+      refundCA += ttc; refundCount += 1;
+    });
+  }
+  return {
+    cancellations: { byChannel: Object.entries(cancel).map(([ch, v]) => ({ ch, qte: v.qte, ca: round2(v.ca) })).sort((a, b) => b.qte - a.qte), totalQte: cancelQte, totalCA: round2(cancelCA) },
+    refunds: { byChannel: Object.entries(refund).map(([ch, v]) => ({ ch, ca: round2(v.ca), count: v.count })).sort((a, b) => a.ca - b.ca), totalCA: round2(refundCA), count: refundCount },
+  };
+}
+
 // ── GA : sessions totales / par jour / par période / agrégats par canal ─────
 function getTotalSessions(ga) {
   if (!ga || !ga.rows || !ga.hdrs) return 0;
@@ -803,6 +842,25 @@ function calcReturns(rows, map) {
   };
 }
 
+// Top produits retournés (dataset 'retprod' : 1 ligne / article retourné, filtrable par date).
+function topReturnedProducts(rows, map, top = 10) {
+  const di = map.des, qi = map.qte, mi = map.montant, ri = map.raison;
+  const by = {};
+  rows.forEach(r => {
+    const des = (r[di] || '').trim(); if (!des) return;
+    const q = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    const mt = fN(r[mi]);
+    const reason = (ri !== undefined ? (r[ri] || '').trim() : '') || '(non précisé)';
+    const e = by[des] || (by[des] = { des, qte: 0, montant: 0, reasons: {} });
+    e.qte += q; e.montant += mt;
+    e.reasons[reason] = (e.reasons[reason] || 0) + q;
+  });
+  return Object.values(by).map(v => {
+    const tr = Object.entries(v.reasons).sort((a, b) => b[1] - a[1])[0];
+    return { des: v.des, qte: v.qte, montant: Math.round(v.montant * 100) / 100, raison: tr ? tr[0] : '' };
+  }).sort((a, b) => b.qte - a.qte).slice(0, top);
+}
+
 // ── Produits : écart vs N-1 (à reconquérir) ─────────────────────────────────
 // byN / byN1 = maps {désignation: {ca, qte}} issues de buildTopProdMap
 function productGap(byN, byN1, top = 10) {
@@ -1096,8 +1154,8 @@ module.exports = {
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
-  buildSeasonMap, calcBySeason, calcCancellations, calcReturns,
-  filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcCancellationsDetail,
+  buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
+  filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, hourlySeries,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,

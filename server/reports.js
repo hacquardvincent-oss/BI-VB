@@ -63,6 +63,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
   const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
+  const retProdN = await loadDataset('retprod', 'N');
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
   const adsN = await loadDataset('ads', 'N'), adsN1 = await loadDataset('ads', 'N1');
 
@@ -484,6 +485,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
+    // Top produits retournés (source produit /returns/get, filtré sur la période).
+    if (retProdN) {
+      const rpRows = calc.filterRows(retProdN.rows, retProdN.map, from, to, isAll);
+      returns.topProduits = calc.topReturnedProducts(rpRows, retProdN.map, 10);
+    }
   }
 
   // ── Analyses produits (Lot B) ──
@@ -546,7 +552,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
-    marketplace: { n: mktN, n1: mktN1 },
+    marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {}) },
     pays,
     saison,
     seasonCompare,

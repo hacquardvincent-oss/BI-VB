@@ -370,6 +370,13 @@ async function refresh(opts = {}, cb = {}) {
       store.setDataset('bis', 'N', { hdrs: ['Produit', 'Abonnements', 'En attente', 'Dernier'], rows, map: { name: 0, count: 1, waiting: 2, last: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
       alerts = subs.length;
     } catch (e) { /* best-effort */ }
+    // Retours niveau produit (top produits retournés) via /returns/get — best-effort.
+    try {
+      if (cb.phase) cb.phase('Retours produits…');
+      const rN = await fetchReturnsRange(from, to);
+      store.setDataset('retprod', 'N', returnsProductDataset(rN));
+      if (N1) { const rN1 = await fetchReturnsRange(cfrom, cto); store.setDataset('retprod', 'N1', returnsProductDataset(rN1)); }
+    } catch (e) { /* best-effort */ }
   }
   return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length, alerts };
 }
@@ -595,6 +602,29 @@ function returnsDataset(returns, eanToRef) {
   });
   const rows = Object.entries(by).map(([ref, v]) => [ref, String(v.qte), v.montant.toFixed(2)]);
   return { hdrs: ['Ref. externe', 'Nb colisages rembourses', 'Montant rembourse'], rows, map: { ref_ext: 0, qte: 1, montant: 2 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+}
+// Retours niveau produit (pour le top produits retournés) : une ligne par article retourné,
+// avec date (filtrable par période), désignation (titre + coloris), quantité, montant et raison.
+function returnsProductDataset(returns) {
+  const rows = [];
+  returns.forEach(rt => {
+    const reasonRet = (rt.reason || rt.returnReason || rt.motif || rt.comment || '').toString().trim();
+    const rawDate = (rt.date || rt.returnDate || rt.createdAt || rt.created_at || '').toString();
+    const m = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+    (rt.orderItems || []).forEach(it => {
+      if (it.refund === false) return; // uniquement les lignes effectivement remboursées
+      const title = (it.title || it.name || '').toString().trim();
+      const color = (it.color || it.colour || '').toString().trim();
+      const des = color && !title.toLowerCase().includes(color.toLowerCase()) ? `${title} - ${color}` : title;
+      if (!des) return;
+      const q = parseInt(it.quantity) || 0;
+      const unit = toNum(it.originalDiscountedUnitPrice) || toNum(it.originalUnitPrice) || toNum(it.compareAtPrice);
+      const reason = (it.returnReason || it.reason || reasonRet || '').toString().trim() || '(non précisé)';
+      rows.push([date, des, String(q), (unit * q).toFixed(2), reason]);
+    });
+  });
+  return { hdrs: ['Date creation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
 // Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
 async function fetchBackInStock(fromISO, toISO) {
