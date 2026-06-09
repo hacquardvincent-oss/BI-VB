@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -106,7 +106,7 @@ const THEME_META = {
 };
 const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'P',
+  kpi: 'P', actionplan: 'P',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
@@ -659,6 +659,20 @@ function renderReport(rep) {
       ? x.reasons.map(rr => `${esc(rr.reason)} <span style="color:var(--t3)">(${fInt(rr.qte)})</span>`).join(' · ')
       : esc(x.raison || '—');
     const topProdTable = tp.length ? `<div style="margin-top:12px"><h3>Top produits retournés & raisons</h3><table><thead><tr><th>#</th><th>Produit</th><th>Pièces</th><th>Montant</th><th>Raisons (détail)</th></tr></thead><tbody>${tp.map((x, i) => `<tr><td>${i + 1}</td><td title="${esc(x.des)}">${esc((x.des || '').slice(0, 38))}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td><td style="font-size:11px">${reasonsCell(x)}</td></tr>`).join('')}</tbody></table></div>` : '';
+    // Analyse des raisons de retour N vs N-1 (par nombre de retours)
+    let reasonsVsTable = '';
+    if (rt1 && rt1.reasons && rt1.reasons.length) {
+      const m1 = {}; rt1.reasons.forEach(x => { m1[x.reason] = x; });
+      const keys = [...new Set([...rt.reasons.map(x => x.reason), ...rt1.reasons.map(x => x.reason)])];
+      const rows = keys.map(rsn => {
+        const a = rt.reasons.find(x => x.reason === rsn) || { count: 0, montant: 0 };
+        const b = m1[rsn] || { count: 0, montant: 0 };
+        return { rsn, cn: a.count, cn1: b.count, mn: a.montant };
+      }).sort((x, y) => y.cn - x.cn).slice(0, 10);
+      reasonsVsTable = `<div style="margin-top:12px"><h3>Analyse des raisons de retour — N vs N-1</h3>
+        <table><thead><tr><th>Raison</th><th>Nb N</th><th>Nb N-1</th><th>Δ</th><th>Montant N</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r.rsn)}</td><td>${fInt(r.cn)}</td><td>${fInt(r.cn1)}</td><td>${delta(r.cn, r.cn1)}</td><td>${fEur(r.mn)}</td></tr>`).join('')}</tbody></table>
+        <div class="note">Évolution des motifs de retour vs N-1 → repérer une dégradation (taille, qualité, conformité) à corriger côté offre/fiches produit.</div></div>`;
+    }
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
@@ -666,6 +680,7 @@ function renderReport(rep) {
         <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
+      ${reasonsVsTable}
       <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Top produits retournés = source produit (/returns/get), filtré sur la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
@@ -824,6 +839,31 @@ function renderReport(rep) {
     ? `<div class="card"><h3>Pilotage 360 — Tops — ${dimLabel}</h3><div class="grid cols2">${pilotPanels}</div></div>`
     : '';
   const caCard = ''; // détail CA fusionné dans la carte Pilotage 360 (évite la redondance)
+  // ── Plan d'action métier : leviers € + ce qui a CHANGÉ vs N-1 (campagnes, emails, offre) ──
+  const actionPlanCard = (() => {
+    const ap = rep.actionPlan;
+    const sigs = bilanSignals(rep).slice(0, 5);
+    const leviers = sigs.length ? `<div class="bilan-sigs">${sigs.map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>` : '';
+    // Décalage des envois email N vs N-1 (jours de la semaine, 364 j = 52 sem. exactes → même jour)
+    const WD = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const emailWd = key => { const c = {}; (rep.timeline || []).forEach(d => { if (d[key] && d.date) { const wd = new Date(d.date + 'T00:00:00').getDay(); c[wd] = (c[wd] || 0) + 1; } }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([w]) => WD[w]); };
+    const wdN = emailWd('email'), wdN1 = emailWd('emailN1');
+    const emailBlock = (wdN.length || wdN1.length) ? `<div class="note" style="margin:8px 0 4px"><b>📧 Cadence d'envoi email</b> — N : ${wdN.length ? wdN.join('/') : '—'} · N-1 : ${wdN1.length ? wdN1.join('/') : '—'}${(wdN.join() !== wdN1.join() && wdN1.length) ? ' → <b>cadence/jours modifiés</b> vs N-1' : ''}</div>` : '';
+    if (!ap && !leviers && !emailBlock) return '';
+    const campTbl = (arr, cols, fmt) => arr && arr.length ? `<table style="font-size:11px"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${arr.map(fmt).join('')}</tbody></table>` : '<div class="note" style="margin:2px 0">—</div>';
+    const nc = ap && ap.newCampaigns || [], mc = ap && ap.missingCampaigns || [];
+    const oin = (ap && ap.offerChanges && ap.offerChanges.entrants) || [], oout = (ap && ap.offerChanges && ap.offerChanges.sortants) || [];
+    const changes = `<div class="grid cols2" style="margin-top:8px">
+      <div><div class="note" style="margin:0 0 3px"><b>🆕 Nouvelles campagnes (N)</b></div>${campTbl(nc, ['Campagne', 'Sessions', 'CA'], c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 26))}</td><td style="text-align:right">${fInt(c.sessionsN)}</td><td style="text-align:right">${fEur(c.revenueN)}</td></tr>`)}</div>
+      <div><div class="note" style="margin:0 0 3px"><b>🚫 Campagnes manquantes (présentes N-1)</b></div>${campTbl(mc, ['Campagne', 'Sess. N-1', 'CA N-1'], c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 26))}</td><td style="text-align:right">${fInt(c.sessionsN1)}</td><td style="text-align:right">${fEur(c.revenueN1)}</td></tr>`)}</div>
+      <div><div class="note" style="margin:6px 0 3px"><b>👗 Offre entrante (nouveaux best-sellers N)</b></div>${campTbl(oin, ['Produit', 'CA N', 'Qté'], p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 30))}</td><td style="text-align:right">${fEur(p.ca)}</td><td style="text-align:right">${fInt(p.qte)}</td></tr>`)}</div>
+      <div><div class="note" style="margin:6px 0 3px"><b>📉 Offre sortie (best-sellers N-1 disparus)</b></div>${campTbl(oout, ['Produit', 'CA N-1', 'Qté N-1'], p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 30))}</td><td style="text-align:right">${fEur(p.caN1)}</td><td style="text-align:right">${fInt(p.qteN1)}</td></tr>`)}</div>
+    </div>`;
+    return `<div class="card"><h3>🧭 Plan d'action — leviers € & ce qui a changé vs N-1</h3>
+      <div class="note" style="margin-bottom:6px">Priorités classées par impact monétaire, puis les écarts d'exécution vs N-1 (campagnes, cadence email, offre produit) → base d'un plan d'action pour les équipes.</div>
+      ${leviers}${emailBlock}${changes}
+      <div class="note" style="margin-top:8px">⚠️ « Campagnes manquantes » et « offre sortie » = ce qui marchait en N-1 et qu'on n'a plus → à challenger en priorité. Sources : OMS + GA4 (campagnes). Marge non disponible.</div></div>`;
+  })();
   // Détail commandes annulées (WSHOP) et remboursées (Y2) par enseigne marketplace
   let mktCRhtml = '';
   const mcr = rep.marketplace && rep.marketplace.cancelRefund;
@@ -993,7 +1033,7 @@ function renderReport(rep) {
   }
   const C = {
     fulloff: fullOffCard,
-    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
+    kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -1001,7 +1041,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -1375,6 +1415,41 @@ function renderCharts(rep) {
     scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } },
   };
   const cut = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+  // Barres « croissance / décroissance » : base bleue = min(N, N-1), cap au bout = |Δ| coloré
+  // (vert si la barre grandit vs N-1, rouge si elle rétrécit). La barre atteint max(N, N-1).
+  const growShrink = (id, items) => {
+    const labels = items.map(x => cut(x.label, 22));
+    const hasN1 = items.some(x => x.n1 != null);
+    const base = items.map(x => (x.n1 == null) ? Math.round(x.n) : Math.round(Math.min(x.n, x.n1)));
+    const cap = items.map(x => (x.n1 == null) ? 0 : Math.round(Math.abs(x.n - x.n1)));
+    const grew = items.map(x => (x.n1 == null) ? null : (x.n >= x.n1));
+    const datasets = [{ label: 'CA', data: base, backgroundColor: 'rgba(74,158,255,.6)', borderColor: '#4a9eff', borderWidth: 1, stack: 'gs' }];
+    if (hasN1) datasets.push({
+      label: 'Δ vs N-1 (vert = hausse, rouge = repli)', data: cap, stack: 'gs',
+      backgroundColor: grew.map(g => g == null ? 'rgba(148,163,184,.3)' : (g ? 'rgba(34,197,94,.8)' : 'rgba(239,68,68,.8)')),
+      borderColor: grew.map(g => g == null ? '#94a3b8' : (g ? '#22c55e' : '#ef4444')), borderWidth: 1,
+    });
+    mk(id, {
+      type: 'bar', data: { labels, datasets },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: hasN1, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } },
+          tooltip: { callbacks: { label: c => {
+            const x = items[c.dataIndex]; if (!x) return '';
+            if (c.datasetIndex === 0) return ` CA N : ${fEur(x.n)}`;
+            if (x.n1 == null) return '';
+            const d = x.n - x.n1;
+            return ` N-1 : ${fEur(x.n1)} · Δ ${d >= 0 ? '+' : '−'}${fEur(Math.abs(d))}`;
+          } } },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+          y: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+  };
   // Camemberts des découpes CA du Bilan (International / Omnicanal / Démarque / Marketplace)
   const segDonut = (id, segs) => { const s = segs.filter(x => (x[1] || 0) > 0); if (s.length) mk(id, { type: 'doughnut', data: { labels: s.map(x => x[0]), datasets: [{ data: s.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts }); };
   const bca = rep.ca && rep.ca.n, bmk = rep.marketplace && rep.marketplace.n;
@@ -1409,10 +1484,10 @@ function renderCharts(rep) {
     const d = rep.device.n;
     mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
   }
-  // Barres CA par pays (top 10, hors France)
+  // Barres CA par pays (top 10, hors France) — croissance/décroissance vs N-1
   if (rep.pays && rep.pays.length) {
     const p = rep.pays.filter(x => (x.pays || '').trim().toLowerCase() !== 'france').slice(0, 10);
-    mk('paysChart', { type: 'bar', data: { labels: p.map(x => cut(x.pays, 18)), datasets: [{ data: p.map(x => Math.round(x.n.ca)), backgroundColor: 'rgba(34,197,94,.55)', borderColor: '#22c55e', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+    growShrink('paysChart', p.map(x => ({ label: x.pays, n: x.n.ca, n1: x.n1 ? x.n1.ca : null })));
   }
   // Donut marketplace (part par enseigne)
   if (rep.marketplace && rep.marketplace.n) {
@@ -1437,26 +1512,7 @@ function renderCharts(rep) {
     mk('crossStack', { type: 'bar', data: { labels: fam.map(f => cut(f.famille, 16)), datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
   }
   if (rep.famille && rep.famille.length) {
-    const f = rep.famille.slice(0, 8);
-    const hasN1f = f.some(x => x.n1 != null);
-    // Barre bleue = CA N ; le Δ vs N-1 est EMPILÉ au sommet : vert au-dessus si gain,
-    // rouge mordant le haut de la barre si perte (base N affichée, delta « par dessus »).
-    const diff = f.map(x => x.n1 != null ? Math.round(x.n - x.n1) : null);
-    const datasets = [{ label: 'CA N', data: f.map(x => Math.round(x.n)), backgroundColor: 'rgba(74,158,255,.6)', borderColor: '#4a9eff', borderWidth: 1, stack: 'fam' }];
-    if (hasN1f) datasets.push({
-      label: 'Δ vs N-1', data: diff, stack: 'fam',
-      backgroundColor: diff.map(v => (v == null ? 'rgba(148,163,184,.3)' : (v >= 0 ? 'rgba(34,197,94,.7)' : 'rgba(239,68,68,.7)'))),
-      borderColor: diff.map(v => (v == null ? '#94a3b8' : (v >= 0 ? '#22c55e' : '#ef4444'))), borderWidth: 1,
-    });
-    const famOpts = {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: hasN1f, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } },
-      scales: {
-        x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
-      },
-    };
-    mk('famChart', { type: 'bar', data: { labels: f.map(x => cut(x.fam, 22)), datasets }, options: famOpts });
+    growShrink('famChart', rep.famille.slice(0, 8).map(x => ({ label: x.fam, n: x.n, n1: x.n1 })));
   }
   if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
     const p = rep.produits.topN.slice(0, 8);
@@ -1564,12 +1620,12 @@ function renderDailyChart(rep) {
   if (gran === 'hour' && !hasHour) gran = 'day';
   document.querySelectorAll('#report .gran').forEach(b => { b.classList.toggle('on', b.dataset.gran === gran); b.onclick = () => { GRAN = b.dataset.gran; renderDailyChart(LAST_REP); }; });
 
-  let labels, caN, caN1, sessN, sessN1, ttN, ttN1, addN;
+  let labels, caN, caN1, sessN, sessN1, ttN, ttN1, addN, addN1;
   if (gran === 'hour') {
     const hN = rep.hourly.n, hN1 = (rep.hourly && rep.hourly.n1) || [];
     labels = hN.map(x => x.hour + 'h');
     caN = hN.map(x => Math.round(x.ca)); caN1 = hN.map((x, i) => hN1[i] ? Math.round(hN1[i].ca) : null);
-    sessN = sessN1 = ttN = ttN1 = addN = null; // pas de trafic horaire (GA daté au jour)
+    sessN = sessN1 = ttN = ttN1 = addN = addN1 = null; // pas de trafic horaire (GA daté au jour)
   } else {
     const sN = aggDaily(rep.daily, gran), sN1 = aggDaily(rep.dailyN1 || [], gran);
     labels = sN.map(x => x.label);
@@ -1577,6 +1633,7 @@ function renderDailyChart(rep) {
     sessN = sN.map(x => x.sessions); sessN1 = sN.map((x, i) => sN1[i] ? sN1[i].sessions : null);
     ttN = sN.map(x => x.tt != null ? +(x.tt * 100).toFixed(2) : null); ttN1 = sN.map((x, i) => (sN1[i] && sN1[i].tt != null) ? +(sN1[i].tt * 100).toFixed(2) : null);
     addN = sN.map(x => x.addRate != null ? +(x.addRate * 100).toFixed(2) : null);
+    addN1 = sN.map((x, i) => (sN1[i] && sN1[i].addRate != null) ? +(sN1[i].addRate * 100).toFixed(2) : null);
   }
   const xax = { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } };
   const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
@@ -1590,16 +1647,17 @@ function renderDailyChart(rep) {
       },
     });
   };
-  // CA N vs N-1
+  // CA N vs N-1 (bâtons N et N-1)
   mk('dailyChart', [
     { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-    { type: 'line', label: 'CA N-1', yAxisID: 'y', data: caN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 },
   ], { x: xax, y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } } });
-  // Trafic (sessions N/N-1) + taux d'ajout panier
+  // Trafic (sessions) + taux d'ajout panier — 1 couleur / indicateur : plein = N, pointillé = N-1
   if (sessN) mk('trafChart', [
-    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2 },
-    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'Taux ajout panier %', yAxisID: 'y1', data: addN, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#4a9eff', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
+    { type: 'line', label: 'Ajout panier % N', yAxisID: 'y1', data: addN, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Ajout panier % N-1', yAxisID: 'y1', data: addN1, borderColor: '#a78bfa', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
   ], { x: xax, y: { position: 'left', ticks: { color: '#4a9eff', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } }, y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
   else if (_charts.trafChart) { _charts.trafChart.destroy(); }
   // TT N vs N-1
