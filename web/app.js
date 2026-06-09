@@ -1860,7 +1860,9 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `Simulation non-livré : ${esc(String(j.simNonLivrePieces ?? '—'))} pièces · ${esc(String(j.simNonLivreLines ?? '—'))} lignes\n\n`
         + `orderCustomerStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.statusDistinct || {}, null, 2))}\n\n`
         + `orderStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.orderStatusDistinct || {}, null, 2))}\n\n`
-        + `Statuts générant du non-livré :\n${esc(JSON.stringify(j.simNonLivreByStatus || {}, null, 2))}</pre>`;
+        + `Statuts générant du non-livré :\n${esc(JSON.stringify(j.simNonLivreByStatus || {}, null, 2))}\n\n`
+        + `Sonde API « Cancelled » : ${esc(JSON.stringify(j.probeCancelled || j.probeErr || '—'))}\n`
+        + `Sonde API « ShippedIncomplete » : ${esc(JSON.stringify(j.probeShippedIncomplete || '—'))}</pre>`;
     }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
