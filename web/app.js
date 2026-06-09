@@ -481,7 +481,9 @@ function renderReport(rep) {
     ['TOTAL Marketplace', mk.total, mk1.total],
   ];
 
-  const paysRows = (rep.pays || []).slice(0, 20)
+  // CA par pays : on exclut la France (≈ 70% du CA → écrase la lecture ; elle est isolée dans le split FR/Inter)
+  const isFrance = p => (p.pays || '').trim().toLowerCase() === 'france';
+  const paysRows = (rep.pays || []).filter(p => !isFrance(p)).slice(0, 20)
     .map(p => `<tr><td>${esc(p.pays)}</td><td>${fEur(p.n.ca)}</td><td>${p.n1 ? delta(p.n.ca, p.n1.ca) : '<span class="na">—</span>'}</td><td>${fInt(p.n.commandes)}</td><td>${fEur(p.n.pm)}</td></tr>`).join('');
 
   const famRows = (rep.famille || []).slice(0, 15)
@@ -691,8 +693,8 @@ function renderReport(rep) {
       <div class="kgrid" style="margin-top:10px">${tiles}</div>
       <div class="note">${empty ? '⚠ Checkout/achats GA absents → relance « Rafraîchir GA4 » pour le funnel détaillé. ' : ''}« Passage » = conversion depuis l’étape précédente. Écart Achats GA vs Commandes OMS = périmètre de tracking.</div></div>`;
   }
-  // TT par pays
-  const ttRows = (rep.ttPays || []).map(p => {
+  // TT par pays (hors France)
+  const ttRows = (rep.ttPays || []).filter(p => (p.pays || '').trim().toLowerCase() !== 'france').map(p => {
     const dTT = pc(p.tt, p.ttN1);
     return `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${p.ttN1 != null ? fPct(p.ttN1) : '—'}</td><td class="${dTT != null && dTT < 0 ? 'dn' : (dTT > 0 ? 'up' : '')}">${dTT != null ? sgn(dTT) : '—'}</td><td>${fEur(p.ca)}</td><td>${p.caN1 != null ? delta(p.ca, p.caN1) : '<span class="na">—</span>'}</td></tr>`;
   }).join('');
@@ -774,10 +776,10 @@ function renderReport(rep) {
   const topFam = (rep.famille || []).slice(0, 5);
   const famP = miniPanel('Top 5 familles (CA)', ['Famille', 'CA', 'Δ N-1'],
     topFam.length ? topFam.map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.n)}</td><td>${f.n1 != null ? delta(f.n, f.n1) : '—'}</td></tr>`).join('') : null);
-  // Top Campagnes (CA attribué GA4 × ROAS, depuis le croisement acquisition)
-  const campA = (rep.ads && rep.ads.campaigns || []).filter(c => c.caGA > 0).sort((a, b) => b.caGA - a.caGA).slice(0, 5);
-  const campP = miniPanel('Top 5 campagnes (CA)', ['Campagne', 'CA', 'ROAS'],
-    campA.length ? campA.map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 28))}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? c.roas.toFixed(2) + '×' : '—'}</td></tr>`).join('') : null);
+  // Top Campagnes : classées par dépense (toujours dispo via Google Ads), CA/ROAS si GA4 croisé
+  const campA = (rep.ads && rep.ads.campaigns || []).filter(c => c.spend > 0).sort((a, b) => ((b.caGA || 0) - (a.caGA || 0)) || (b.spend - a.spend)).slice(0, 5);
+  const campP = miniPanel('Top 5 campagnes', ['Campagne', 'Dépense', 'CA', 'ROAS'],
+    campA.length ? campA.map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 24))}</td><td>${fEur(c.spend)}</td><td>${c.caGA > 0 ? fEur(c.caGA) : '—'}</td><td>${c.roas != null ? c.roas.toFixed(2) + '×' : '—'}</td></tr>`).join('') : null);
   // Pilotage 360 = uniquement les TOP (KPI/détail CA/marketplace portés par le Bilan)
   const pilotPanels = [paysInterP, famP, prodCAP, prodQteP, canauxP, campP].filter(Boolean).join('');
   const kpiCard = pilotPanels
@@ -793,7 +795,7 @@ function renderReport(rep) {
   // International : performance par famille pour le top 5 pays
   let fampaysCard = '';
   if (rep.familleParPays && rep.familleParPays.length) {
-    const frows = rep.familleParPays.map(c => {
+    const frows = rep.familleParPays.filter(c => (c.pays || '').trim().toLowerCase() !== 'france').map(c => {
       const fams = (c.familles || []).map(f => `${esc(f.fam)} <span style="color:var(--t3)">(${fEur(f.ca)})</span>`).join(' · ');
       return `<tr><td><b>${esc(c.pays)}</b></td><td>${fEur(c.ca)}</td><td style="font-size:11px">${fams || '—'}</td></tr>`;
     }).join('');
@@ -1316,9 +1318,9 @@ function renderCharts(rep) {
     const d = rep.device.n;
     mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
   }
-  // Barres CA par pays (top 10)
+  // Barres CA par pays (top 10, hors France)
   if (rep.pays && rep.pays.length) {
-    const p = rep.pays.slice(0, 10);
+    const p = rep.pays.filter(x => (x.pays || '').trim().toLowerCase() !== 'france').slice(0, 10);
     mk('paysChart', { type: 'bar', data: { labels: p.map(x => cut(x.pays, 18)), datasets: [{ data: p.map(x => Math.round(x.n.ca)), backgroundColor: 'rgba(34,197,94,.55)', borderColor: '#22c55e', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
   }
   // Donut marketplace (part par enseigne)
