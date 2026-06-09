@@ -1729,7 +1729,11 @@ document.getElementById('logout').addEventListener('click', async () => {
   location.href = '/login.html';
 });
 document.getElementById('pdf').addEventListener('click', () => {
-  window.open(`/api/report/pdf?${reportQuery()}`, '_blank');
+  // Type de reporting → structure du PDF : 1 jour = quotidien, sinon hebdo/mensuel.
+  const v = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const oneDay = DATES && DATES.from && DATES.from === DATES.to;
+  const type = (CURRENT_MODULE === 'quotidien' || oneDay) ? 'quotidien' : 'periode';
+  window.open(`/api/report/pdf?${reportQuery()}&type=${type}`, '_blank');
 });
 document.getElementById('acAdd').addEventListener('click', addUser);
 document.getElementById('filesToggle').addEventListener('click', () => {
