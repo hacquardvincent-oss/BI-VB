@@ -494,7 +494,7 @@ router.get('/ping', requireAuth, async (req, res) => {
   try {
     const to = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
     const iso = d => d.toISOString().slice(0, 10);
-    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 300 });
+    const resp = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, page: 1, limit: 80 });
     const arr = Array.isArray(resp) ? resp : (resp && (resp.data || resp.orders || resp.results)) || [];
     out.orders = 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
     // Diagnostic « annulation » : valeurs DISTINCTES de orderCustomerStatus (le champ qui calque
@@ -543,23 +543,8 @@ router.get('/ping', requireAuth, async (req, res) => {
       const CL = /(color|colour|couleur|variant|declin|libdim|size|taille)/i;
       const pickCl = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (CL.test(k)) r[k] = obj[k]; }); return r; };
       out.itemColorFields = items[0] ? pickCl(items[0]) : {};
-      // Dump complet anonymisé d'un échantillon de commandes : on retire toute PII client et on
-      // garde TOUT le reste (statuts, quantités, dates…) pour identifier le vrai champ d'annulation.
-      const PII = /(name|email|mail|phone|tel|mobile|address|adresse|street|rue|city|ville|zip|postal|client|customer|firstname|lastname|civil|birth|naissance|iban|card|civility|contact|recipient|billing|shipping)/i;
-      const sanitize = (v, depth) => {
-        if (v == null || depth > 4) return (typeof v === 'object' ? '…' : v);
-        if (Array.isArray(v)) return v.slice(0, 3).map(x => sanitize(x, depth + 1));
-        if (typeof v === 'object') { const r = {}; Object.keys(v).forEach(k => { if (PII.test(k)) return; r[k] = sanitize(v[k], depth + 1); }); return r; }
-        return v;
-      };
-      // 1) première commande, 2) une commande avec une ligne non expédiée (candidat annulation/attente)
-      out.sampleOrder = sanitize(o0, 0);
-      const pend = arr.find(o => (Array.isArray(o.orderItems) ? o.orderItems : []).some(it => {
-        const qo = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
-        const qs = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : qo;
-        return qo > 0 && qs < qo;
-      }));
-      out.sampleOrderNonExpedie = pend ? sanitize(pend, 0) : '(aucune ligne non expédiée dans l\'échantillon)';
+      // Statut de la commande échantillon (anonyme : juste les valeurs de statut, pas de PII).
+      out.sampleOrderStatuses = { orderCustomerStatus: o0.orderCustomerStatus || '(vide)', orderStatus: o0.orderStatus || '(vide)', orderStoreStatus: o0.orderStoreStatus || '(vide)' };
     }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
   res.json(out);
