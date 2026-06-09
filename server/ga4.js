@@ -126,6 +126,28 @@ async function fetchItemFunnel(propertyId, startDate, endDate) {
   }));
 }
 
+// Funnel produit pour la page de saison : large limite, stocké en dataset (jointure par nom).
+async function fetchSaisonItems(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'itemName' }],
+    metrics: [{ name: 'itemsViewed' }, { name: 'itemsAddedToCart' }, { name: 'itemsPurchased' }],
+    orderBys: [{ metric: { metricName: 'itemsViewed' }, desc: true }],
+    limit: 5000,
+  });
+  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.metricValues[0].value, r.metricValues[1].value, r.metricValues[2].value]);
+  return { hdrs: ['Item', 'Vues', 'Paniers', 'Achats'], rows, map: { item: 0, views: 1, carts: 2, purchases: 3 }, row_count: rows.length, uploaded_by: 'GA4 API', uploaded_at: new Date().toISOString() };
+}
+// Récupère le funnel produit GA4 pour les fenêtres saison N (et N-1) → slots saisongaitem.
+async function refreshSaisonItems(opts = {}) {
+  const propertyId = process.env.GA4_PROPERTY_ID;
+  if (!propertyId) throw new Error('GA4_PROPERTY_ID non défini');
+  let n = 0, n1 = 0;
+  if (opts.from && opts.to) { const d = await fetchSaisonItems(propertyId, opts.from, opts.to); store.setDataset('saisongaitem', 'N', d); n = d.row_count; }
+  if (opts.cfrom && opts.cto) { const d = await fetchSaisonItems(propertyId, opts.cfrom, opts.cto); store.setDataset('saisongaitem', 'N1', d); n1 = d.row_count; }
+  return { itemsN: n, itemsN1: n1 };
+}
+
 // ── Top pages vues (× pays → filtrable par dimension) ───────────────────────
 async function fetchPages(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
@@ -305,6 +327,15 @@ router.post('/refresh', requireAuth, async (req, res) => {
   try {
     const r = await refresh(req.query);
     res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/saison-items', requireAuth, async (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (clé ou GA4_PROPERTY_ID manquants côté serveur)' });
+  try {
+    res.json({ ok: true, ...(await refreshSaisonItems(req.query)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

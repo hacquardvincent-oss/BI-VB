@@ -747,6 +747,20 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const inColN1 = e => !!(setN1 && e.model && setN1.has(e.model));
   const sum = arr => arr.reduce((s, e) => s + e.ca, 0);
 
+  // GA4 produit (item-level) : vues / paniers / achats par nom d'article → jointure par désignation
+  const gaItemsDs = await loadDataset('saisongaitem', 'N');
+  const hasGA = !!(gaItemsDs && gaItemsDs.rows && gaItemsDs.rows.length);
+  const gaMap = {};
+  if (hasGA) {
+    const mp = gaItemsDs.map || {};
+    gaItemsDs.rows.forEach(r => {
+      const key = calc.norm(r[mp.item] || ''); if (!key) return;
+      const e = gaMap[key] || (gaMap[key] = { views: 0, carts: 0, purchases: 0 });
+      e.views += parseFloat(r[mp.views]) || 0; e.carts += parseFloat(r[mp.carts]) || 0; e.purchases += parseFloat(r[mp.purchases]) || 0;
+    });
+  }
+  const gaFor = des => hasGA ? (gaMap[calc.norm(des || '')] || null) : null;
+
   // Index désignation (modèle) → CA/qté, N et N-1 (tout EShop) pour le comparatif produit
   const desKey = e => `${e.fam} ${e.des || e.ref || '(sans désignation)'}`;
   const desIdx = arr => { const o = {}; arr.forEach(e => { const k = desKey(e); const t = o[k] || (o[k] = { fam: e.fam, des: e.des || e.ref || '(sans désignation)', ca: 0, qte: 0, caFP: 0, stock: 0, qteRet: 0, montantRet: 0 }); t.ca += e.ca; t.qte += e.qte; t.caFP += e.caFP || 0; t.stock += e.stock || 0; t.qteRet += e.qteRet || 0; t.montantRet += e.montantRet || 0; }); return o; };
@@ -763,7 +777,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const familles = Object.values(famAgg).map(f => {
     // Top 10 produits (désignation) de la famille, vs même produit en N-1 (0 si nouveauté)
     const produits = Object.values(nDes).filter(d => d.fam === f.fam).sort((a, b) => b.ca - a.ca).slice(0, 80)
-      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caFP: d.caFP, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0, caFPN1: p ? p.caFP : 0, stock: d.stock, sellThrough: hasStock ? stRate(d.qte, d.stock) : null, qteRet: d.qteRet, tauxRetour: (hasRet && d.qte > 0) ? d.qteRet / d.qte : null, caNet: d.ca - (d.montantRet || 0) }; });
+      .map(d => { const p = n1Des[`${f.fam} ${d.des}`]; return { des: d.des, ca: d.ca, qte: d.qte, caFP: d.caFP, caN1: p ? p.ca : 0, qteN1: p ? p.qte : 0, caFPN1: p ? p.caFP : 0, stock: d.stock, sellThrough: hasStock ? stRate(d.qte, d.stock) : null, qteRet: d.qteRet, tauxRetour: (hasRet && d.qte > 0) ? d.qteRet / d.qte : null, caNet: d.ca - (d.montantRet || 0), ...(gaFor(d.des) ? (gp => ({ vues: gp.views, tauxATC: gp.views > 0 ? gp.carts / gp.views : null, convProduit: gp.views > 0 ? gp.purchases / gp.views : null }))(gaFor(d.des)) : { vues: null, tauxATC: null, convProduit: null }) }; });
     // Réfs bien vendues en N-1 (collection E25) qu'on ne vend plus cette année (désignation, EShop complet N)
     const top = produits.slice(0, 10);
     const perdusRaw = {};
@@ -826,7 +840,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   }
 
   return {
-    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet },
+    meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet, hasGA },
     global: {
       ca: kN.ca, caN1: kN1 ? kN1.ca : null,
       commandes: kN.commandes, commandesN1: kN1 ? kN1.commandes : null,

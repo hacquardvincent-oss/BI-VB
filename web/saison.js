@@ -337,6 +337,20 @@ if (merchBtn) merchBtn.addEventListener('click', async () => {
     res => `✓ Stock : ${fInt(res.stockRefs)} réfs · Retours N : ${fInt(res.retoursN)}${res.retoursN1 ? ` · N-1 : ${fInt(res.retoursN1)}` : ''}${res.backInStock ? ` · Back-in-stock : ${fInt(res.backInStock)}` : ''}`);
 });
 
+const gaItemBtn = document.getElementById('gaItemApi');
+if (gaItemBtn) gaItemBtn.addEventListener('click', async () => {
+  const note = document.getElementById('gaItemNote');
+  gaItemBtn.disabled = true; note.textContent = 'Import GA4 produits (N et N-1)…';
+  try {
+    const q = new URLSearchParams(period()).toString();
+    const r = await fetch('/api/ga4/saison-items?' + q, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); gaItemBtn.disabled = false; return; }
+    note.textContent = `✓ GA4 produits : ${fInt(j.itemsN)} articles N${j.itemsN1 ? ` · ${fInt(j.itemsN1)} N-1` : ''}.`;
+    gaItemBtn.disabled = false; loadReport();
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); gaItemBtn.disabled = false; }
+});
+
 document.getElementById('wshoprefresh').addEventListener('click', async () => {
   const note = document.getElementById('wshopnote');
   const btns = [document.getElementById('wshoprefresh'), document.getElementById('loadBtn')];
@@ -362,10 +376,10 @@ function familleDetailHTML(fam) {
   const offN1 = f.caOffN1 != null ? f.caOffN1 : ((f.caN1 || 0) - (f.caFPN1 || 0));
   const tile = (label, val, d) => `<div class="kc"><div class="l">${label}</div><div class="v">${val}</div>${d ? `<div class="note" style="margin-top:2px">${d}</div>` : ''}</div>`;
   const m = LAST_REP.meta || {};
-  const hasStock = !!m.hasStock, hasRet = !!m.hasRet;
+  const hasStock = !!m.hasStock, hasRet = !!m.hasRet, hasGA = !!m.hasGA;
   const stCls = v => v == null ? '' : (v >= 0.7 ? 'up' : v < 0.3 ? 'dn' : '');
-  const extraH = (hasStock ? '<th>Stock</th><th>Sell-thr.</th>' : '') + (hasRet ? '<th>Retour</th>' : '');
-  const ncol = 6 + (hasStock ? 2 : 0) + (hasRet ? 1 : 0);
+  const extraH = (hasStock ? '<th>Stock</th><th>Sell-thr.</th>' : '') + (hasRet ? '<th>Retour</th>' : '') + (hasGA ? '<th title="Vues fiche produit (GA4)">Vues</th><th title="Ajouts panier / vues">ATC</th><th title="Achats / vues">Conv.</th>' : '');
+  const ncol = 6 + (hasStock ? 2 : 0) + (hasRet ? 1 : 0) + (hasGA ? 3 : 0);
   const prodR = (f.produits || []).map(p => {
     const pOff = p.ca - (p.caFP || 0);
     return `<tr>
@@ -377,6 +391,7 @@ function familleDetailHTML(fam) {
       <td>${fInt(p.qte)}</td>
       ${hasStock ? `<td>${fInt(p.stock)}</td><td class="${stCls(p.sellThrough)}">${p.sellThrough != null ? fPct(p.sellThrough) : '—'}</td>` : ''}
       ${hasRet ? `<td class="${p.tauxRetour > 0.25 ? 'dn' : ''}">${p.tauxRetour != null ? fPct(p.tauxRetour) : '—'}</td>` : ''}
+      ${hasGA ? `<td>${p.vues != null ? fInt(p.vues) : '—'}</td><td>${p.tauxATC != null ? fPct(p.tauxATC) : '—'}</td><td class="${p.convProduit != null ? (p.convProduit >= 0.04 ? 'up' : p.convProduit < 0.01 ? 'dn' : '') : ''}">${p.convProduit != null ? fPct(p.convProduit) : '—'}</td>` : ''}
     </tr>`;
   }).join('') || `<tr><td colspan="${ncol}" class="na">Aucun produit.</td></tr>`;
   const perdusR = (f.perdus || []).map(p => `<tr>
