@@ -1416,18 +1416,25 @@ function renderTimelineChart(rep) {
   const tl = rep.timeline;
   const labels = tl.map(d => (d.date || d.label || '').slice(5));
   const ca = tl.map(d => Math.round(d.ca || 0));
+  const caN1 = tl.map(d => d.caN1 != null ? Math.round(d.caN1) : null);
   const tt = tl.map(d => d.tt != null ? +(d.tt * 100).toFixed(2) : null);
+  const ttN1 = tl.map(d => d.ttN1 != null ? +(d.ttN1 * 100).toFixed(2) : null);
   const atc = tl.map(d => d.addRate != null ? +(d.addRate * 100).toFixed(2) : null);
-  const maxCa = Math.max(1, ...ca);
+  const atcN1 = tl.map(d => d.addN1 != null ? +(d.addN1 * 100).toFixed(2) : null);
+  const hasN1 = caN1.some(v => v != null);
+  const maxCa = Math.max(1, ...ca, ...caN1.filter(v => v != null));
   const emailPts = tl.map(d => d.email ? maxCa * 1.06 : null);
   const el = document.getElementById('tlChart'); if (!el) return;
   if (_charts.tlChart) _charts.tlChart.destroy();
   _charts.tlChart = new Chart(el.getContext('2d'), {
     data: {
       labels, datasets: [
-        { type: 'bar', label: 'CA/jour', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
-        { type: 'line', label: 'TT %', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-        { type: 'line', label: 'Ajouts panier %', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
+        ...(hasN1 ? [{ type: 'line', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, borderColor: '#f5a623', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: 'TT % N', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#22c55e', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#a78bfa', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
         { type: 'line', label: '✉️ Email envoyé', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
       ],
     },

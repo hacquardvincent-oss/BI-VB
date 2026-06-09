@@ -432,7 +432,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const vals = Object.values(emailByDay).filter(v => v > 0).sort((a, b) => a - b);
     const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
     const thr = Math.max(med * 1.5, 10);
-    return serie.map(d => ({ ...d, email: (emailByDay[d.date] || 0) >= thr }));
+    // N-1 : même fenêtre décalée de 364 j (CA/TT/ajouts panier) → courbes en pointillé.
+    const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
+    const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
+    const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f).forEach(e => { byDate1[e.date] = e; });
+    return serie.map(d => { const e1 = byDate1[isoShiftDays(d.date, -364)]; return { ...d, email: (emailByDay[d.date] || 0) >= thr, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),

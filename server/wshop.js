@@ -166,7 +166,11 @@ function orderToRows(order) {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
     const qShipRaw = it.quantityShipped;
     const qShip = qShipRaw != null ? (parseInt(qShipRaw) || 0) : qOrd; // expédié inconnu → considéré livré
-    const nonLivre = isFinal ? Math.max(0, qOrd - qShip) : 0;
+    // quantityOffered = quantité encore À EXPÉDIER (non annulée). Donc annulé = commandé − expédié − offert.
+    // Commande en cours → offered > 0 → 0 annulé ; commande annulée → offered = 0 & expédié = 0 → comptée.
+    // Repli (champ absent) : finalisation par statut/âge.
+    const qOff = it.quantityOffered != null ? (parseInt(it.quantityOffered) || 0) : null;
+    const nonLivre = qOff != null ? Math.max(0, qOrd - qShip - qOff) : (isFinal ? Math.max(0, qOrd - qShip) : 0);
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
     // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
     // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price

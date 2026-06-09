@@ -986,9 +986,12 @@ function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
   }
   if (y2Rows && y2Map && y2Map.code !== undefined) {
     const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab;
-    y2Rows.forEach(r => add(y2Ref(r[ci], li !== undefined ? r[li] : ''), '',
-      y2ChannelOf(ei !== undefined ? r[ei] : ''),
-      fN(r[tci]), q2 !== undefined ? (parseInt((r[q2] || '1').toString().replace(/\s/g, '')) || 1) : 1));
+    y2Rows.forEach(r => {
+      const ttc = fN(r[tci]);
+      if (ttc <= 0) return; // exclure les retours (Total TTC ≤ 0) → pas de CA négatif par famille
+      add(y2Ref(r[ci], li !== undefined ? r[li] : ''), '', y2ChannelOf(ei !== undefined ? r[ei] : ''),
+        ttc, q2 !== undefined ? (parseInt((r[q2] || '1').toString().replace(/\s/g, '')) || 1) : 1);
+    });
   }
   return { byRef, byChannel };
 }
