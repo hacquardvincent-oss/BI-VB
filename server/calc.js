@@ -733,10 +733,14 @@ function calcCancellations(rows, map) {
     }
   });
   return {
-    qteAnnulee, qteCmd, caAnnuleEstime: caAnnule, caPaye,
+    qteAnnulee, qteCmd, caAnnuleEstime: caAnnule, caNonLivre: caAnnule, caPaye,
+    caCommande: caPaye, caLivre: caPaye - caAnnule,
     commandesImpactees: ordersImpacted.size,
     tauxPieces: qteCmd > 0 ? qteAnnulee / qteCmd : null,
-    tauxCAEstime: (caAnnule + caPaye) > 0 ? caAnnule / (caAnnule + caPaye) : null,
+    // CA payé = Prix de vente payé = unit × quantité COMMANDÉE → inclut déjà la valeur non livrée.
+    // Taux d'annulation CA = CA non livré ÷ CA commandé (et non ÷ (annulé + payé), qui double-comptait).
+    tauxCA: caPaye > 0 ? caAnnule / caPaye : null,
+    tauxCAEstime: caPaye > 0 ? caAnnule / caPaye : null,
   };
 }
 
