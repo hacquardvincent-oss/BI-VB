@@ -544,25 +544,53 @@ function returnsDataset(returns, eanToRef) {
   const rows = Object.entries(by).map(([ref, v]) => [ref, String(v.qte), v.montant.toFixed(2)]);
   return { hdrs: ['Ref. externe', 'Nb colisages rembourses', 'Montant rembourse'], rows, map: { ref_ext: 0, qte: 1, montant: 2 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
-// Orchestrateur : stock actuel → saisonstock N ; retours N et N-1 → saisonret N / N1.
+// Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
+async function fetchBackInStock(fromISO, toISO) {
+  const out = []; let page = 1; const limit = 1000;
+  for (let i = 0; i < 300; i++) {
+    const resp = await apiPost('/api/v1/back-in-stock-subscriptions/get', { begin: fromISO, end: toISO, page, limit, exclude_anonymized_customer: true });
+    const arr = Array.isArray(resp) ? resp : ((resp && resp.data) || []);
+    out.push(...arr);
+    if (arr.length < limit) break;
+    page += 1;
+  }
+  return out;
+}
+function bisDataset(subs, eanToRef) {
+  const by = {};
+  subs.forEach(s => {
+    const it = s.item || {};
+    const ean = (it.ean || '').toString().trim();
+    const ref = eanToRef[ean] || ean; if (!ref) return;
+    const e = by[ref] || (by[ref] = { title: '', count: 0, waiting: 0 });
+    if (!e.title && it.title) e.title = it.title;
+    e.count += 1;
+    if ((s.status || '') === 'subscribed') e.waiting += 1;
+  });
+  const rows = Object.entries(by).map(([ref, v]) => [ref, v.title, String(v.count), String(v.waiting)]);
+  return { hdrs: ['Ref. externe', 'Titre', 'Abonnements', 'En attente'], rows, map: { ref_ext: 0, title: 1, count: 2, waiting: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+}
+// Orchestrateur : stock actuel → saisonstock N ; retours N/N-1 → saisonret ; back-in-stock → saisonbis N.
 async function refreshSaisonMerch(opts = {}, cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré');
   if (cb.phase) cb.phase('Stock (inventory)…');
   const inv = await fetchInventory();
   store.setDataset('saisonstock', 'N', stockDataset(inv.byRef));
   if (cb.count) cb.count('N', Object.keys(inv.byRef).length);
-  let retN = 0, retN1 = 0;
+  let retN = 0, retN1 = 0, bis = 0;
   if (opts.from && opts.to) {
     if (cb.phase) cb.phase('Retours N…');
     const rN = await fetchReturnsRange(opts.from, opts.to);
     store.setDataset('saisonret', 'N', returnsDataset(rN, inv.eanToRef)); retN = rN.length;
+    if (cb.phase) cb.phase('Back-in-stock (demande)…');
+    try { const subs = await fetchBackInStock(opts.from, opts.to); store.setDataset('saisonbis', 'N', bisDataset(subs, inv.eanToRef)); bis = subs.length; } catch (e) { /* best-effort */ }
   }
   if (opts.cfrom && opts.cto) {
     if (cb.phase) cb.phase('Retours N-1…');
     const rN1 = await fetchReturnsRange(opts.cfrom, opts.cto);
     store.setDataset('saisonret', 'N1', returnsDataset(rN1, inv.eanToRef)); retN1 = rN1.length;
   }
-  return { stockRefs: Object.keys(inv.byRef).length, invItems: inv.count, retoursN: retN, retoursN1: retN1 };
+  return { stockRefs: Object.keys(inv.byRef).length, invItems: inv.count, retoursN: retN, retoursN1: retN1, backInStock: bis };
 }
 
 router.post('/refresh', requireAuth, (req, res) => {
