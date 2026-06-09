@@ -37,6 +37,7 @@ const OMS_CANON = [
   ['NOM MAGASIN', 'mag'], ['Type Paiement', 'type'], ['Numeros', 'num'], ['Designation produit', 'des'],
   ['quantites commandees', 'qte'], ['Quantité non livré', 'qte_non_livre'], ['Ref. externe', 'ref_ext'],
   ['Lieu de prise de commande', 'lieu'], ['Prix Vente', 'pv'], ['Prix Vente Remise', 'pv_remise'],
+  ['Statut commande', 'statut'],
 ];
 
 // Colonnes PII à NE PAS conserver (privacy by design — cf. ADR-005)

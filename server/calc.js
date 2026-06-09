@@ -95,6 +95,7 @@ const OMS_ALIASES = {
   pv: ['prix vente'],
   pv_remise: ['prix vente remise'],
   lieu: ['lieu de prise de commande', 'lieu prise de commande', 'lieu de commande'],
+  statut: ['statut commande', 'statut', 'status'],
 };
 const Y2_ALIASES = {
   date: ['date'],
@@ -833,10 +834,10 @@ function calcCancellations(rows, map) {
 // Détail des annulations : entrepôt (WEBSTORE) vs magasin (ship-from-store),
 // + top magasins qui annulent + top produits annulés (qté & CA estimé).
 function calcCancellationsDetail(rows, map) {
-  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type;
+  const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
   const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
-  const byStore = {}, byProd = {}, byCanal = {};
+  const byStore = {}, byProd = {}, byCanal = {}, byStatut = {};
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
@@ -856,6 +857,9 @@ function calcCancellationsDetail(rows, map) {
     const c = byCanal[canal] || (byCanal[canal] = { canal, qte: 0, ca: 0, prods: {} });
     c.qte += nonLivre; c.ca += caAnn;
     const cp = c.prods[des] || (c.prods[des] = { des, qte: 0, ca: 0 }); cp.qte += nonLivre; cp.ca += caAnn;
+    // Répartition par statut OMS (audit : Cancelled vs ShippedIncomplete vs …).
+    const st = (si !== undefined ? (r[si] || '').trim() : '') || '(statut absent)';
+    const bs = byStatut[st] || (byStatut[st] = { statut: st, qte: 0, ca: 0 }); bs.qte += nonLivre; bs.ca += caAnn;
   });
   const r2 = x => Math.round(x * 100) / 100;
   return {
@@ -867,6 +871,7 @@ function calcCancellationsDetail(rows, map) {
       canal: c.canal, qte: c.qte, ca: r2(c.ca),
       top: Object.values(c.prods).map(p => ({ ...p, ca: r2(p.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 5),
     })).sort((a, b) => b.qte - a.qte).slice(0, 8),
+    byStatut: Object.values(byStatut).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte),
   };
 }
 
