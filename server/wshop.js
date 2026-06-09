@@ -150,21 +150,23 @@ function orderToRows(order) {
   const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
-  // Statut de la commande : on ne compte une « quantité non livrée » (annulation) QUE si la
-  // commande est finalisée (expédiée/livrée/close/annulée). Une commande encore en cours
-  // (non expédiée) ne doit PAS être comptée comme annulée (sinon les commandes d'hier, pas
-  // encore préparées, gonflent faussement le taux). Repli sans statut : seulement les
-  // expéditions PARTIELLES (0 < expédié < commandé).
+  // « Quantité non livrée » (annulation) = commandé − expédié, mais UNIQUEMENT sur les commandes
+  // FINALISÉES. L'API WSHOP n'expose pas de statut → on considère une commande finalisée si son
+  // statut le dit (si présent), sinon si elle date de plus de WSHOP_FINALIZE_DAYS jours (défaut 14).
+  // Ainsi une commande d'hier (encore en préparation, expédié = 0) → 0 (pas une annulation), et une
+  // commande ancienne non expédiée → comptée (vraie annulation).
   const st = (o.status || o.orderStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString().toLowerCase();
-  const finalized = st ? (/(ship|exped|deliver|livr|clos|complet|cancel|annul|refus|return|remb)/.test(st) ? true
-    : (/(pending|process|prepar|attente|en cours|nouveau|new|created|waiting|valid|paid|payé|confirm)/.test(st) ? false : null)) : null;
+  const statusFinal = st ? (/(ship|exped|deliver|livr|clos|complet|cancel|annul|refus|return|remb)/.test(st) ? true
+    : (/(pending|process|prepar|attente|en cours|nouveau|new|created|waiting|valid|paid|confirm)/.test(st) ? false : null)) : null;
+  const finalizeDays = parseInt(process.env.WSHOP_FINALIZE_DAYS || '14', 10) || 14;
+  const tOrd = Date.parse((o.orderDate || '').toString().replace(' ', 'T'));
+  const ageDays = isNaN(tOrd) ? 999 : (Date.now() - tOrd) / 86400000;
+  const isFinal = statusFinal != null ? statusFinal : (ageDays >= finalizeDays);
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
     const qShipRaw = it.quantityShipped;
     const qShip = qShipRaw != null ? (parseInt(qShipRaw) || 0) : qOrd; // expédié inconnu → considéré livré
-    const ecart = Math.max(0, qOrd - qShip);
-    // finalisée → écart réel ; en cours → 0 ; inconnu → uniquement si expédition partielle.
-    const nonLivre = finalized === true ? ecart : (finalized === false ? 0 : (qShipRaw != null && qShip > 0 && qShip < qOrd ? ecart : 0));
+    const nonLivre = isFinal ? Math.max(0, qOrd - qShip) : 0;
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
     // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
     // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price
