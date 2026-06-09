@@ -266,7 +266,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   }
   // Campagnes (UTM) N vs N-1 — agrégées par campagne après filtre pays
   const campN = store.getDataset('gacampaigns', 'N'), campN1 = store.getDataset('gacampaigns', 'N1');
-  let campaigns = null, lostCampaigns = null, campaignsTotals = null, gaCampAggN = null, gaCampAggN1 = null;
+  let campaigns = null, lostCampaigns = null, newCampaigns = null, campaignsTotals = null, gaCampAggN = null, gaCampAggN1 = null;
   if (campN && campN.rows) {
     const aggCamp = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const e = m[x.campaign] || (m[x.campaign] = { sessions: 0, purchases: 0, revenue: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; e.revenue += x.revenue || 0; }); return m; };
     const aN = aggCamp(campN.rows), aN1 = aggCamp(campN1 && campN1.rows);
@@ -290,6 +290,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     lostCampaigns = Object.entries(aN1).filter(([c, v]) => v.sessions >= 100 && (!aN[c] || aN[c].sessions < v.sessions * 0.2))
       .map(([campaign, v]) => ({ campaign, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[campaign] || {}).sessions || 0 }))
       .sort((a, b) => b.revenueN1 - a.revenueN1).slice(0, 10);
+    // Nouvelles campagnes N (présentes en N, absentes/quasi nulles en N-1)
+    newCampaigns = Object.entries(aN).filter(([c, v]) => v.sessions >= 100 && (!aN1[c] || aN1[c].sessions < v.sessions * 0.2))
+      .map(([campaign, v]) => ({ campaign, sessionsN: v.sessions, revenueN: v.revenue, sessionsN1: (aN1[campaign] || {}).sessions || 0 }))
+      .sort((a, b) => b.revenueN - a.revenueN).slice(0, 10);
   }
   // ── Acquisition payante : croisement Ads (dépense) × GA4 (sessions/conv/CA attribué) par campagne ──
   if (ads && adsCalcN && adsCalcN.byCampaign) {
@@ -560,6 +564,17 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     })).sort((a, b) => b.caN - a.caN);
   }
 
+  // ── Plan d'action / pilotage : qu'est-ce qui a CHANGÉ vs N-1 (offre produit + campagnes) ──
+  const offerChanges = (() => {
+    const TH = 300, r2 = x => Math.round(x * 100) / 100, inP = [], outP = [];
+    if (topN1obj) {
+      Object.entries(topNobj).forEach(([des, v]) => { const b = topN1obj[des]; if (v.ca >= TH && (!b || b.ca < v.ca * 0.2)) inP.push({ des, ca: r2(v.ca), qte: v.qte }); });
+      Object.entries(topN1obj).forEach(([des, v]) => { const a = topNobj[des]; if (v.ca >= TH && (!a || a.ca < v.ca * 0.2)) outP.push({ des, caN1: r2(v.ca), qteN1: v.qte }); });
+    }
+    return { entrants: inP.sort((a, b) => b.ca - a.ca).slice(0, 10), sortants: outP.sort((a, b) => b.caN1 - a.caN1).slice(0, 10) };
+  })();
+  const actionPlan = { newCampaigns, missingCampaigns: lostCampaigns, offerChanges };
+
   return {
     empty: false,
     meta: {
@@ -614,6 +629,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     campaigns,
     campaignsTotals,
     lostCampaigns,
+    newCampaigns,
+    actionPlan,
     campaignLanding,
     topPagesBySource,
     lostPagesBySource,
