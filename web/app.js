@@ -1853,6 +1853,15 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `Montants ligne (item) : ${esc(JSON.stringify(j.itemPriceFields || {}, null, 2))}\n\n`
         + `Montants commande : ${esc(JSON.stringify(j.orderPriceFields || {}, null, 2))}</pre>`;
     }
+    if (j.statusDistinct || j.simNonLivrePieces != null) {
+      html += `<div style="margin-top:8px"><b>Diagnostic annulations</b> (statuts, anonyme) :</div>`
+        + `<pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:4px;overflow-x:auto">`
+        + `Échantillon : ${esc(String(j.sampleCount ?? '—'))} commandes\n`
+        + `Simulation non-livré : ${esc(String(j.simNonLivrePieces ?? '—'))} pièces · ${esc(String(j.simNonLivreLines ?? '—'))} lignes\n\n`
+        + `orderCustomerStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.statusDistinct || {}, null, 2))}\n\n`
+        + `orderStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.orderStatusDistinct || {}, null, 2))}\n\n`
+        + `Statuts générant du non-livré :\n${esc(JSON.stringify(j.simNonLivreByStatus || {}, null, 2))}</pre>`;
+    }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
