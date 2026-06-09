@@ -236,6 +236,28 @@ function render(rep) {
     </div>`;
   }
 
+  // 5 · Demande — produits les plus attendus (back-in-stock) → réassort prioritaire
+  let demandeCard = '';
+  if (rep.demande && rep.demande.top && rep.demande.top.length) {
+    const dm = rep.demande;
+    const r = dm.top.map(p => {
+      const prio = (p.stock === 0 || (p.sellThrough != null && p.sellThrough >= 0.8)) && p.count >= 3;
+      return `<tr>
+        <td title="${esc(p.title)}">${prio ? '🔥 ' : ''}${esc((p.title || '').slice(0, 44))}</td>
+        <td>${esc(p.fam)}</td>
+        <td>${fInt(p.count)}</td>
+        <td>${fInt(p.waiting)}</td>
+        <td class="${p.stock === 0 ? 'dn' : ''}">${fInt(p.stock)}</td>
+        <td>${p.sellThrough != null ? fPct(p.sellThrough) : '—'}</td>
+      </tr>`;
+    }).join('');
+    demandeCard = `<div class="card">
+      <h3>🔔 Produits les plus attendus (back-in-stock) — réassort prioritaire</h3>
+      <table><thead><tr><th>Produit</th><th>Famille</th><th>Abonnements</th><th>En attente</th><th>Stock actuel</th><th>Sell-through</th></tr></thead><tbody>${r}</tbody></table>
+      <div class="note">Nombre de clients qui ont demandé « prévenez-moi quand dispo » → signal de <b>demande</b> sur les ruptures. 🔥 = forte demande + stock épuisé/quasi épuisé → <b>réassort prioritaire</b>. Source : abonnements back-in-stock WSHOP sur la période.</div>
+    </div>`;
+  }
+
   // Contrôle des données (CA global EShop + réconciliation) : replié, sert au contrôle du chargement
   const controlSection = `<details>
     <summary class="card" style="cursor:pointer;font-weight:700;font-size:12px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;list-style:none">🛠️ Contrôle du chargement des données (CA global EShop + réconciliation) ▾</summary>
@@ -250,7 +272,7 @@ function render(rep) {
     selSaison.dataset.filled = String(m.saisons.length);
   }
   if (selSaison) selSaison.value = SAISON;
-  box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + controlSection;
+  box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + demandeCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
   if (ds) ds.addEventListener('change', loadReport);
@@ -312,7 +334,7 @@ if (merchBtn) merchBtn.addEventListener('click', async () => {
     if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btns.forEach(b => { b.disabled = false; }); return; }
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btns.forEach(b => { b.disabled = false; }); return; }
   pollJob(btns, note,
-    res => `✓ Stock : ${fInt(res.stockRefs)} réfs · Retours N : ${fInt(res.retoursN)}${res.retoursN1 ? ` · N-1 : ${fInt(res.retoursN1)}` : ''}`);
+    res => `✓ Stock : ${fInt(res.stockRefs)} réfs · Retours N : ${fInt(res.retoursN)}${res.retoursN1 ? ` · N-1 : ${fInt(res.retoursN1)}` : ''}${res.backInStock ? ` · Back-in-stock : ${fInt(res.backInStock)}` : ''}`);
 });
 
 document.getElementById('wshoprefresh').addEventListener('click', async () => {

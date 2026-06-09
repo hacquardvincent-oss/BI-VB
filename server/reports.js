@@ -809,6 +809,22 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const seuil = parseFloat((demSeuil || '').toString().replace(',', '.'));
   const demarque = detectDemarque(dailyOff(rowsN, omsN.map), hasN1 ? dailyOff(rowsN1, mapN1) : null, seuil > 1 ? seuil / 100 : seuil);
 
+  // Demande (back-in-stock) : produits les plus attendus, croisés au stock & aux ventes → réassort
+  const bisDs = await loadDataset('saisonbis', 'N');
+  let demande = null;
+  if (bisDs && bisDs.rows && bisDs.rows.length) {
+    const mp = bisDs.map || {};
+    const top = bisDs.rows.map(r => {
+      const ref = (r[mp.ref_ext] || '').toString().trim();
+      const count = parseInt(r[mp.count]) || 0, waiting = parseInt(r[mp.waiting]) || 0;
+      const stock = stkN[ref] || 0;
+      const sold = nWin[ref] ? nWin[ref].qte : 0;
+      const fam = refMap[ref] || '(non référencé)';
+      return { ref, title: (r[mp.title] || ref).toString(), fam, count, waiting, stock, sold, sellThrough: (sold + stock) > 0 ? sold / (sold + stock) : null };
+    }).sort((a, b) => b.count - a.count).slice(0, 30);
+    demande = { top, total: top.reduce((s, x) => s + x.count, 0) };
+  }
+
   return {
     meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet },
     global: {
@@ -827,6 +843,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
     kpiGlobal,
     fullOff,
     demarque,
+    demande,
     familles,
   };
 }
