@@ -1861,8 +1861,10 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `orderCustomerStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.statusDistinct || {}, null, 2))}\n\n`
         + `orderStatus (valeurs · nb cmd) :\n${esc(JSON.stringify(j.orderStatusDistinct || {}, null, 2))}\n\n`
         + `Statuts générant du non-livré :\n${esc(JSON.stringify(j.simNonLivreByStatus || {}, null, 2))}\n\n`
-        + `Sonde API « Cancelled » : ${esc(JSON.stringify(j.probeCancelled || j.probeErr || '—'))}\n`
-        + `Sonde API « ShippedIncomplete » : ${esc(JSON.stringify(j.probeShippedIncomplete || '—'))}</pre>`;
+        + `Sonde « Cancelled » (comptée) : ${esc(JSON.stringify(j.probeCancelled || j.probeErr || '—'))}\n`
+        + `Sonde « CancelledInternal » (comptée) : ${esc(JSON.stringify(j.probeCancelledInternal || '—'))}\n`
+        + `Sonde « ShippedIncomplete » (comptée) : ${esc(JSON.stringify(j.probeShippedIncomplete || '—'))}\n`
+        + `Sonde « CancelledCustomer » (EXCLUE) : ${esc(JSON.stringify(j.probeCancelledCustomer || '—'))}</pre>`;
     }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
