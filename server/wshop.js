@@ -522,6 +522,23 @@ router.get('/ping', requireAuth, async (req, res) => {
       out.simNonLivreLines = nlLines;
       out.simNonLivreByStatus = nlByStatus;   // détail par statut qui a généré du non-livré
     } catch (e) { out.statusDiagErr = e.message; }
+    // Sondes ciblées : interroge l'API filtrée par statut pour CONFIRMER que les commandes annulées /
+    // expédiées incomplètes existent sur la période et sont bien détectées (échantillon page 1 = tout Shipped).
+    try {
+      const probe = async (status) => {
+        const r = await apiPost('/api/v1/orders/get', { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59`, orderCustomerStatus: status, page: 1, limit: 50 });
+        const a = Array.isArray(r) ? r : (r && (r.data || r.orders || r.results)) || [];
+        let pieces = 0;
+        a.forEach(o => (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+          const qo = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
+          const qs = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : 0;
+          pieces += Math.max(0, qo - qs);
+        }));
+        return { commandes: a.length, piecesNonLivre: pieces, statutRenvoye: a[0] ? (a[0].orderCustomerStatus || '(vide)') : '(0 cmd)' };
+      };
+      out.probeCancelled = await probe('Cancelled');
+      out.probeShippedIncomplete = await probe('ShippedIncomplete');
+    } catch (e) { out.probeErr = e.message; }
     out.sampleKeys = arr[0] ? Object.keys(arr[0]) : (Array.isArray(resp) ? '[] (0 commande sur 30 j)' : ('réponse non-tableau: ' + JSON.stringify(resp).slice(0, 200)));
     // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
     // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
