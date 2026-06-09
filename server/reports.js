@@ -438,6 +438,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
   };
+  // Alertes stock (back-in-stock WSHOP) : produits les plus attendus sur la période
+  const bisDs = store.getDataset('bis', 'N');
+  let stockAlerts = null;
+  if (bisDs && bisDs.rows && bisDs.rows.length) {
+    const mp = bisDs.map || {};
+    stockAlerts = bisDs.rows.map(r => ({ name: (r[mp.name] || '').toString(), count: parseInt(r[mp.count]) || 0, waiting: parseInt(r[mp.waiting]) || 0, last: (r[mp.last] || '').toString() }))
+      .sort((a, b) => b.count - a.count).slice(0, 20);
+  }
 
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
@@ -565,6 +573,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     daily,
     dailyN1,
     timeline,
+    stockAlerts,
     hourly,
     gaFunnel,
     ttPays,
