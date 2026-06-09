@@ -481,9 +481,97 @@ function runJob(label, worker) {
   return jobSnapshot();
 }
 
+// ── Inventory (stock) + Returns (retours) WSHOP API → slots saison ───────────
+const toNum = x => Number(x) || 0;
+async function fetchAllPaged(path, baseBody, pick, maxPages = 50) {
+  const out = []; let page = 1; const limit = 10000;
+  for (let i = 0; i < maxPages; i++) {
+    const resp = await apiPost(path, Object.assign({}, baseBody, { page, limit }));
+    const batch = pick(resp) || [];
+    out.push(...batch);
+    if (batch.length < limit) break;
+    page += 1;
+  }
+  return out;
+}
+// Stock global : quantité agrégée par référence (somme des EAN/tailles) + map EAN→référence.
+async function fetchInventory() {
+  // in_stock=true : on ne ramène que les références avec stock > 0 (suffisant pour le
+  // sell-through et le dead stock ; les ruptures = stock 0 → sell-through 100% par défaut).
+  const items = await fetchAllPaged('/api/v1/inventory/get', { in_stock: true }, r => (r && r.data) || []);
+  const byRef = {}, eanToRef = {};
+  items.forEach(it => {
+    const ref = (it.reference || '').toString().trim();
+    const ean = (it.ean || '').toString().trim();
+    const q = parseInt(it.quantity) || 0;
+    if (ref) { byRef[ref] = (byRef[ref] || 0) + q; if (ean) eanToRef[ean] = ref; }
+    else if (ean) { byRef[ean] = (byRef[ean] || 0) + q; }
+  });
+  return { byRef, eanToRef, count: items.length };
+}
+function stockDataset(byRef) {
+  const rows = Object.entries(byRef).map(([ref, q]) => [ref, String(q)]);
+  return { hdrs: ['Ref. externe', 'Stock'], rows, map: { ref_ext: 0, qte: 1 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+}
+// Retours sur une fenêtre (begin/end). Réponse = tableau ; découpe si plafond 10 000 atteint.
+async function fetchReturnsRange(fromISO, toISO) {
+  const all = [];
+  const collect = async (a, b) => {
+    const resp = await apiPost('/api/v1/returns/get', { begin: `${a} 00:00:00`, end: `${b} 23:59:59` });
+    const arr = Array.isArray(resp) ? resp : ((resp && resp.data) || []);
+    if (arr.length >= 10000 && daysBetween(a, b) >= 1) {
+      const mid = isoAddDays(a, Math.floor(daysBetween(a, b) / 2));
+      await collect(a, mid); await collect(isoAddDays(mid, 1), b);
+    } else all.push(...arr);
+  };
+  await collect(fromISO, toISO);
+  return all;
+}
+// Agrège les retours remboursés par référence (via EAN→référence) : qté + montant TTC.
+function returnsDataset(returns, eanToRef) {
+  const by = {};
+  returns.forEach(rt => {
+    (rt.orderItems || []).forEach(it => {
+      if (it.refund === false) return; // seulement les lignes effectivement remboursées
+      const ean = (it.ean || '').toString().trim();
+      const ref = eanToRef[ean] || ean; if (!ref) return;
+      const q = parseInt(it.quantity) || 0;
+      const unit = toNum(it.originalDiscountedUnitPrice) || toNum(it.originalUnitPrice) || toNum(it.compareAtPrice);
+      const e = by[ref] || (by[ref] = { qte: 0, montant: 0 });
+      e.qte += q; e.montant += unit * q;
+    });
+  });
+  const rows = Object.entries(by).map(([ref, v]) => [ref, String(v.qte), v.montant.toFixed(2)]);
+  return { hdrs: ['Ref. externe', 'Nb colisages rembourses', 'Montant rembourse'], rows, map: { ref_ext: 0, qte: 1, montant: 2 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+}
+// Orchestrateur : stock actuel → saisonstock N ; retours N et N-1 → saisonret N / N1.
+async function refreshSaisonMerch(opts = {}, cb = {}) {
+  if (!isConfigured()) throw new Error('WSHOP non configuré');
+  if (cb.phase) cb.phase('Stock (inventory)…');
+  const inv = await fetchInventory();
+  store.setDataset('saisonstock', 'N', stockDataset(inv.byRef));
+  if (cb.count) cb.count('N', Object.keys(inv.byRef).length);
+  let retN = 0, retN1 = 0;
+  if (opts.from && opts.to) {
+    if (cb.phase) cb.phase('Retours N…');
+    const rN = await fetchReturnsRange(opts.from, opts.to);
+    store.setDataset('saisonret', 'N', returnsDataset(rN, inv.eanToRef)); retN = rN.length;
+  }
+  if (opts.cfrom && opts.cto) {
+    if (cb.phase) cb.phase('Retours N-1…');
+    const rN1 = await fetchReturnsRange(opts.cfrom, opts.cto);
+    store.setDataset('saisonret', 'N1', returnsDataset(rN1, inv.eanToRef)); retN1 = rN1.length;
+  }
+  return { stockRefs: Object.keys(inv.byRef).length, invItems: inv.count, retoursN: retN, retoursN1: retN1 };
+}
+
 router.post('/refresh', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   res.status(202).json({ started: true, ...runJob('refresh', cb => refresh(req.query, cb)) });
+});
+router.post('/saison-merch', requireAuth, (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
+  res.status(202).json({ started: true, ...runJob('saison-merch', cb => refreshSaisonMerch(req.query, cb)) });
 });
 router.post('/sync', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
