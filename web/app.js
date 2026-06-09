@@ -527,11 +527,13 @@ function renderReport(rep) {
   }
 
   // Suivi temporel — vue 4 semaines (indépendante de la période) : CA/jour + TT + ajouts panier + emails
-  const timelineCard = (rep.timeline && rep.timeline.length > 1)
+  const tlDays = (rep.timeline && rep.timeline.length) || 0;
+  const timelineCard = tlDays > 1
     ? `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
        <div style="height:260px"><canvas id="tlChart"></canvas></div>
        <div class="note">Barres = CA/jour · courbes = taux de transfo (TT) et taux d'ajout panier · ✉️ = jour avec envoi email (détecté via un pic du canal Email GA4).</div></div>`
-    : '';
+    : `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
+       <div class="note">⚠️ Ce graphe affiche les <b>28 derniers jours</b> de l'OMS — or l'OMS chargé ne couvre que ${tlDays} jour(s). Lance « <b>Importer OMS depuis WSHOP</b> » sur une <b>période large</b> (ex. preset « 30 j » ou un mois) : les données s'accumulent et ce suivi (CA/jour + TT + ajouts panier + croix ✉️ email) s'affichera, quelle que soit la période d'analyse choisie ensuite.</div></div>`;
 
   // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
