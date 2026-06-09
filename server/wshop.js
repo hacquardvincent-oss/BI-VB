@@ -150,9 +150,21 @@ function orderToRows(order) {
   const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
+  // Statut de la commande : on ne compte une « quantité non livrée » (annulation) QUE si la
+  // commande est finalisée (expédiée/livrée/close/annulée). Une commande encore en cours
+  // (non expédiée) ne doit PAS être comptée comme annulée (sinon les commandes d'hier, pas
+  // encore préparées, gonflent faussement le taux). Repli sans statut : seulement les
+  // expéditions PARTIELLES (0 < expédié < commandé).
+  const st = (o.status || o.orderStatus || o.state || o.orderState || o.fulfillmentStatus || '').toString().toLowerCase();
+  const finalized = st ? (/(ship|exped|deliver|livr|clos|complet|cancel|annul|refus|return|remb)/.test(st) ? true
+    : (/(pending|process|prepar|attente|en cours|nouveau|new|created|waiting|valid|paid|payé|confirm)/.test(st) ? false : null)) : null;
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
-    const qShip = parseInt(it.quantityShipped != null ? it.quantityShipped : qOrd) || 0;
+    const qShipRaw = it.quantityShipped;
+    const qShip = qShipRaw != null ? (parseInt(qShipRaw) || 0) : qOrd; // expédié inconnu → considéré livré
+    const ecart = Math.max(0, qOrd - qShip);
+    // finalisée → écart réel ; en cours → 0 ; inconnu → uniquement si expédition partielle.
+    const nonLivre = finalized === true ? ecart : (finalized === false ? 0 : (qShipRaw != null && qShip > 0 && qShip < qOrd ? ecart : 0));
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
     // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
     // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price
@@ -168,7 +180,7 @@ function orderToRows(order) {
       'Numeros': num,
       'Designation produit': it.title || it.name || '',
       'quantites commandees': qOrd,
-      'Quantité non livré': Math.max(0, qOrd - qShip),
+      'Quantité non livré': nonLivre,
       'Ref. externe': it.reference || it.ean || '',
       'Lieu de prise de commande': lieu,
       'Prix Vente': pvUnit * qOrd,
@@ -462,6 +474,11 @@ router.get('/ping', requireAuth, async (req, res) => {
       out.orderPriceFields = pick(o0);
       out.itemPriceFields = items[0] ? pick(items[0]) : {};
       out.itemCount = items.length;
+      // Champs de statut (pour caler la règle « annulation » sur les commandes finalisées)
+      const ST = /(status|statut|state|etat|fulfil|ship|exped|livr|cancel|annul)/i;
+      const pickSt = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (ST.test(k)) r[k] = obj[k]; }); return r; };
+      out.orderStatusFields = pickSt(o0);
+      out.itemStatusFields = items[0] ? pickSt(items[0]) : {};
     }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
   res.json(out);
