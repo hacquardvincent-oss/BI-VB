@@ -47,7 +47,17 @@ function topListQte(byProd, n = 10) {
 async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget }) {
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
-  if (!omsN) return { empty: true, message: 'Aucun fichier OMS (EShop) chargé.' };
+  if (!omsN) {
+    // OMS (N) absent : on indique ce qui EST chargé pour lever l'ambiguïté (imports indépendants),
+    // car le reporting central est bâti autour du CA OMS et ne peut pas s'afficher sans lui.
+    const present = [];
+    for (const [src, lbl] of [['oms', 'OMS N-1'], ['y2', 'Y2 marketplace'], ['ads', 'Google Ads'], ['ga', 'GA4']]) {
+      if (src === 'oms') { if (await loadDataset('oms', 'N1')) present.push(lbl); continue; }
+      if ((await loadDataset(src, 'N')) || (await loadDataset(src, 'N1'))) present.push(lbl);
+    }
+    const dispo = present.length ? ` Données déjà chargées : ${present.join(', ')}.` : '';
+    return { empty: true, message: `OMS (année N) manquant : importe l'OMS (fichier de secours) ou relance « Importer OMS depuis WSHOP ».${dispo} Les imports sont indépendants — si l'OMS était chargé puis a disparu, le serveur a probablement redémarré en mode mémoire (active DATABASE_URL pour conserver les données).` };
+  }
   const omsN1 = await loadDataset('oms', 'N1');
   const gaN = await loadDataset('ga', 'N'), gaN1 = await loadDataset('ga', 'N1');
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
