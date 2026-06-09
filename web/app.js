@@ -58,13 +58,13 @@ const MODULES = {
     icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
     intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays', 'fampays'],
+    layout: ['kpi', 'ca', 'timeline', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays', 'fampays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'channels', 'produits'],
+    layout: ['kpi', 'funnel', 'gafunnel', 'timeline', 'daily', 'channels', 'produits'],
   },
   produit: {
     icon: '🧶', label: 'Produit', preset: 'all',
@@ -94,7 +94,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'timeline', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -107,7 +107,7 @@ const THEME_META = {
 const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P',
-  daily: 'T',
+  daily: 'T', timeline: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES',
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
@@ -443,6 +443,7 @@ async function loadReport() {
   box.innerHTML = renderReport(rep);
   renderObjectives(rep);
   renderDailyChart(rep);
+  renderTimelineChart(rep);
   renderCharts(rep);
   wireBilan();
 }
@@ -525,10 +526,17 @@ function renderReport(rep) {
     funnelCard = `<div class="card"><h3>Funnel de conversion — Sessions → Commandes → CA</h3><div class="kgrid">${tiles}</div></div>`;
   }
 
+  // Suivi temporel — vue 4 semaines (indépendante de la période) : CA/jour + TT + ajouts panier + emails
+  const timelineCard = (rep.timeline && rep.timeline.length > 1)
+    ? `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
+       <div style="height:260px"><canvas id="tlChart"></canvas></div>
+       <div class="note">Barres = CA/jour · courbes = taux de transfo (TT) et taux d'ajout panier · ✉️ = jour avec envoi email (détecté via un pic du canal Email GA4).</div></div>`
+    : '';
+
   // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
   const dailyCard = (rep.daily && rep.daily.length)
-    ? `<div class="card"><h3>Suivi temporel — N vs N-1</h3>
+    ? `<div class="card"><h3>Suivi temporel (période) — N vs N-1</h3>
        <div class="toolbar" style="margin-bottom:8px"><span class="note" style="margin:0">Granularité</span>
          ${hasHour ? '<button class="pb gran" data-gran="hour">Heure</button>' : ''}
          <button class="pb gran" data-gran="day">Jour</button>
@@ -941,7 +949,7 @@ function renderReport(rep) {
   }
   const C = {
     fulloff: fullOffCard,
-    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, ca: caCard,
+    kpi: kpiCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -949,7 +957,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard,
   };
-  const FULL = ['kpi', 'gafunnel', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+  const FULL = ['kpi', 'gafunnel', 'timeline', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
   const layout = (MODULES[CURRENT_MODULE] && MODULES[CURRENT_MODULE].layout) || FULL;
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -1384,6 +1392,38 @@ function aggDaily(arr, gran) {
     return Object.values(w).map(x => ({ label: x.label, ca: x.ca, sessions: x.sessions, tt: x.sessions > 0 ? x.commandes / x.sessions : null, addRate: x.sessions > 0 ? x.carts / x.sessions : null }));
   }
   return arr.map(d => ({ label: d.date.slice(5), ca: d.ca, sessions: d.sessions, tt: d.tt, addRate: d.addRate }));
+}
+// Suivi temporel 4 semaines : CA/jour (barres) + TT + ajouts panier (courbes) + croix « email »
+function renderTimelineChart(rep) {
+  if (typeof Chart === 'undefined' || !rep || !rep.timeline || rep.timeline.length < 2) { if (_charts.tlChart) { _charts.tlChart.destroy(); _charts.tlChart = null; } return; }
+  const tl = rep.timeline;
+  const labels = tl.map(d => (d.date || d.label || '').slice(5));
+  const ca = tl.map(d => Math.round(d.ca || 0));
+  const tt = tl.map(d => d.tt != null ? +(d.tt * 100).toFixed(2) : null);
+  const atc = tl.map(d => d.addRate != null ? +(d.addRate * 100).toFixed(2) : null);
+  const maxCa = Math.max(1, ...ca);
+  const emailPts = tl.map(d => d.email ? maxCa * 1.06 : null);
+  const el = document.getElementById('tlChart'); if (!el) return;
+  if (_charts.tlChart) _charts.tlChart.destroy();
+  _charts.tlChart = new Chart(el.getContext('2d'), {
+    data: {
+      labels, datasets: [
+        { type: 'bar', label: 'CA/jour', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
+        { type: 'line', label: 'TT %', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        { type: 'line', label: 'Ajouts panier %', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        { type: 'line', label: '✉️ Email envoyé', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
 }
 function renderDailyChart(rep) {
   if (typeof Chart === 'undefined' || !rep || !rep.daily || !rep.daily.length) return;
