@@ -157,8 +157,10 @@ function orderToRows(order) {
   //   • EXPÉDIÉE INCOMPLÈTE : ShippedIncomplete           → /incomplete/  → non livré = commandé − expédié
   //   • TOUT LE RESTE (Waiting, Preparation, Late, Shipped, ShippedPartial/PreparationPartial = split
   //     en cours, WaitingValidation, PickupStoreProcessed…) → 0. On ne compte jamais une commande en cours.
+  // ⚠️ On EXCLUT les annulations DEMANDE (client/blacklist/fraude/impayé/dossier refusé) : pré-livraison,
+  //    hors périmètre « non livré » de l'OMS. On garde Cancelled (stock) + CancelledInternal (par le mag).
   const cstatus = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString().toLowerCase();
-  const cancelled = /cancel/.test(cstatus);
+  const cancelled = /cancel/.test(cstatus) && !/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/.test(cstatus);
   const incomplete = /shippedincomplete|incomplete/.test(cstatus);
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
@@ -499,10 +501,12 @@ router.get('/ping', requireAuth, async (req, res) => {
     // Garde-fou anti-504 : chaque appel WSHOP est plafonné en temps → on renvoie une réponse PARTIELLE
     // plutôt que de laisser le proxy couper. Les 3 requêtes en parallèle (échantillon + 2 sondes statut).
     const withTimeout = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
-    const [resp, respCancel, respInc] = await Promise.all([
+    const [resp, respCancel, respInc, respCust, respInt] = await Promise.all([
       withTimeout(apiPost('/api/v1/orders/get', Object.assign({ page: 1, limit: 15 }, win)), 9000, 'sample'),
       withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'Cancelled', page: 1, limit: 15 }, win)), 9000, 'cancelled'),
       withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'ShippedIncomplete', page: 1, limit: 15 }, win)), 9000, 'incomplete'),
+      withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'CancelledCustomer', page: 1, limit: 15 }, win)), 9000, 'cust'),
+      withTimeout(apiPost('/api/v1/orders/get', Object.assign({ orderCustomerStatus: 'CancelledInternal', page: 1, limit: 15 }, win)), 9000, 'internal'),
     ]);
     const arr = getArr(resp);
     out.orders = (resp && resp.__err) ? ('partiel — ' + resp.__err) : 'ok'; out.ordersMs = Date.now() - t; out.sampleCount = arr.length;
@@ -514,7 +518,8 @@ router.get('/ping', requireAuth, async (req, res) => {
         const cs = (o.orderCustomerStatus || '').toString();
         bump(csVals, cs); bump(osVals, (o.orderStatus || '').toString());
         const s = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString().toLowerCase();
-        const cancelled = /cancel/.test(s), incomplete = /shippedincomplete|incomplete/.test(s);
+        const cancelled = /cancel/.test(s) && !/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/.test(s);
+        const incomplete = /shippedincomplete|incomplete/.test(s);
         (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
           const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;
           const qsk = it.quantityShipped != null ? (parseInt(it.quantityShipped) || 0) : null;
@@ -539,8 +544,10 @@ router.get('/ping', requireAuth, async (req, res) => {
       }));
       return { commandes: a.length, piecesNonLivre: pieces, statutRenvoye: a[0] ? (a[0].orderCustomerStatus || '(vide)') : '(0 cmd)' };
     };
-    out.probeCancelled = probeOf(respCancel, 'Cancelled');
-    out.probeShippedIncomplete = probeOf(respInc, 'ShippedIncomplete');
+    out.probeCancelled = probeOf(respCancel, 'Cancelled');                 // = comptée (Annulée Stock)
+    out.probeShippedIncomplete = probeOf(respInc, 'ShippedIncomplete');     // = comptée (Expédiée Incomplète)
+    out.probeCancelledInternal = probeOf(respInt, 'CancelledInternal');     // = comptée (Annulée par le mag)
+    out.probeCancelledCustomer = probeOf(respCust, 'CancelledCustomer');    // = EXCLUE (annulation client)
     out.sampleKeys = arr[0] ? Object.keys(arr[0]) : '[] (0 commande sur 30 j)';
     // Diagnostic « règle CA » : expose les champs liés au montant (anonymes : prix/quantités
     // uniquement, aucun nom/adresse) pour caler le mapping prix unitaire vs net payé / remises.
