@@ -818,7 +818,7 @@ function calcCancellationsDetail(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type;
   if (qni === undefined) return null;
   const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
-  const byStore = {}, byProd = {};
+  const byStore = {}, byProd = {}, byCanal = {};
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
@@ -833,6 +833,11 @@ function calcCancellationsDetail(rows, map) {
     if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
     const des = (di !== undefined ? (r[di] || '').trim() : '') || '(sans désignation)';
     const ep = byProd[des] || (byProd[des] = { des, qte: 0, ca: 0 }); ep.qte += nonLivre; ep.ca += caAnn;
+    // Produits annulés ventilés par canal qui annule (entrepôt vs chaque magasin).
+    const canal = isEnt ? 'Entrepôt (Webstore)' : (mag || '(magasin inconnu)');
+    const c = byCanal[canal] || (byCanal[canal] = { canal, qte: 0, ca: 0, prods: {} });
+    c.qte += nonLivre; c.ca += caAnn;
+    const cp = c.prods[des] || (c.prods[des] = { des, qte: 0, ca: 0 }); cp.qte += nonLivre; cp.ca += caAnn;
   });
   const r2 = x => Math.round(x * 100) / 100;
   return {
@@ -840,6 +845,10 @@ function calcCancellationsDetail(rows, map) {
     magasin: { qte: magasin.qte, ca: r2(magasin.ca) },
     topStores: Object.values(byStore).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 8),
     topProduits: Object.values(byProd).map(s => ({ ...s, ca: r2(s.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 10),
+    byCanal: Object.values(byCanal).map(c => ({
+      canal: c.canal, qte: c.qte, ca: r2(c.ca),
+      top: Object.values(c.prods).map(p => ({ ...p, ca: r2(p.ca) })).sort((a, b) => b.qte - a.qte).slice(0, 5),
+    })).sort((a, b) => b.qte - a.qte).slice(0, 8),
   };
 }
 
@@ -884,8 +893,8 @@ function topReturnedProducts(rows, map, top = 10) {
     e.reasons[reason] = (e.reasons[reason] || 0) + q;
   });
   return Object.values(by).map(v => {
-    const tr = Object.entries(v.reasons).sort((a, b) => b[1] - a[1])[0];
-    return { des: v.des, qte: v.qte, montant: Math.round(v.montant * 100) / 100, raison: tr ? tr[0] : '' };
+    const reasons = Object.entries(v.reasons).map(([reason, qte]) => ({ reason, qte })).sort((a, b) => b.qte - a.qte);
+    return { des: v.des, qte: v.qte, montant: Math.round(v.montant * 100) / 100, raison: reasons.length ? reasons[0].reason : '', reasons: reasons.slice(0, 4) };
   }).sort((a, b) => b.qte - a.qte).slice(0, top);
 }
 
