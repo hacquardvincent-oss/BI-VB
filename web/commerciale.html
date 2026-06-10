@@ -34,8 +34,9 @@
       <input id="opName" class="dt" placeholder="Nom de l'opération (ex. Avant-première soldes)" style="min-width:260px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Du</span>
       <input type="date" id="dFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dTo" class="dt">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Comparable N-1 = mêmes jours de semaine (−364 j), éditable">N-1</span>
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Période de comparaison N-1 — libre (les opérations peuvent être décalées d'une semaine vs N-1)">N-1</span>
       <input type="date" id="dCFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCTo" class="dt">
+      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine)">≈ −364 j</button>
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
