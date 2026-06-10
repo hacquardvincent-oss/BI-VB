@@ -290,11 +290,15 @@ donuts N/N-1) · `canaltype` (récap par type) · `device` · `marketplace` (don
 `annulations` (tuiles delta **inversé**, entrepôt/magasin, **incomplètes à part**, byStatut, byCanal) · `retours` (tuiles,
 top produits + raisons, raisons N vs N-1) · `stockalerts` (top 10) · `produits`/`itemfunnel`/`renta` · `pages`/`landing`/
 `pagesrc`/`lostpages`/`campaignland` · `famille` (barres croissance/décroissance) · `ga` · `campaigns` · `ads` ·
-**Vue « Analyse commerciale »** (thème `CO`) : `demarque` (CA off/full, taux de démarque inversé, **CA par tranche de
-démarque** via `calcDiscountDepth` sur pv/pv_remise, top produits/familles en démarque) · `fulloff` · `offrecompare`
-(**comparatif de listings N vs N-1** via `calcOffreCompare` : largeur par famille, réfs par niveau de démarque, origine,
-« à réintégrer » = vendeurs N-1 absents du listing N, « démarquées sans vente ») · `comalerts` (campagnes manquantes/
-flop/saturées/bridées, landing en chute de conversion, pages perdues).
+Cartes commerciales (thème `CO`, dispo dans l'éditeur de vue) : `demarque` (CA off/full, taux de démarque inversé,
+**CA par tranche de démarque** via `calcDiscountDepth` sur pv/pv_remise) · `fulloff` · `offrecompare` (via
+`calcOffreCompare` : largeur par famille, réfs par niveau de démarque, origine, « à réintégrer », « démarquées sans
+vente ») · `comalerts` (campagnes manquantes/flop/saturées/bridées, landing en chute, pages perdues).
+**Page dédiée « Analyse commerciale »** (`commerciale.html`/`commerciale.js`, onglet header — PAS une vue Reporting) :
+pilotage d'UNE opération (avant-première/soldes) : Bilan 360 avec **poids off/full permanent** (donut), **🚀 lancement
+= CA à l'heure du jour J** (barres + cumul vs cumul N-1 à heure équivalente, via `/api/report?from=J&to=J` → `hourly`),
+tranches de démarque, familles off VS full côte à côte, emails/campagnes (canal CRM + UTM), comparatif d'offre,
+alertes. Bouton **⚡ delta WSHOP** intégré = quasi temps réel les jours de lancement. Reporting = analyses génériques.
 
 ### Graphiques (Chart.js) — comment ils sont construits
 Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. Couleurs : `--a #f5a623` (CA/ambre), `--b #4a9eff`

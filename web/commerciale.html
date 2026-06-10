@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Analyse commerciale</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting (analyses génériques digitales)">📊 Reporting</a>
+    <a class="pb on" href="/commerciale.html" title="Pilotage d'une opération commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap">
+  <!-- INTRO -->
+  <div class="card">
+    <h3>💰 Analyse commerciale — pilotage d'une opération</h3>
+    <div class="note">Zoom sur <b>une offre commerciale</b> (avant-première, soldes, vente privée…) : est-ce qu'elle fonctionne, et quelles actions déclencher ? Vue 360 du CA EShop avec le <b>poids off/full price en permanence</b>, <b>CA à l'heure les jours de lancement</b> (quasi temps réel via la synchro delta), tranches de démarque, familles off vs full, emails/campagnes dédiés, comparatif de largeur d'offre N vs N-1 et alertes d'exécution.</div>
+  </div>
+
+  <!-- 1 · OPÉRATION -->
+  <div class="card">
+    <h3>1 · Opération commerciale</h3>
+    <div class="toolbar">
+      <input id="opName" class="dt" placeholder="Nom de l'opération (ex. Avant-première soldes)" style="min-width:260px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Du</span>
+      <input type="date" id="dFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dTo" class="dt">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Comparable N-1 = mêmes jours de semaine (−364 j), éditable">N-1</span>
+      <input type="date" id="dCFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCTo" class="dt">
+    </div>
+    <div class="toolbar" style="margin-top:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
+      <button class="pb on" data-dim="global">FR + Inter</button>
+      <button class="pb" data-dim="fr">France</button>
+      <button class="pb" data-dim="inter">International</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn blue" id="analyze">Analyser l'opération</button>
+    </div>
+    <div class="note">Le comparable N-1 se cale automatiquement à <b>−364 jours</b> (mêmes jours de semaine). Pour le <b>comparatif d'offre</b>, dépose les listings produits N / N-1 dans <a href="/app.html">Reporting → Import manuel</a> (source « 🏷️ Offre »).</div>
+    <div class="note" id="metaNote"></div>
+  </div>
+
+  <!-- 2 · TEMPS RÉEL -->
+  <div class="card">
+    <h3>2 · Données & temps réel</h3>
+    <div class="toolbar">
+      <button class="btn blue" id="syncDelta">⚡ Actualiser les données (delta WSHOP)</button>
+      <span class="note" id="syncNote" style="margin:0">Récupère les commandes nouvelles/modifiées en quelques secondes → recharge l'analyse. À utiliser en boucle les jours de lancement pour un pilotage quasi temps réel.</span>
+    </div>
+  </div>
+
+  <div id="report" style="display:flex;flex-direction:column;gap:14px">
+    <div class="card"><div class="note">Choisis la période de l'opération puis clique « Analyser l'opération ».</div></div>
+  </div>
+</div>
+
+<script src="/commerciale.js"></script>
+</body>
+</html>
