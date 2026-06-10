@@ -18,19 +18,13 @@ const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' }
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'commerciale', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
     intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
     layout: ['kpi', 'ca', 'ads', 'funnel', 'produits'],
-  },
-  commerciale: {
-    icon: '💰', label: 'Analyse commerciale', preset: 'all',
-    intro: 'Pilotage de l\'offre commerciale : performance de la démarque vs full price (CA, taux, tranches), comparatif de largeur d\'offre N vs N-1 (listings produits), familles qui performent en démarque, campagnes/landing qui sur- ou sous-performent et alertes d\'exécution.',
-    files: { required: ['oms'], optional: ['ga', 'ads', 'ref', 'offre'] },
-    layout: ['demarque', 'fulloff', 'offrecompare', 'comalerts', 'famille', 'produits', 'campaigns', 'campaignland', 'landing', 'pages', 'lostpages', 'timeline2'],
   },
   estore: {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
@@ -1099,7 +1093,7 @@ function renderReport(rep) {
         <div><h3>Réfs par niveau de démarque</h3><table><thead><tr><th>Niveau</th><th>Réfs N</th><th>Réfs N-1</th><th>Δ</th></tr></thead><tbody>${bkRows}</tbody></table></div>
       </div>${reint}${sv}
       <div class="note">Source : listings produits déposés (« Offre » N et N-1 dans l'import manuel) — réf, famille, prix initial/soldé (ou % de démarque), origine (initial / ajout outlet…). Croisé avec les ventes OMS de la période.</div></div>`;
-  } else if (CURRENT_MODULE === 'commerciale') {
+  } else if (getLayout(CURRENT_MODULE).includes('offrecompare')) {
     offreCompareCard = `<div class="card"><h3>📋 Comparatif d'offre — listing N vs N-1</h3>
       <div class="note">Dépose les <b>listings produits N et N-1</b> (source « 🏷️ Offre » dans <b>Import manuel de fichiers</b>) pour activer ce comparatif : largeur d'offre par famille, réfs par niveau de démarque (-30/-40/-50 %), origine (offre initiale vs ajouts outlet), références à réintégrer (vendeurs N-1 absents du listing N) et démarquées sans vente.<br>Colonnes attendues : <b>Réf. externe</b> · <b>Famille/Regroupement</b> · <b>Désignation</b> · <b>Prix initial</b> et <b>Prix soldé</b> (ou <b>% de démarque</b>) · <b>Origine</b> (optionnel).</div></div>`;
   }
@@ -2241,14 +2235,9 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
 (async () => {
   if (!(await me())) return;
   await loadServerLayouts(); // vues personnalisées partagées (avant le 1er rendu)
-  // Lien profond depuis le header (?view=) : ouvre directement une vue donnée (ex. Analyse commerciale).
+  // Lien profond ?view= : ouvre directement une vue donnée (si autorisée RBAC).
   const qView = new URLSearchParams(location.search).get('view');
   if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) CURRENT_MODULE = qView;
-  // Onglet header actif selon la vue courante.
-  document.querySelectorAll('#hdr .pb').forEach(a => {
-    const isComm = (a.getAttribute('href') || '').includes('view=commerciale');
-    a.classList.toggle('on', isComm ? (CURRENT_MODULE === 'commerciale') : ((a.getAttribute('href') === '/app.html') && CURRENT_MODULE !== 'commerciale'));
-  });
   initModules();
   const m = MODULES[CURRENT_MODULE];
   CURRENT_DIM = m.dim || 'global';
