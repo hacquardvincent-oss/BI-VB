@@ -44,7 +44,11 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare }) {
+  // compare='0' → analyse N SEULE (pas de comparaison N-1) : aucun jeu N-1 chargé, aucun repli
+  // N-1 depuis l'OMS N. Permet d'analyser une période sans avoir importé l'année précédente.
+  const noN1 = compare === '0' || compare === 0 || compare === false;
+  const loadN1 = (src) => noN1 ? Promise.resolve(null) : loadDataset(src, 'N1');
   dim = dim || 'global';
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) {
@@ -58,15 +62,15 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const dispo = present.length ? ` Données déjà chargées : ${present.join(', ')}.` : '';
     return { empty: true, message: `OMS (année N) manquant : importe l'OMS (fichier de secours) ou relance « Importer OMS depuis WSHOP ».${dispo} Les imports sont indépendants — si l'OMS était chargé puis a disparu, le serveur a probablement redémarré en mode mémoire (active DATABASE_URL pour conserver les données).` };
   }
-  const omsN1 = await loadDataset('oms', 'N1');
-  const gaN = await loadDataset('ga', 'N'), gaN1 = await loadDataset('ga', 'N1');
-  const y2N = await loadDataset('y2', 'N'), y2N1 = await loadDataset('y2', 'N1');
+  const omsN1 = await loadN1('oms');
+  const gaN = await loadDataset('ga', 'N'), gaN1 = await loadN1('ga');
+  const y2N = await loadDataset('y2', 'N'), y2N1 = await loadN1('y2');
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
-  const retN = await loadDataset('ret', 'N'), retN1 = await loadDataset('ret', 'N1');
+  const retN = await loadDataset('ret', 'N'), retN1 = await loadN1('ret');
   const retProdN = await loadDataset('retprod', 'N');
-  const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
-  const adsN = await loadDataset('ads', 'N'), adsN1 = await loadDataset('ads', 'N1');
-  const offreN = await loadDataset('offre', 'N'), offreN1 = await loadDataset('offre', 'N1');
+  const implN = await loadDataset('impl', 'N'), implN1 = await loadN1('impl');
+  const adsN = await loadDataset('ads', 'N'), adsN1 = await loadN1('ads');
+  const offreN = await loadDataset('offre', 'N'), offreN1 = await loadN1('offre');
 
   // Période N (preset hérité, ou plage de dates explicite)
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
@@ -78,9 +82,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const gaN1f = calc.filterGADim(gaN1, dim);
   const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
-  const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadDataset('gasess', 'N1');
-  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadDataset('gacampdaily', 'N1');
-  const gaEmailHourN = await loadDataset('gaemailhour', 'N'), gaEmailHourN1 = await loadDataset('gaemailhour', 'N1');
+  const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadN1('gasess');
+  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadN1('gacampdaily');
+  const gaEmailHourN = await loadDataset('gaemailhour', 'N'), gaEmailHourN1 = await loadN1('gaemailhour');
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;
   const sessSrcN1 = calc.filterGADim(gaSessN1, dim) || gaN1f;
 
@@ -116,7 +120,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   if (omsN1) {
     mapN1 = omsN1.map; calc.ensureRefExtIdx(omsN1.hdrs, mapN1);
     rowsN1 = isAll ? omsN1.rows : calc.filterRows(omsN1.rows, mapN1, cf, ct, false);
-  } else if (!isAll) {
+  } else if (!isAll && !noN1) {
     mapN1 = omsN.map;
     rowsN1 = calc.filterRows(omsN.rows, omsN.map, cf, ct, false);
   }
@@ -447,8 +451,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     };
     const eN = emailDays(gaNf), eN1 = emailDays(gaN1f);
     // N-1 : même fenêtre décalée de 364 j (CA/TT/ajouts panier) → courbes en pointillé.
-    const src1 = omsN1 || omsN, map1 = omsN1 ? mapN1 : omsN.map;
-    const rows1 = calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1);
+    const src1 = noN1 ? null : (omsN1 || omsN), map1 = omsN1 ? mapN1 : omsN.map;
+    const rows1 = src1 ? calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1) : [];
     const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
     return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, emailVol: eN.by[d.date] || 0, emailVolN1: eN1.by[dShift] || 0, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
   })();
@@ -505,7 +509,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     if (retN1) {
       const retRowsN1 = calc.filterDim(isAll ? retN1.rows : calc.filterRows(retN1.rows, retN1.map, cf, ct, false), retN1.map, dim);
       rN1 = calc.calcReturns(retRowsN1, retN1.map);
-    } else if (!isAll) {
+    } else if (!isAll && !noN1) {
       const rr = calc.filterDim(calc.filterRows(retN.rows, retN.map, cf, ct, false), retN.map, dim);
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
@@ -700,9 +704,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });

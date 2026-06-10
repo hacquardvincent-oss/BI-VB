@@ -380,9 +380,9 @@ function renderPeriodique(doc, rep) {
 
 router.get('/pdf', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, type } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, type, compare } = req.query;
     const isAll = req.query.isAll === '1';
-    const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope });
+    const rep = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, compare });
     if (rep.empty) return res.status(400).json({ error: rep.message });
     // Type de reporting : 'quotidien' (1 structure) sinon hebdo/mensuel (structure complète).
     const isDaily = type ? /quotid|daily|jour/i.test(type) : (rep.meta.from && rep.meta.from === rep.meta.to);

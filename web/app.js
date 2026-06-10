@@ -10,6 +10,7 @@ let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, 
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
 let PERSIST = false;       // base de données active (persistance) ?
+let COMPARE = true;        // comparaison N-1 activée ? (false = analyse N seule, pas besoin des données N-1)
 let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
 let IS_ADMIN = false;      // l'utilisateur courant est admin (→ CTA EDIT, page Admin)
 let EDIT_VIEW = null;      // mode édition WYSIWYG : clé de la vue en cours d'édition (null = rendu normal)
@@ -169,6 +170,184 @@ function getLayout(m) {
 function isCustomLayout(m) { if (isMyView(m)) return true; const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
 // Vues éditables côté ADMIN (vues partagées ; « Full » contient toujours tout → non éditable).
 function editableViews() { return MODULE_ORDER.filter(k => MODULES[k] && k !== 'full'); }
+
+// ── Widgets « from scratch » : l'utilisateur compose Donnée × Métrique × Forme ──────────
+// Un widget = { id, title, dim, metric, form, top, n1 } stocké dans le layout (objets mêlés aux clés).
+const W_METRICS = {
+  ca: { label: 'CA (€)', fmt: 'eur' }, qte: { label: 'Quantité', fmt: 'int' },
+  commandes: { label: 'Commandes', fmt: 'int' }, pieces: { label: 'Pièces', fmt: 'int' },
+  pm: { label: 'Panier moyen (€)', fmt: 'eur' }, tt: { label: 'Taux de transfo', fmt: 'pct' },
+  sessions: { label: 'Sessions', fmt: 'int' }, revenue: { label: 'Revenu GA (€)', fmt: 'eur' },
+  purchases: { label: 'Achats (GA)', fmt: 'int' },
+  caFP: { label: 'CA Full Price (€)', fmt: 'eur' }, caOP: { label: 'CA Off Price (€)', fmt: 'eur' },
+  caFR: { label: 'CA France (€)', fmt: 'eur' }, caInt: { label: 'CA International (€)', fmt: 'eur' },
+};
+const W_DIMS = {
+  total: { label: 'Total période (1 chiffre)', metrics: ['ca', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'caFP', 'caOP', 'caFR', 'caInt'], forms: ['kpi'] },
+  famille: { label: 'Par famille', metrics: ['ca'], forms: ['bars', 'table', 'donut'] },
+  pays: { label: 'Par pays', metrics: ['ca', 'commandes'], forms: ['bars', 'table', 'donut'] },
+  produit: { label: 'Par produit (top 10)', metrics: ['ca', 'qte'], forms: ['table', 'bars'] },
+  saison: { label: 'Par saison (collection)', metrics: ['ca'], forms: ['table', 'donut', 'bars'] },
+  canal: { label: 'Par canal (GA4)', metrics: ['sessions', 'revenue'], forms: ['table', 'donut', 'bars'] },
+  canaltype: { label: 'Par type de canal', metrics: ['sessions', 'revenue'], forms: ['table', 'donut', 'bars'] },
+  device: { label: 'Par device', metrics: ['sessions', 'revenue'], forms: ['donut', 'table', 'bars'] },
+  jour: { label: 'Par jour (évolution)', metrics: ['ca', 'commandes', 'sessions', 'tt'], forms: ['line', 'bars', 'table'] },
+  tranche: { label: 'Par tranche de démarque', metrics: ['ca', 'qte'], forms: ['table', 'bars', 'donut'] },
+  campagne: { label: 'Par campagne (UTM)', metrics: ['sessions', 'revenue', 'purchases'], forms: ['table', 'bars'] },
+};
+const W_FORMS = { kpi: 'Chiffre clé (tuile)', table: 'Tableau', bars: 'Barres', donut: 'Camembert', line: 'Courbe' };
+const fmtW = (v, f) => f === 'eur' ? fEur(v) : f === 'pct' ? fPct(v) : fInt(v);
+
+// Extraction : widget → lignes {label, n, n1} depuis l'objet rep (source unique, déjà calculée).
+function widgetData(w, rep) {
+  const fmt = (W_METRICS[w.metric] || {}).fmt || 'int';
+  const M = w.metric, T = w.top || 10;
+  const out = rows => ({ rows: rows.filter(r => r && r.label != null && r.n != null).slice(0, T), fmt });
+  try {
+    switch (w.dim) {
+      case 'total': {
+        const k = rep.kpiEShop && rep.kpiEShop.n, k1 = (rep.kpiEShop && rep.kpiEShop.n1) || {};
+        const c = rep.ca && rep.ca.n, c1 = (rep.ca && rep.ca.n1) || {};
+        const map = { ca: [k && k.ca, k1.ca], commandes: [k && k.commandes, k1.commandes], pieces: [k && k.pieces, k1.pieces], pm: [k && k.pm, k1.pm], tt: [k && k.tt, k1.tt], sessions: [k && k.sessions, k1.sessions], caFP: [c && c.caFP, c1.caFP], caOP: [c && c.caOP, c1.caOP], caFR: [c && c.caFR, c1.caFR], caInt: [c && c.caInt, c1.caInt] };
+        const v = map[M] || [null, null];
+        return out([{ label: (W_METRICS[M] || {}).label || M, n: v[0], n1: v[1] }]);
+      }
+      case 'famille': return out((rep.famille || []).map(f => ({ label: f.fam, n: f.n, n1: f.n1 })));
+      case 'pays': return out((rep.pays || []).map(p => ({ label: p.pays, n: M === 'commandes' ? (p.n && p.n.commandes) : (p.n && p.n.ca), n1: p.n1 ? (M === 'commandes' ? p.n1.commandes : p.n1.ca) : null })));
+      case 'produit': {
+        const a = (rep.topProduits && rep.topProduits.n) || [];
+        const b = {}; ((rep.topProduits && rep.topProduits.n1) || []).forEach(x => { b[x.des] = x; });
+        return out(a.map(x => ({ label: x.des, n: M === 'qte' ? x.qte : x.ca, n1: b[x.des] ? (M === 'qte' ? b[x.des].qte : b[x.des].ca) : null })));
+      }
+      case 'saison': return out((rep.saison || []).map(s => ({ label: s.saison, n: s.n, n1: s.n1 })));
+      case 'canal': {
+        const b = {}; ((rep.channels && rep.channels.n1) || []).forEach(x => { b[x.canal] = x; });
+        return out(((rep.channels && rep.channels.n) || []).map(x => ({ label: x.canal, n: x[M === 'revenue' ? 'revenue' : 'sessions'], n1: b[x.canal] ? b[x.canal][M === 'revenue' ? 'revenue' : 'sessions'] : null })));
+      }
+      case 'canaltype': {
+        const b = {}; ((rep.channelTypes && rep.channelTypes.n1) || []).forEach(x => { b[x.type] = x; });
+        return out(((rep.channelTypes && rep.channelTypes.n) || []).map(x => ({ label: x.type, n: x[M === 'revenue' ? 'revenue' : 'sessions'], n1: b[x.type] ? b[x.type][M === 'revenue' ? 'revenue' : 'sessions'] : null })));
+      }
+      case 'device': {
+        const b = {}; ((rep.device && rep.device.n1) || []).forEach(x => { b[x.device] = x; });
+        return out(((rep.device && rep.device.n) || []).map(x => ({ label: x.device, n: x[M === 'revenue' ? 'revenue' : 'sessions'], n1: b[x.device] ? b[x.device][M === 'revenue' ? 'revenue' : 'sessions'] : null })));
+      }
+      case 'jour': {
+        const a = rep.daily || [], b = rep.dailyN1 || [];
+        return { rows: a.map((d, i) => ({ label: (d.date || '').slice(5), n: d[M], n1: b[i] ? b[i][M] : null })), fmt };
+      }
+      case 'tranche': {
+        const dd = rep.demarqueDepth && rep.demarqueDepth.n; if (!dd) return { rows: [], fmt };
+        const b = {}; ((rep.demarqueDepth.n1 && rep.demarqueDepth.n1.buckets) || []).forEach(x => { b[x.label] = x; });
+        return out(dd.buckets.filter(x => x.ca > 0 || (b[x.label] && b[x.label].ca > 0)).map(x => ({ label: x.label, n: M === 'qte' ? x.qte : x.ca, n1: b[x.label] ? (M === 'qte' ? b[x.label].qte : b[x.label].ca) : null })));
+      }
+      case 'campagne': {
+        const key = M === 'revenue' ? 'revenue' : (M === 'purchases' ? 'purchases' : 'sessions');
+        return out((rep.campaigns || []).slice().sort((a, b2) => (b2[key] || 0) - (a[key] || 0)).map(x => ({ label: x.campaign, n: x[key], n1: x[key + 'N1'] })));
+      }
+      default: return { rows: [], fmt };
+    }
+  } catch (e) { return { rows: [], fmt }; }
+}
+
+// Rendu d'un widget (HTML) + mise en file des graphiques (dessinés après innerHTML).
+let W_PENDING = [];
+const W_CHARTS = {};
+function renderCustomWidget(w, rep, placeholder) {
+  const { rows, fmt } = widgetData(w, rep);
+  const title = w.title || `${(W_DIMS[w.dim] || {}).label || w.dim} — ${(W_METRICS[w.metric] || {}).label || w.metric}`;
+  if (!rows.length) return placeholder ? `<div class="card"><h3>🧱 ${esc(title)}</h3><div class="note">Pas de donnée pour ce widget sur cette période (source manquante ou vide).</div></div>` : '';
+  const useN1 = w.n1 !== false && rows.some(r => r.n1 != null);
+  const cid = 'cw_' + w.id;
+  let body = '';
+  if (w.form === 'kpi') {
+    body = `<div class="kgrid">${rows.map(r => `<div class="kc"><div class="l">${esc(r.label)}</div><div class="v">${fmtW(r.n, fmt)} ${useN1 && r.n1 != null ? delta(r.n, r.n1) : ''}</div></div>`).join('')}</div>`;
+  } else if (w.form === 'table') {
+    body = `<table><thead><tr><th>${esc((W_DIMS[w.dim] || {}).label || '')}</th><th>N</th>${useN1 ? '<th>N-1</th><th>Δ</th>' : ''}</tr></thead><tbody>${rows.map(r => `<tr><td title="${esc(r.label)}">${esc((r.label || '').toString().slice(0, 40))}</td><td>${fmtW(r.n, fmt)}</td>${useN1 ? `<td>${r.n1 != null ? fmtW(r.n1, fmt) : '—'}</td><td>${delta(r.n, r.n1)}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  } else {
+    const h = w.form === 'donut' ? 200 : Math.max(160, Math.min(360, rows.length * (w.form === 'bars' ? 26 : 10) + 60));
+    body = `<div style="height:${h}px"><canvas id="${cid}"></canvas></div>`;
+    W_PENDING.push({ cid, w, rows, fmt, useN1 });
+  }
+  return `<div class="card"><h3>🧱 ${esc(title)}</h3>${body}<div class="note">Widget personnalisé · ${esc((W_DIMS[w.dim] || {}).label || w.dim)} · ${esc((W_METRICS[w.metric] || {}).label || w.metric)}${useN1 ? ' · vs N-1' : ''}</div></div>`;
+}
+function renderWidgetCharts() {
+  if (typeof Chart === 'undefined') { W_PENDING = []; return; }
+  W_PENDING.forEach(({ cid, w, rows, fmt, useN1 }) => {
+    const el = document.getElementById(cid); if (!el) return;
+    if (W_CHARTS[cid]) W_CHARTS[cid].destroy();
+    const labels = rows.map(r => (r.label || '').toString().slice(0, 22));
+    const vals = rows.map(r => fmt === 'pct' ? +((r.n || 0) * 100).toFixed(2) : Math.round(r.n || 0));
+    const vals1 = rows.map(r => r.n1 != null ? (fmt === 'pct' ? +((r.n1 || 0) * 100).toFixed(2) : Math.round(r.n1 || 0)) : null);
+    const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
+    let cfg;
+    if (w.form === 'donut') {
+      cfg = { type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } };
+    } else if (w.form === 'line') {
+      cfg = { type: 'line', data: { labels, datasets: [
+        { label: 'N', data: vals, borderColor: '#f5a623', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(useN1 ? [{ label: 'N-1', data: vals1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+      ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: useN1, labels: { color: '#94a3b8', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } } } } };
+    } else { // bars (horizontales, N + N-1 claire)
+      cfg = { type: 'bar', data: { labels, datasets: [
+        { label: 'N', data: vals, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
+        ...(useN1 ? [{ label: 'N-1', data: vals1, backgroundColor: 'rgba(148,163,184,.3)', borderColor: '#94a3b8', borderWidth: 1 }] : []),
+      ] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: useN1, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } } } };
+    }
+    W_CHARTS[cid] = new Chart(el.getContext('2d'), cfg);
+  });
+  W_PENDING = [];
+}
+
+// Constructeur de widget (modal) : Donnée × Métrique × Forme × Top × N-1 → callback(widget).
+function openWidgetBuilder(cb) {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:70;padding:20px';
+  const dimOpts = Object.entries(W_DIMS).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
+  ov.innerHTML = `<div style="background:var(--s);border:1px solid var(--br);border-radius:14px;padding:18px;width:430px;max-width:100%">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:10px"><b>🧱 Nouveau widget</b><span id="wbX" style="cursor:pointer;color:var(--t3)">✕</span></div>
+    <label class="note" style="display:block;margin:8px 0 2px">Titre (optionnel)</label>
+    <input id="wbTitle" class="dt" style="width:100%" placeholder="ex. Part PAP vs Maroquinerie (CA)">
+    <label class="note" style="display:block;margin:10px 0 2px">Donnée (dimension)</label>
+    <select id="wbDim" class="dt" style="width:100%">${dimOpts}</select>
+    <label class="note" style="display:block;margin:10px 0 2px">Métrique</label>
+    <select id="wbMetric" class="dt" style="width:100%"></select>
+    <label class="note" style="display:block;margin:10px 0 2px">Forme</label>
+    <select id="wbForm" class="dt" style="width:100%"></select>
+    <div class="toolbar" style="margin-top:10px">
+      <label class="note" style="margin:0">Top</label>
+      <select id="wbTop" class="dt"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
+      <label class="note" style="margin:0 0 0 10px"><input type="checkbox" id="wbN1" checked> Comparer à N-1</label>
+    </div>
+    <div class="toolbar" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn" id="wbCancel">Annuler</button>
+      <button class="btn primary" id="wbAdd">Ajouter le widget</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const fill = () => {
+    const d = W_DIMS[ov.querySelector('#wbDim').value];
+    ov.querySelector('#wbMetric').innerHTML = d.metrics.map(m => `<option value="${m}">${esc(W_METRICS[m].label)}</option>`).join('');
+    ov.querySelector('#wbForm').innerHTML = d.forms.map(f => `<option value="${f}">${esc(W_FORMS[f])}</option>`).join('');
+  };
+  fill();
+  ov.querySelector('#wbDim').addEventListener('change', fill);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('#wbX').onclick = close;
+  ov.querySelector('#wbCancel').onclick = close;
+  ov.querySelector('#wbAdd').onclick = () => {
+    const w = {
+      id: 'w' + Date.now().toString(36),
+      title: ov.querySelector('#wbTitle').value.trim(),
+      dim: ov.querySelector('#wbDim').value,
+      metric: ov.querySelector('#wbMetric').value,
+      form: ov.querySelector('#wbForm').value,
+      top: parseInt(ov.querySelector('#wbTop').value) || 10,
+      n1: ov.querySelector('#wbN1').checked,
+    };
+    close(); cb(w);
+  };
+}
 async function saveLayout(m, arr) {
   SERVER_LAYOUTS[m] = arr; // maj mémoire immédiate (rendu sync)
   const r = await fetch('/api/layouts/' + encodeURIComponent(m), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layout: arr }) });
@@ -315,6 +494,19 @@ function initModules() {
   const sv = document.getElementById('editSave'); if (sv && !sv._wired) { sv._wired = true; sv.addEventListener('click', () => saveEditView()); }
   const rs = document.getElementById('editReset'); if (rs && !rs._wired) { rs._wired = true; rs.addEventListener('click', async () => { if (!EDIT_VIEW) return; if (!confirm('Réinitialiser cette vue à sa configuration d\'origine ?')) return; try { await resetLayout(EDIT_VIEW); } catch (e) { /* best-effort */ } loadReport(); }); }
   const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
+  // 🧱 Nouveau widget (en mode édition) : compose un widget et l'insère en tête, déjà coché.
+  const aw = document.getElementById('addWidgetBtn');
+  if (aw && !aw._wired) {
+    aw._wired = true;
+    aw.addEventListener('click', () => openWidgetBuilder(w => {
+      const cont = document.getElementById('editCards'); if (!cont) return;
+      const body = renderCustomWidget(w, LAST_REP, true) || `<div class="card"><h3>🧱 ${esc(w.title || 'Widget')}</h3><div class="note">Pas de donnée pour ce widget sur cette période.</div></div>`;
+      cont.insertAdjacentHTML('afterbegin', editWrapHtml(w, true, body));
+      renderWidgetCharts(); // dessine le graphe du widget fraîchement inséré
+      updateEditCount();
+      cont.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+  }
   const nd = document.getElementById('newDashBtn'); if (nd) nd.addEventListener('click', () => createDashboard());
   // Boutons « éditer / supprimer mon tableau de bord » (visibles seulement sur une vue perso).
   const myc = document.getElementById('myViewCtl');
@@ -447,7 +639,7 @@ function reportQuery() {
     ? `from=${DATES.from}&to=${DATES.to}&cfrom=${DATES.cfrom}&cto=${DATES.cto}&dim=${CURRENT_DIM}`
     : `preset=all&dim=${CURRENT_DIM}`;
   const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
-  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}`;
+  return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}${COMPARE ? '' : '&compare=0'}`;
 }
 async function loadReport() {
   const box = document.getElementById('report');
@@ -474,12 +666,14 @@ async function loadReport() {
   renderTimelineChart(rep);
   renderTimeline2Chart(rep);
   renderCharts(rep);
+  renderWidgetCharts(); // graphes des widgets « from scratch » (mode normal + édition)
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
   else { wireBilan(); buildReportNav(); }
   updateViewControls();
 }
 
 function renderReport(rep) {
+  W_PENDING = []; // file des graphes de widgets (vidée à chaque rendu)
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
   const kRows = [['CA', fEur(k.ca), fEur(k1.ca), delta(k.ca, k1.ca)]];
   if (k.caFP != null) kRows.push(['↳ CA Full Price', fEur(k.caFP), fEur(k1.caFP), delta(k.caFP, k1.caFP)]);
@@ -1187,8 +1381,10 @@ function renderReport(rep) {
   let body;
   if (isCustomLayout(CURRENT_MODULE)) {
     // Vue personnalisée : on respecte l'ORDRE exact du layout (drag'n'drop), bannière au changement de thème.
+    // Les items peuvent être des clés de cartes (string) ou des WIDGETS « from scratch » (objets).
     let lastTheme = null; const out = [];
     layout.forEach(k => {
+      if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html); return; }
       const html = card(k); if (!html) return;
       const t = THEME_OF[k];
       if (t && t !== lastTheme) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); lastTheme = t; }
@@ -1247,23 +1443,32 @@ function buildReportNav() {
 // ── Mode édition WYSIWYG (admin) : case + poignée sur CHAQUE tableau, drag'n'drop sur la page ──
 // Rendu du rapport en mode édition : TOUS les tableaux affichés (non sélectionnés estompés en fond),
 // les sélectionnés entourés en pointillés. `card` = builder local de renderReport.
+function editWrapHtml(k, inView, bodyHtml) {
+  const isW = typeof k === 'object' && k;
+  const name = isW ? (k.title || `Widget ${(W_DIMS[k.dim] || {}).label || k.dim}`) : (CARD_LABELS[k] || k);
+  const attrs = isW ? `data-widget="${encodeURIComponent(JSON.stringify(k))}"` : `data-key="${k}"`;
+  return `<div class="edit-wrap ${inView ? 'in' : 'out'}" draggable="true" ${attrs} data-in="${inView ? 1 : 0}">
+    <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner le sens de lecture">⠿</span>
+      <button type="button" class="edit-toggle">${inView ? '✓ Dans la vue' : '+ Ajouter à la vue'}</button>
+      <span class="edit-name">${isW ? '🧱 ' : ''}${esc(name)}</span></div>${bodyHtml}</div>`;
+}
 function renderEditMode(rep, card) {
   const cur = getLayout(EDIT_VIEW);
-  const included = cur.filter(k => ALL_CARDS.includes(k));
-  const excluded = ALL_CARDS.filter(k => !included.includes(k));
+  const included = cur.filter(k => (typeof k === 'object' && k) || ALL_CARDS.includes(k));
+  const inKeys = new Set(included.filter(k => typeof k === 'string'));
+  const excluded = ALL_CARDS.filter(k => !inKeys.has(k));
   const ordered = included.concat(excluded); // inclus (dans l'ordre de lecture) puis les autres à ajouter
   const wrap = k => {
-    const inView = included.includes(k);
-    let html = card(k);
+    const isW = typeof k === 'object' && k;
+    const inView = isW || inKeys.has(k);
+    let html = isW ? renderCustomWidget(k, rep, true) : card(k);
     if (!html) html = `<div class="card"><h3>${esc(CARD_LABELS[k] || k)}</h3><div class="note">Aucune donnée sur cette période — ce tableau s'affichera dès que la donnée sera disponible.</div></div>`;
-    return `<div class="edit-wrap ${inView ? 'in' : 'out'}" draggable="true" data-key="${k}" data-in="${inView ? 1 : 0}">
-      <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner le sens de lecture">⠿</span>
-        <button type="button" class="edit-toggle">${inView ? '✓ Dans la vue' : '+ Ajouter à la vue'}</button>
-        <span class="edit-name">${esc(CARD_LABELS[k] || k)}</span></div>${html}</div>`;
+    return editWrapHtml(k, inView, html);
   };
   return `<div id="editCards">${ordered.map(wrap).join('')}</div>`;
 }
-// Branche le drag'n'drop + les boutons « ajouter / retirer » (appelé après innerHTML en mode édition).
+// Branche le drag'n'drop + les boutons « ajouter / retirer » (délégation → marche aussi pour
+// les widgets ajoutés dynamiquement en cours d'édition).
 function wireEditMode() {
   const cont = document.getElementById('editCards'); if (!cont) return;
   let dragEl = null;
@@ -1275,13 +1480,14 @@ function wireEditMode() {
     if (!dragEl) return;
     if (after) cont.insertBefore(dragEl, after); else cont.appendChild(dragEl);
   });
-  cont.querySelectorAll('.edit-toggle').forEach(btn => btn.addEventListener('click', () => {
+  cont.addEventListener('click', e => {
+    const btn = e.target.closest('.edit-toggle'); if (!btn) return;
     const w = btn.closest('.edit-wrap'); const on = w.dataset.in === '1';
     w.dataset.in = on ? '0' : '1';
     w.classList.toggle('in', !on); w.classList.toggle('out', on);
     btn.textContent = on ? '+ Ajouter à la vue' : '✓ Dans la vue';
     updateEditCount();
-  }));
+  });
   updateEditCount();
 }
 function updateEditCount() {
@@ -1291,7 +1497,9 @@ function updateEditCount() {
 // Enregistre la vue en édition (cartes sélectionnées, dans l'ordre affiché).
 async function saveEditView() {
   const cont = document.getElementById('editCards'); if (!cont || !EDIT_VIEW) return;
-  const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.dataset.in === '1').map(w => w.dataset.key);
+  const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.dataset.in === '1')
+    .map(w => w.dataset.widget ? JSON.parse(decodeURIComponent(w.dataset.widget)) : w.dataset.key)
+    .filter(Boolean);
   if (!arr.length) { alert('Sélectionne au moins un tableau pour cette vue.'); return; }
   const btn = document.getElementById('editSave'); if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
   try {
@@ -2272,6 +2480,15 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
 }));
 // Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande).
 document.getElementById('n1Default').addEventListener('click', () => { syncComparable(); });
+// Comparaison N-1 : « N vs N-1 » (défaut) ou « N seule » (pas besoin des données de l'année précédente).
+document.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-cmp]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  COMPARE = b.dataset.cmp === '1';
+  ['dCfrom', 'dCto'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !COMPARE; });
+  const nd = document.getElementById('n1Default'); if (nd) nd.disabled = !COMPARE;
+  loadReport();
+}));
 document.getElementById('datesAll').addEventListener('click', () => {
   DATES = null;
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
