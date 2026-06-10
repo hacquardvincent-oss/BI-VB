@@ -65,15 +65,10 @@
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Presets</span>
-      <button class="pb" data-range="yesterday" title="Hier · comparable J-364 (même jour de semaine N-1)">Hier</button>
-      <button class="pb" data-range="week" title="Semaine en cours (lun→dim) · comparable même semaine N-1">Semaine</button>
-      <button class="pb" data-range="month" title="Mois en cours (1er→fin) · comparable même mois N-1">Mois</button>
-      <button class="pb" data-range="ytd" title="Cumul annuel (1er janv → aujourd'hui) vs même cumul N-1">Cumul annuel</button>
-      <button class="pb" data-range="year" title="Année complète (1er janv → 31 déc) vs N-1">Année</button>
-      <button class="pb" data-range="7d">7 j</button>
-      <button class="pb" data-range="30d">30 j</button>
-      <button class="pb" data-season="ete">Saison Été</button>
-      <button class="pb" data-season="hiver">Saison Hiver</button>
+      <button class="pb" data-range="yesterday" title="Hier (J-1) vs même jour de semaine N-1">Hier</button>
+      <button class="pb" data-range="week" title="Semaine dernière complète (lun→dim) vs N-1">Semaine (S-1)</button>
+      <button class="pb" data-range="month" title="Cumul du mois en cours (1er → aujourd'hui) vs même cumul N-1">Mois en cours</button>
+      <button class="pb" data-range="ytd" title="Cumul de l'année en cours (1er janv → aujourd'hui) vs même cumul N-1">Année en cours</button>
       <button class="pb on" id="datesAll">Tout</button>
     </div>
     <div class="toolbar" style="margin-top:8px">
@@ -88,7 +83,7 @@
       <div class="spacer" style="flex:1"></div>
       <button class="btn blue" id="applyDates">Appliquer</button>
     </div>
-    <div class="note">🧵 <b>Analyse de saison — 2 modes</b> : clique <b>Saison Été/Hiver</b> pour la fenêtre d'implantation (dates éditables), puis choisis le périmètre : <b>« Collection saison »</b> = évolution des seules pièces de la collection ; <b>« Tout »</b> = impact de la saison sur le CA global de la période.</div>
+    <div class="note">🧵 <b>Périmètre</b> : <b>« Tout »</b> = CA global de la période ; <b>« Collection saison »</b> = uniquement les pièces de l'implantation (E26/E25). Pour une analyse de saison complète (période longue, sell-through, couverture), utilise la page dédiée <a href="/saison.html">🏷️ Analyse de saison</a>.</div>
     <div class="note" id="metaNote"></div>
   </div>
 

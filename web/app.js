@@ -2531,16 +2531,13 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   // sinon comparable −364 j (même jour de semaine : hier, semaine, fenêtres glissantes).
   let calendarCompare = false;
   if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
-  else if (kind === '7d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 7); }
-  else if (kind === '30d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 30); }
-  else if (kind === 'week') { // semaine en cours, lundi → dimanche
+  else if (kind === 'week') { // SEMAINE DERNIÈRE complète (lundi → dimanche précédents)
     const dow = (today.getDay() + 6) % 7; // 0 = lundi
-    from = new Date(today); from.setDate(today.getDate() - dow);
-    to = new Date(from); to.setDate(from.getDate() + 6);
+    to = new Date(today); to.setDate(today.getDate() - dow - 1);   // dimanche dernier
+    from = new Date(to); from.setDate(to.getDate() - 6);           // lundi de cette semaine-là
   }
-  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = new Date(today.getFullYear(), today.getMonth() + 1, 0); calendarCompare = true; }
-  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }
-  else if (kind === 'year') { from = new Date(today.getFullYear(), 0, 1); to = new Date(today.getFullYear(), 11, 31); calendarCompare = true; }
+  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; calendarCompare = true; } // cumul du mois EN COURS
+  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }                  // cumul de l'année EN COURS
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
   document.getElementById('dCfrom').value = calendarCompare ? shiftYearStr(nf) : comparable364(nf);
