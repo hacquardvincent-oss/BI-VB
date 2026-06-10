@@ -1105,24 +1105,25 @@ function buildReportNav() {
 
 // ── Éditeur de vue : cocher / réordonner (drag'n'drop) les tableaux d'une vue ──────
 // ── Mode édition WYSIWYG (admin) : case + poignée sur CHAQUE tableau, drag'n'drop sur la page ──
-// Rendu du rapport en mode édition : tous les tableaux, cochables et déplaçables. `card` = builder local de renderReport.
+// Rendu du rapport en mode édition : TOUS les tableaux affichés (non sélectionnés estompés en fond),
+// les sélectionnés entourés en pointillés. `card` = builder local de renderReport.
 function renderEditMode(rep, card) {
   const cur = getLayout(EDIT_VIEW);
   const included = cur.filter(k => ALL_CARDS.includes(k));
   const excluded = ALL_CARDS.filter(k => !included.includes(k));
-  const ordered = included.concat(excluded); // inclus (dans l'ordre) puis le reste à ajouter
+  const ordered = included.concat(excluded); // inclus (dans l'ordre de lecture) puis les autres à ajouter
   const wrap = k => {
     const inView = included.includes(k);
     let html = card(k);
     if (!html) html = `<div class="card"><h3>${esc(CARD_LABELS[k] || k)}</h3><div class="note">Aucune donnée sur cette période — ce tableau s'affichera dès que la donnée sera disponible.</div></div>`;
-    return `<div class="edit-wrap${inView ? '' : ' off'}" draggable="true" data-key="${k}">
-      <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner">⠿</span>
-        <label><input type="checkbox" ${inView ? 'checked' : ''}> Dans cette vue</label>
+    return `<div class="edit-wrap ${inView ? 'in' : 'out'}" draggable="true" data-key="${k}" data-in="${inView ? 1 : 0}">
+      <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner le sens de lecture">⠿</span>
+        <button type="button" class="edit-toggle">${inView ? '✓ Dans la vue' : '+ Ajouter à la vue'}</button>
         <span class="edit-name">${esc(CARD_LABELS[k] || k)}</span></div>${html}</div>`;
   };
   return `<div id="editCards">${ordered.map(wrap).join('')}</div>`;
 }
-// Branche le drag'n'drop + le toggle des cases (appelé après innerHTML en mode édition).
+// Branche le drag'n'drop + les boutons « ajouter / retirer » (appelé après innerHTML en mode édition).
 function wireEditMode() {
   const cont = document.getElementById('editCards'); if (!cont) return;
   let dragEl = null;
@@ -1134,12 +1135,23 @@ function wireEditMode() {
     if (!dragEl) return;
     if (after) cont.insertBefore(dragEl, after); else cont.appendChild(dragEl);
   });
-  cont.querySelectorAll('.edit-wrap input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => cb.closest('.edit-wrap').classList.toggle('off', !cb.checked)));
+  cont.querySelectorAll('.edit-toggle').forEach(btn => btn.addEventListener('click', () => {
+    const w = btn.closest('.edit-wrap'); const on = w.dataset.in === '1';
+    w.dataset.in = on ? '0' : '1';
+    w.classList.toggle('in', !on); w.classList.toggle('out', on);
+    btn.textContent = on ? '+ Ajouter à la vue' : '✓ Dans la vue';
+    updateEditCount();
+  }));
+  updateEditCount();
 }
-// Enregistre la vue en édition (cartes cochées, dans l'ordre affiché).
+function updateEditCount() {
+  const cont = document.getElementById('editCards'); const el = document.getElementById('editCount');
+  if (cont && el) el.textContent = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.dataset.in === '1').length + ' tableau(x) dans la vue';
+}
+// Enregistre la vue en édition (cartes sélectionnées, dans l'ordre affiché).
 async function saveEditView() {
   const cont = document.getElementById('editCards'); if (!cont || !EDIT_VIEW) return;
-  const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.querySelector('input[type=checkbox]').checked).map(w => w.dataset.key);
+  const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.dataset.in === '1').map(w => w.dataset.key);
   if (!arr.length) { alert('Sélectionne au moins un tableau pour cette vue.'); return; }
   const btn = document.getElementById('editSave'); if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
   try { await saveLayout(EDIT_VIEW, arr); exitEditMode(); }
