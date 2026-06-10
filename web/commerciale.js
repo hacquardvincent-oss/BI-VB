@@ -219,7 +219,7 @@ async function analyze() {
   const cfrom = document.getElementById('dCFrom').value || shiftDays(from, -364);
   const cto = document.getElementById('dCTo').value || shiftDays(to, -364);
   const opName = document.getElementById('opName').value.trim();
-  try { localStorage.setItem('vbOp', JSON.stringify({ opName, from, to })); } catch (e) { /* ignore */ }
+  try { localStorage.setItem('vbOp', JSON.stringify({ opName, from, to, cfrom, cto })); } catch (e) { /* ignore */ }
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement de l\'opération…</div>';
   let rep;
@@ -297,15 +297,15 @@ async function syncDelta() {
   const from = (saved && saved.from) || shiftDays(today, -6), to = (saved && saved.to) || today;
   document.getElementById('opName').value = (saved && saved.opName) || '';
   document.getElementById('dFrom').value = from; document.getElementById('dTo').value = to;
-  document.getElementById('dCFrom').value = shiftDays(from, -364); document.getElementById('dCTo').value = shiftDays(to, -364);
-  // N-1 auto quand on change N
-  const syncN1 = () => {
+  document.getElementById('dCFrom').value = (saved && saved.cfrom) || shiftDays(from, -364);
+  document.getElementById('dCTo').value = (saved && saved.cto) || shiftDays(to, -364);
+  // N-1 = pré-rempli à −364 j en DÉFAUT, mais éditable librement (les périodes peuvent être décalées
+  // d'une semaine vs N-1). On NE recale PAS automatiquement N-1 quand N change.
+  document.getElementById('n1Default').addEventListener('click', () => {
     const f = document.getElementById('dFrom').value, t = document.getElementById('dTo').value;
     if (f) document.getElementById('dCFrom').value = shiftDays(f, -364);
     if (t) document.getElementById('dCTo').value = shiftDays(t, -364);
-  };
-  document.getElementById('dFrom').addEventListener('change', syncN1);
-  document.getElementById('dTo').addEventListener('change', syncN1);
+  });
   document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); DIM = b.dataset.dim; analyze();

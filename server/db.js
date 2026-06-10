@@ -47,6 +47,12 @@ async function init() {
     data       jsonb NOT NULL DEFAULT '{}'::jsonb,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // Tableaux de bord PERSONNELS (1 ligne / utilisateur) : data = { key: {label, cards[]} }
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_views (
+    username   text PRIMARY KEY,
+    data       jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     username   text PRIMARY KEY,
     pass_hash  text NOT NULL,

@@ -27,13 +27,18 @@
     <h3>1 · Type d'analyse</h3>
     <div class="toolbar" id="moduleBar"></div>
     <div class="toolbar" style="margin-top:8px">
-      <button class="btn hidden" id="editViewBtn" title="Mode édition : choisir les tableaux de chaque vue et les réordonner (admin)">✏️ EDIT</button>
+      <button class="btn hidden" id="editViewBtn" title="Mode édition des vues partagées : choisir les tableaux et les réordonner (admin)">✏️ EDIT (vues partagées)</button>
+      <span id="myViewCtl" class="hidden" style="display:inline-flex;gap:6px">
+        <button class="btn" id="myEditBtn" title="Éditer mon tableau de bord">✏️ Éditer ce tableau</button>
+        <button class="btn" id="myDelBtn" title="Supprimer mon tableau de bord">🗑️</button>
+      </span>
       <button class="btn" id="navToggle" title="Sommaire / navigation rapide dans la page">☰ Sommaire</button>
       <span class="note" id="customViewNote" style="margin:0"></span>
     </div>
     <div class="toolbar hidden" id="editBar" style="margin-top:8px;background:var(--s2);border:1px solid var(--a);border-radius:8px;padding:8px 10px">
-      <b style="font-size:12px">✏️ Édition de la vue :</b>
+      <b style="font-size:12px">✏️ Édition :</b>
       <select id="editViewSel" class="dt"></select>
+      <input id="editViewName" class="dt hidden" placeholder="Nom du tableau de bord" style="min-width:200px">
       <span class="pill" id="editCount"></span>
       <span class="note" style="margin:0">Clique « + Ajouter » sur un tableau pour l'inclure · glisse (⠿) pour réordonner le sens de lecture.</span>
       <div class="spacer" style="flex:1"></div>
@@ -52,6 +57,7 @@
       <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
       <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
+      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine). Sinon, période N-1 libre.">≈ −364 j</button>
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Presets</span>

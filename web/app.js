@@ -148,9 +148,26 @@ const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', '
 let SERVER_LAYOUTS = {};
 async function loadServerLayouts() { try { const r = await fetch('/api/layouts'); if (r.ok) SERVER_LAYOUTS = (await r.json()) || {}; } catch (e) { SERVER_LAYOUTS = {}; } }
 function defaultLayout(m) { return (MODULES[m] && MODULES[m].layout) || FULL_LAYOUT; }
-function getLayout(m) { if (m === 'full') return ALL_CARDS.slice(); const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m); }
-function isCustomLayout(m) { const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
-// Vues éditables (la vue « Full » contient toujours TOUS les tableaux → non éditable).
+// ── Tableaux de bord PERSONNELS (moteur de création par utilisateur, persistés par compte) ──
+let MY_VIEWS = {}; // { key: { label, cards[] } }
+const isMyView = k => typeof k === 'string' && k.indexOf('my:') === 0;
+const myKey = k => k.slice(3);
+async function loadMyViews() { try { const r = await fetch('/api/myviews'); if (r.ok) MY_VIEWS = (await r.json()) || {}; } catch (e) { MY_VIEWS = {}; } }
+function viewLabel(k) { return isMyView(k) ? ((MY_VIEWS[myKey(k)] || {}).label || 'Mon tableau de bord') : ((MODULES[k] && MODULES[k].label) || k); }
+async function saveMyView(key, label, cards) {
+  MY_VIEWS[key] = { label, cards };
+  const r = await fetch('/api/myviews/' + encodeURIComponent(key), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, cards }) });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('HTTP ' + r.status)); }
+}
+async function deleteMyView(key) { delete MY_VIEWS[key]; try { await fetch('/api/myviews/' + encodeURIComponent(key), { method: 'DELETE' }); } catch (e) { /* ignore */ } }
+
+function getLayout(m) {
+  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? v.cards : ['kpi']; }
+  if (m === 'full') return ALL_CARDS.slice();
+  const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m);
+}
+function isCustomLayout(m) { if (isMyView(m)) return true; const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
+// Vues éditables côté ADMIN (vues partagées ; « Full » contient toujours tout → non éditable).
 function editableViews() { return MODULE_ORDER.filter(k => MODULES[k] && k !== 'full'); }
 async function saveLayout(m, arr) {
   SERVER_LAYOUTS[m] = arr; // maj mémoire immédiate (rendu sync)
@@ -265,25 +282,30 @@ function initModules() {
   const bar = document.getElementById('moduleBar');
   let order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
   if (ALLOWED_VIEWS) order = order.filter(k => ALLOWED_VIEWS.includes(k)); // RBAC : vues autorisées
+  const myKeys = Object.keys(MY_VIEWS);
+  const myBtns = myKeys.map(k => `<button class="pb${('my:' + k) === CURRENT_MODULE ? ' on' : ''}" data-mod="my:${esc(k)}">📌 ${esc(MY_VIEWS[k].label)}</button>`).join('');
   bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
-    + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('');
+    + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('')
+    + (myKeys.length ? '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:6px">Mes tableaux</span>' + myBtns : '')
+    + '<button class="pb" id="newDashBtn" title="Créer mon propre tableau de bord (choisir les tableaux et l\'ordre)" style="border-style:dashed;color:var(--a)">➕ Nouveau tableau de bord</button>';
   bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
     bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     CURRENT_MODULE = b.dataset.mod;
-    const m = MODULES[CURRENT_MODULE];
+    const m = MODULES[CURRENT_MODULE] || {};
     // La période est pilotée par le sélecteur de dates (indépendant de la vue).
     // Prisme géo : la vue qui l'impose (International → hors France) prime ; sinon on
     // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
     CURRENT_DIM = m.dim || USER_DIM;
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
     // Vue à période fixe (ex. Démarque E26/E25) : applique ses dates au sélecteur.
-    if (m.dates) {
+    if (m && m.dates) {
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
       set('dNfrom', m.dates.from); set('dNto', m.dates.to); set('dCfrom', m.dates.cfrom); set('dCto', m.dates.cto);
       DATES = { from: m.dates.from, to: m.dates.to, cfrom: m.dates.cfrom, cto: m.dates.cto };
       const da = document.getElementById('datesAll'); if (da) da.classList.remove('on');
     }
+    const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.toggle('hidden', !isMyView(CURRENT_MODULE));
     renderModuleHint();
     loadReport();
   }));
@@ -293,13 +315,39 @@ function initModules() {
   const sv = document.getElementById('editSave'); if (sv && !sv._wired) { sv._wired = true; sv.addEventListener('click', () => saveEditView()); }
   const rs = document.getElementById('editReset'); if (rs && !rs._wired) { rs._wired = true; rs.addEventListener('click', async () => { if (!EDIT_VIEW) return; if (!confirm('Réinitialiser cette vue à sa configuration d\'origine ?')) return; try { await resetLayout(EDIT_VIEW); } catch (e) { /* best-effort */ } loadReport(); }); }
   const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
+  const nd = document.getElementById('newDashBtn'); if (nd) nd.addEventListener('click', () => createDashboard());
+  // Boutons « éditer / supprimer mon tableau de bord » (visibles seulement sur une vue perso).
+  const myc = document.getElementById('myViewCtl');
+  if (myc) {
+    myc.classList.toggle('hidden', !isMyView(CURRENT_MODULE));
+    const eb = document.getElementById('myEditBtn'), db = document.getElementById('myDelBtn');
+    if (eb) eb.onclick = () => enterEditMode(CURRENT_MODULE);
+    if (db) db.onclick = async () => {
+      if (!isMyView(CURRENT_MODULE)) return;
+      if (!confirm('Supprimer ce tableau de bord ?')) return;
+      await deleteMyView(myKey(CURRENT_MODULE));
+      CURRENT_MODULE = 'full'; initModules(); loadReport();
+    };
+  }
+}
+
+// Crée un tableau de bord personnel (nom → vue vide démarrée sur le Bilan + Pilotage, puis éditeur).
+async function createDashboard() {
+  const name = (prompt('Nom de ton tableau de bord ?', 'Mon tableau de bord') || '').trim();
+  if (!name) return;
+  const key = 'd' + Date.now().toString(36);
+  try { await saveMyView(key, name, ['kpi']); } catch (e) { alert('Échec de la création : ' + e.message); return; }
+  CURRENT_MODULE = 'my:' + key;
+  initModules();
+  enterEditMode('my:' + key); // ouvre directement l'éditeur WYSIWYG pour composer la vue
 }
 
 const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace', ads: 'Google Ads', impl: 'Implantation', offre: 'Offre / listing produits' };
 function fileLoaded(key) { return LAST_STATUS.some(s => s.source === key); }
 function renderModuleHint() {
   const el = document.getElementById('modHint'); if (!el) return;
-  const m = MODULES[CURRENT_MODULE]; if (!m) return;
+  if (isMyView(CURRENT_MODULE)) { el.innerHTML = `<b>📌 ${esc(viewLabel(CURRENT_MODULE))}</b> — ton tableau de bord personnel. « ✏️ Éditer ce tableau » pour choisir/réordonner les tableaux.`; return; }
+  const m = MODULES[CURRENT_MODULE]; if (!m) { el.innerHTML = ''; return; }
   const badge = (k, req) => { const ok = fileLoaded(k); return `<span class="pill ${ok ? '' : (req ? 'miss' : '')}">${FILE_LABEL[k] || k} ${ok ? '✓' : (req ? 'manquant' : '—')}</span>`; };
   const req = (m.files.required || []).map(k => badge(k, true)).join(' ');
   const opt = (m.files.optional || []).map(k => badge(k, false)).join(' ');
@@ -1246,26 +1294,50 @@ async function saveEditView() {
   const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.dataset.in === '1').map(w => w.dataset.key);
   if (!arr.length) { alert('Sélectionne au moins un tableau pour cette vue.'); return; }
   const btn = document.getElementById('editSave'); if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
-  try { await saveLayout(EDIT_VIEW, arr); exitEditMode(); }
-  catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; } alert('Échec de l\'enregistrement : ' + e.message); }
+  try {
+    if (isMyView(EDIT_VIEW)) {
+      const nm = document.getElementById('editViewName');
+      const label = (nm && nm.value.trim()) || viewLabel(EDIT_VIEW);
+      await saveMyView(myKey(EDIT_VIEW), label, arr);
+      initModules();
+    } else {
+      await saveLayout(EDIT_VIEW, arr); // vue partagée (admin)
+    }
+    exitEditMode();
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; } alert('Échec de l\'enregistrement : ' + e.message); }
 }
-function enterEditMode() {
-  const views = editableViews();
-  if (!views.length) return;
-  EDIT_VIEW = views.includes(CURRENT_MODULE) ? CURRENT_MODULE : views[0];
+// target optionnel : 'my:<key>' (perso, tout utilisateur) ou clé de vue partagée (admin).
+function enterEditMode(target) {
+  const personal = isMyView(target);
+  if (personal) EDIT_VIEW = target;
+  else {
+    if (!IS_ADMIN) return;
+    const views = editableViews(); if (!views.length) return;
+    EDIT_VIEW = views.includes(CURRENT_MODULE) ? CURRENT_MODULE : views[0];
+  }
   const bar = document.getElementById('editBar');
   if (bar) {
     bar.classList.remove('hidden');
-    const sel = document.getElementById('editViewSel');
-    if (sel) sel.innerHTML = views.map(k => `<option value="${k}"${k === EDIT_VIEW ? ' selected' : ''}>${esc(MODULES[k].label)}</option>`).join('');
+    const sel = document.getElementById('editViewSel'), nm = document.getElementById('editViewName'), rs = document.getElementById('editReset');
+    if (personal) {
+      if (sel) sel.classList.add('hidden');
+      if (nm) { nm.classList.remove('hidden'); nm.value = viewLabel(EDIT_VIEW); }
+      if (rs) rs.classList.add('hidden'); // pas de « réinitialiser » sur une vue perso
+    } else {
+      if (nm) nm.classList.add('hidden');
+      if (rs) rs.classList.remove('hidden');
+      if (sel) { sel.classList.remove('hidden'); sel.innerHTML = editableViews().map(k => `<option value="${k}"${k === EDIT_VIEW ? ' selected' : ''}>${esc(MODULES[k].label)}</option>`).join(''); }
+    }
   }
   document.getElementById('editViewBtn').classList.add('hidden');
+  const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.add('hidden');
   loadReport();
 }
 function exitEditMode() {
   EDIT_VIEW = null;
   const bar = document.getElementById('editBar'); if (bar) bar.classList.add('hidden');
-  if (IS_ADMIN) document.getElementById('editViewBtn').classList.remove('hidden');
+  if (IS_ADMIN) { const ev = document.getElementById('editViewBtn'); if (ev) ev.classList.remove('hidden'); }
+  initModules(); // restaure la barre de vues (+ contrôles « mes tableaux »)
   loadReport();
 }
 function updateViewControls() {
@@ -2192,11 +2264,14 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   document.getElementById('datesAll').classList.remove('on');
   applyCurrentPeriod(); loadReport();
 }));
-// Saisie manuelle de N → N-1 se recale automatiquement sur le comparable −364 j (jour pour jour).
+// Saisie manuelle de N : on PROPOSE le comparable −364 j seulement si N-1 est vide (sinon on respecte
+// la période N-1 saisie — les comparaisons peuvent être décalées d'une semaine vs N-1).
 ['dNfrom', 'dNto'].forEach(id => document.getElementById(id).addEventListener('change', () => {
-  syncComparable();
+  if (!document.getElementById('dCfrom').value && !document.getElementById('dCto').value) syncComparable();
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
 }));
+// Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande).
+document.getElementById('n1Default').addEventListener('click', () => { syncComparable(); });
 document.getElementById('datesAll').addEventListener('click', () => {
   DATES = null;
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
@@ -2234,12 +2309,13 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
 // Init
 (async () => {
   if (!(await me())) return;
-  await loadServerLayouts(); // vues personnalisées partagées (avant le 1er rendu)
+  await loadServerLayouts(); // vues partagées (avant le 1er rendu)
+  await loadMyViews();       // tableaux de bord personnels de l'utilisateur
   // Lien profond ?view= : ouvre directement une vue donnée (si autorisée RBAC).
   const qView = new URLSearchParams(location.search).get('view');
   if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) CURRENT_MODULE = qView;
   initModules();
-  const m = MODULES[CURRENT_MODULE];
+  const m = MODULES[CURRENT_MODULE] || {};
   CURRENT_DIM = m.dim || 'global';
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
   await loadStatus();

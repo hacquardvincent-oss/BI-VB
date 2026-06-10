@@ -22,6 +22,7 @@ const googleads = require('./googleads');
 const reco = require('./reco');
 const objectives = require('./objectives');
 const layouts = require('./layouts');
+const userviews = require('./userviews');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use('/api/googleads', googleads.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 app.use('/api/layouts', layouts.router);
+app.use('/api/myviews', userviews.router);
 
 // Statique : on force la revalidation du HTML/JS/CSS (Cache-Control: no-cache) pour que
 // chaque déploiement soit pris en compte immédiatement, sans vidage de cache manuel.
