@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Administration</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Retour au reporting">📊 Reporting</a>
+    <a class="pb on" href="/admin.html" title="Administration">👤 Administration</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap">
+  <div class="card" id="guard"><div class="note">Vérification des droits…</div></div>
+
+  <div class="card hidden" id="adminBody">
+    <h3>👥 Comptes & droits d'accès</h3>
+    <div class="note" style="margin-bottom:10px">Crée des accès pour ton équipe et restreins chaque profil aux vues qu'il a le droit de consulter (RBAC). Un compte <b>admin</b> voit tout et peut gérer les comptes.</div>
+
+    <div class="card" style="background:var(--s2)">
+      <h3 style="color:var(--a)">➕ Créer / mettre à jour un accès</h3>
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <input id="acUser" placeholder="identifiant" class="dt" style="min-width:160px">
+        <input id="acPass" type="password" placeholder="mot de passe" class="dt" style="min-width:160px">
+        <select id="acRole" class="dt">
+          <option value="user">Utilisateur (droits limités)</option>
+          <option value="admin">Admin (tous droits)</option>
+        </select>
+        <button class="btn primary" id="acAdd">Enregistrer le compte</button>
+      </div>
+      <div class="note" style="margin-top:10px"><b>Vues autorisées</b> pour ce profil (aucune cochée = accès à toutes les vues) :</div>
+      <div id="acViews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+      <div class="note" id="acNote" style="margin-top:8px"></div>
+    </div>
+
+    <h3 style="margin-top:16px">Comptes existants</h3>
+    <div id="acList"></div>
+  </div>
+</div>
+
+<script src="/admin.js"></script>
+</body>
+</html>
