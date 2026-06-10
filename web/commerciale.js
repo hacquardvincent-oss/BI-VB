@@ -6,6 +6,7 @@
 // ============================================================================
 
 let DIM = 'global';
+let COMPARE = true; // comparer vs N-1 (CTA)
 let LAST = null; // dernier rep de l'opération
 
 // ── Formatters (miroir de app.js) ──
@@ -55,51 +56,95 @@ function secBilan(rep, opName) {
     <div class="note">⚠️ <b>Poids Off Price</b> en couleur inversée (une hausse = plus de démarque). L'objectif d'une opération saine : développer le CA <b>sans effondrer la part full price</b>. Si le poids off explose mais que le CA global ne progresse pas, l'opération cannibalise le plein tarif.</div></div>`;
 }
 
+// GLOBAL : pivot FR / Inter × Démarqué / Full price (CA, poids, vs N-1, évolution).
+// Réplique le tableau de pilotage d'offre : où se fait le CA et avec quel poids de démarque.
+function secGlobal(rep) {
+  const z = rep.zoneFullOff && rep.zoneFullOff.n, z1 = rep.zoneFullOff && rep.zoneFullOff.n1;
+  if (!z) return '';
+  const totN = (z.fr.caFP + z.fr.caOP + z.inter.caFP + z.inter.caOP) || 0;
+  const totN1 = z1 ? (z1.fr.caFP + z1.fr.caOP + z1.inter.caFP + z1.inter.caOP) : 0;
+  if (totN <= 0) return '';
+  // Ligne : libellé, CA N, CA N-1, indenté (sous-ligne off/full), invert (démarque = inversé)
+  const line = (label, caN, caN1, indent, inv) => {
+    const poids = totN > 0 ? caN / totN : 0;
+    const poids1 = totN1 > 0 && caN1 != null ? caN1 / totN1 : null;
+    const dif = caN1 != null ? caN - caN1 : null;
+    return `<tr class="${indent ? 'sub' : 'grp'}">
+      <td style="${indent ? 'padding-left:22px;color:var(--t2)' : 'font-weight:700'}">${esc(label)}</td>
+      <td>${fEur(caN)}</td>
+      <td>${fPct(poids)}</td>
+      <td>${caN1 != null ? fEur(caN1) : '—'}</td>
+      <td>${poids1 != null ? fPct(poids1) : '—'}</td>
+      <td>${caN1 != null ? (inv ? deltaInv(caN, caN1) : delta(caN, caN1)) : '—'}</td>
+      <td class="${dif == null ? 'na' : (dif >= 0 ? 'up' : 'dn')}">${dif == null ? '—' : (dif >= 0 ? '+' : '') + fEur(dif)}</td>
+    </tr>`;
+  };
+  const zoneRows = (name, zN, zN1) => {
+    const caN = zN.caFP + zN.caOP, caN1 = zN1 ? (zN1.caFP + zN1.caOP) : null;
+    if (caN <= 0 && (!caN1 || caN1 <= 0)) return '';
+    return line(name, caN, caN1, false, false)
+      + line('Démarqué (Off)', zN.caOP, zN1 ? zN1.caOP : null, true, true)
+      + line('Full price', zN.caFP, zN1 ? zN1.caFP : null, true, false);
+  };
+  const body = zoneRows('FR', z.fr, z1 ? z1.fr : null) + zoneRows('International', z.inter, z1 ? z1.inter : null)
+    + line('Total général', totN, z1 ? totN1 : null, false, false);
+  return `<div class="card"><h3>🌍 GLOBAL — CA par zone × démarque (poids & vs N-1)</h3>
+    <table class="pivot"><thead><tr><th>Zone</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>Poids N-1</th><th>vs N-1</th><th>Évol. €</th></tr></thead><tbody>${body}</tbody></table>
+    <div class="note">💡 Lecture pilotage : la ligne <b>Démarqué</b> est en couleur inversée (une hausse de démarque = signal à surveiller). On veut faire grandir le CA <b>sans gonfler le poids du démarqué</b>. Le « Poids » est calculé sur le CA total EShop de la période.</div></div>`;
+}
+
 // Lancement : CA à l'heure du jour J (barres) + cumul vs cumul N-1 (courbes) — quasi temps réel.
 function secLancement(repL, day) {
   const hN = (repL.hourly && repL.hourly.n) || [], hN1 = (repL.hourly && repL.hourly.n1) || [];
   const sum = arr => arr.reduce((s, x) => s + (x.ca || 0), 0);
+  const sumOff = arr => arr.reduce((s, x) => s + (x.caOP || 0), 0);
   const caJ = sum(hN), caJ1 = sum(hN1);
   const cmdJ = hN.reduce((s, x) => s + (x.commandes || 0), 0);
-  const lastH = hN.length ? hN[hN.length - 1].hour : null;
-  // Cumul à heure équivalente N-1 (comparaison honnête en cours de journée)
-  const caJ1Equiv = lastH != null ? sum(hN1.filter(x => x.hour <= lastH)) : caJ1;
+  const lastH = hN.length ? parseInt(hN[hN.length - 1].hour) : null;
+  // « CA à date et heure » : si le jour analysé est AUJOURD'HUI, on se cale sur l'heure courante,
+  // sinon sur la dernière heure de vente. On compare au N-1 cumulé À LA MÊME HEURE (minuit→Hh).
+  const isToday = day === new Date().toISOString().slice(0, 10);
+  const nowH = new Date().getHours();
+  const refH = isToday ? nowH : (lastH != null ? lastH : 23);
+  const caJ1Equiv = sum(hN1.filter(x => parseInt(x.hour) <= refH));
+  const offShare = caJ > 0 ? sumOff(hN) / caJ : null;
   const tiles = [
-    tile('CA du jour (cumul)', fEur(caJ), caJ, caJ1Equiv),
+    `<div class="kc"><div class="l">CA cumulé à ${refH}h${isToday ? ' (maintenant)' : ''}</div><div class="v">${fEur(caJ)} ${delta(caJ, caJ1Equiv)}</div><div class="note" style="margin:2px 0 0">vs N-1 à ${refH}h : ${fEur(caJ1Equiv)}</div></div>`,
     `<div class="kc"><div class="l">CA N-1 même jour (total)</div><div class="v">${fEur(caJ1)}</div></div>`,
+    `<div class="kc"><div class="l">Part démarquée du jour</div><div class="v">${offShare != null ? fPct(offShare) : '—'}</div></div>`,
     `<div class="kc"><div class="l">Commandes du jour</div><div class="v">${fInt(cmdJ)}</div></div>`,
-    `<div class="kc"><div class="l">Dernière vente</div><div class="v">${lastH != null ? lastH + 'h' : '—'}</div></div>`,
   ].join('');
   return `<div class="card"><h3>🚀 Lancement — CA à l'heure · <input type="date" id="launchDay" class="dt" value="${esc(day)}"></h3>
     <div class="kgrid">${tiles}</div>
-    <div style="height:240px;margin-top:10px"><canvas id="launchChart"></canvas></div>
-    <div class="note">Barres = CA par heure (jour sélectionné) · courbe pleine = <b>cumul du jour</b> · pointillé = <b>cumul N-1 même jour de semaine</b> (−364 j). Le Δ du « CA du jour » compare à heure équivalente N-1. ⚡ Utilise « Actualiser les données » ci-dessus puis re-sélectionne le jour pour suivre en quasi temps réel.</div></div>`;
+    <div style="height:260px;margin-top:10px"><canvas id="launchChart"></canvas></div>
+    <div class="note">Chaque heure : <b>2 bâtons empilés</b> — N (gauche) et N-1 (droite), chacun découpé en <b>Full price</b> (bleu) / <b>Off price démarqué</b> (ambre). Courbes = <b>Sessions N</b> (trait plein) et <b>Sessions N-1</b> (pointillé même couleur). Le « CA cumulé à ${refH}h » compare à heure équivalente N-1 → es-tu en avance ou en retard ? ⚡ « Actualiser les données » puis re-sélectionne le jour pour suivre en quasi temps réel.</div></div>`;
 }
 function chartLancement(repL) {
   const hN = (repL.hourly && repL.hourly.n) || [], hN1 = (repL.hourly && repL.hourly.n1) || [];
-  const byH = arr => { const o = {}; arr.forEach(x => { o[parseInt(x.hour)] = x.ca; }); return o; };
+  const sessN = (repL.hourly && repL.hourly.sessN) || null, sessN1 = (repL.hourly && repL.hourly.sessN1) || null;
+  const byH = arr => { const fp = {}, op = {}; arr.forEach(x => { const h = parseInt(x.hour); fp[h] = x.caFP || 0; op[h] = x.caOP || 0; }); return { fp, op }; };
   const a = byH(hN), b = byH(hN1);
   const hours = [...Array(24).keys()];
-  let cum = 0, cum1 = 0;
-  const bars = hours.map(h => Math.round(a[h] || 0));
-  const cumN = hours.map(h => { cum += a[h] || 0; return Math.round(cum); });
-  const cumN1 = hours.map(h => { cum1 += b[h] || 0; return Math.round(cum1); });
+  const sAt = (obj, h) => obj ? Math.round(obj[String(h).padStart(2, '0')] || obj[h] || 0) : null;
+  const sessLineN = sessN ? hours.map(h => sAt(sessN, h)) : null;
+  const sessLineN1 = sessN1 ? hours.map(h => sAt(sessN1, h)) : null;
+  const ds = [
+    { type: 'bar', label: 'Full price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.fp[h] || 0)), backgroundColor: '#4a9eff', borderWidth: 0 },
+    { type: 'bar', label: 'Off price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.op[h] || 0)), backgroundColor: '#f5a623', borderWidth: 0 },
+    { type: 'bar', label: 'Full price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.fp[h] || 0)), backgroundColor: 'rgba(74,158,255,.4)', borderWidth: 0 },
+    { type: 'bar', label: 'Off price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.op[h] || 0)), backgroundColor: 'rgba(245,166,35,.4)', borderWidth: 0 },
+  ];
+  if (sessLineN) ds.push({ type: 'line', label: 'Sessions N', yAxisID: 'y1', data: sessLineN, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
+  if (sessLineN1) ds.push({ type: 'line', label: 'Sessions N-1', yAxisID: 'y1', data: sessLineN1, borderColor: '#22c55e', borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
   mk('launchChart', {
-    data: {
-      labels: hours.map(h => h + 'h'),
-      datasets: [
-        { type: 'bar', label: 'CA/heure', yAxisID: 'y', data: bars, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-        { type: 'line', label: 'Cumul jour', yAxisID: 'y1', data: cumN, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 },
-        { type: 'line', label: 'Cumul N-1', yAxisID: 'y1', data: cumN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 },
-      ],
-    },
+    data: { labels: hours.map(h => h + 'h'), datasets: ds },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
       scales: {
-        x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y1: { position: 'right', ticks: { color: '#22c55e', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { drawOnChartArea: false } },
+        x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(46,51,80,.4)' } },
+        y: { stacked: true, position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' }, title: { display: true, text: 'CA (€)', color: '#64748b', font: { size: 9 } } },
+        y1: { position: 'right', ticks: { color: '#22c55e', font: { size: 9 } }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Sessions', color: '#22c55e', font: { size: 9 } } },
       },
     },
   });
@@ -121,50 +166,88 @@ function secTranches(rep) {
     <div class="note">💡 Pilote le <b>rendement de tranche</b> : si la tranche profonde (≥ 50 %) pèse beaucoup sans faire plus de volume que la -30/-40, la marge se détruit sans gain. Comparer au nombre de réfs offertes par tranche (comparatif d'offre ci-dessous).</div></div>`;
 }
 
-// Familles : CA Off par famille ET CA Full par famille, avec le poids off/full visible.
-function secFamilles(rep) {
-  const ff = rep.fullOffFamille;
-  if (!ff || !ff.length) return '';
-  const rowsOff = ff.filter(f => f.caOP > 0).sort((a, b) => b.caOP - a.caOP).slice(0, 10)
-    .map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.caOP)}</td><td>${f.ca > 0 ? fPct(f.caOP / f.ca) : '—'}</td><td>${fEur(f.ca)}</td><td>${f.caN1 != null ? delta(f.ca, f.caN1) : '—'}</td></tr>`).join('');
-  const rowsFull = ff.filter(f => f.caFP > 0).sort((a, b) => b.caFP - a.caFP).slice(0, 10)
-    .map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.caFP)}</td><td>${f.ca > 0 ? fPct(f.caFP / f.ca) : '—'}</td><td>${fEur(f.ca)}</td><td>${f.caN1 != null ? delta(f.ca, f.caN1) : '—'}</td></tr>`).join('');
-  return `<div class="card"><h3>👗 Familles — CA Off price vs CA Full price</h3>
+// Performances produits : bloc Off price (familles + top produits démarqués vs N-1),
+// puis le même bloc en Full price. Réplique le pivot « PERFORMANCES PRODUITS ».
+function perfBlock(title, ff, fp, key, keyN1, prods, color) {
+  const tot = ff.reduce((s, f) => s + (f[key] || 0), 0);
+  const totN1 = ff.reduce((s, f) => s + (f[keyN1] != null ? f[keyN1] : 0), 0);
+  const famRows = ff.filter(f => (f[key] || 0) > 0 || (f[keyN1] || 0) > 0).sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 14)
+    .map(f => {
+      const caN = f[key] || 0, caN1 = f[keyN1];
+      const dif = caN1 != null ? caN - caN1 : null;
+      return `<tr><td>${esc(f.fam)}</td><td>${fEur(caN)}</td><td>${tot > 0 ? fPct(caN / tot) : '—'}</td><td>${caN1 != null ? fEur(caN1) : '—'}</td><td>${caN1 != null ? delta(caN, caN1) : '—'}</td><td class="${dif == null ? 'na' : (dif >= 0 ? 'up' : 'dn')}">${dif == null ? '—' : (dif >= 0 ? '+' : '') + fEur(dif)}</td></tr>`;
+    }).join('');
+  const top = (fp || []).filter(p => (p[key] || 0) > 0).sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10)
+    .map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fEur(p[key] || 0)}</td><td>${fInt(p.qte)}</td><td>${p[keyN1] != null ? delta(p[key] || 0, p[keyN1]) : '—'}</td></tr>`).join('');
+  return `<h3 style="margin-top:6px;color:${color}">${title} — ${fEur(tot)}${totN1 ? ` <span class="note" style="display:inline">(N-1 ${fEur(totN1)}, ${delta(tot, totN1)})</span>` : ''}</h3>
     <div class="grid cols2">
-      <div><h3>Top familles en démarque (CA Off)</h3><table><thead><tr><th>Famille</th><th>CA Off</th><th>% Off</th><th>CA total</th><th>Δ N-1</th></tr></thead><tbody>${rowsOff}</tbody></table></div>
-      <div><h3>Top familles au plein tarif (CA Full)</h3><table><thead><tr><th>Famille</th><th>CA Full</th><th>% Full</th><th>CA total</th><th>Δ N-1</th></tr></thead><tbody>${rowsFull}</tbody></table></div>
-    </div>
-    <div class="note">💡 Gauche = qui tire l'opération. Droite = qui <b>résiste au plein tarif pendant l'opération</b> (futurs piliers : à protéger de la démarque et à réassortir). Nécessite le référentiel produit (familles).</div></div>`;
+      <div><table><thead><tr><th>Famille</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>vs N-1</th><th>Dif €</th></tr></thead><tbody>${famRows}</tbody></table></div>
+      <div><h4 style="margin:0 0 4px;font-size:12px;color:var(--t2)">Top produits</h4><table><thead><tr><th>#</th><th>Produit</th><th>CA</th><th>Qté</th><th>vs N-1</th></tr></thead><tbody>${top}</tbody></table></div>
+    </div>`;
+}
+function secFamilles(rep) {
+  const ff = rep.fullOffFamille, fp = rep.fullOffProduits;
+  if (!ff || !ff.length) return '';
+  return `<div class="card"><h3>👗 Performances produits — Démarqué (Off) puis Full price</h3>
+    ${perfBlock('🏷️ Off price (démarqué)', ff, fp, 'caOP', 'caOPn1', fp, '#f5a623')}
+    <div style="height:10px"></div>
+    ${perfBlock('💎 Full price (plein tarif)', ff, fp, 'caFP', 'caFPn1', fp, '#4a9eff')}
+    <div class="note">💡 Off price = ce qui tire l'opération (top démarques). Full price = ce qui <b>résiste au plein tarif pendant l'opération</b> (futurs piliers : à protéger de la démarque, à réassortir). Le « Poids » est calculé dans chaque bloc (Off / Full). Nécessite le référentiel produit (familles).</div></div>`;
 }
 
-// Emails & campagnes dédiés à l'opération.
-function secEmails(rep) {
-  const out = [];
-  const ct = rep.channelTypes && rep.channelTypes.n, ct1 = (rep.channelTypes && rep.channelTypes.n1) || [];
-  if (ct) {
-    const m1 = {}; ct1.forEach(x => { m1[x.type] = x; });
-    const crm = ct.find(x => x.type === 'CRM');
-    if (crm) {
-      const p = m1.CRM || {};
-      out.push(`<div class="kgrid">${[
-        tile('Sessions Email/CRM', fInt(crm.sessions), crm.sessions, p.sessions),
-        tile('CA attribué Email/CRM', fEur(crm.revenue), crm.revenue, p.revenue),
-        tile('Conv. Email/CRM', crm.convRate != null ? fPct(crm.convRate) : '—', crm.convRate, p.convRate),
-        tile('Part du trafic', fPct(crm.share), null, null),
-      ].join('')}</div>`);
-    }
-  }
+// Vue GROUPÉE des canaux de communication : sessions + performances vs N-1 (tous types).
+const CHAN_ICON = { CRM: '📧', Paid: '💰', Social: '📱', SEO: '🔎', Direct: '🔗', Referral: '↗️', Autre: '•' };
+function secCanaux(rep) {
+  const ct = rep.channelTypes && rep.channelTypes.n;
+  if (!ct || !ct.length) return '';
+  const ct1 = (rep.channelTypes && rep.channelTypes.n1) || [];
+  const m1 = {}; ct1.forEach(x => { m1[x.type] = x; });
+  const rows = ct.slice().sort((a, b) => (b.sessions || 0) - (a.sessions || 0)).map(c => {
+    const p = m1[c.type] || {};
+    return `<tr><td>${CHAN_ICON[c.type] || '•'} ${esc(c.type)}</td><td>${fInt(c.sessions)}</td><td>${delta(c.sessions, p.sessions)}</td><td>${fPct(c.share)}</td><td>${fEur(c.revenue)}</td><td>${delta(c.revenue, p.revenue)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td></tr>`;
+  }).join('');
+  return `<div class="card"><h3>📡 Canaux de communication — vue groupée (sessions & perfs vs N-1)</h3>
+    <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ sess.</th><th>Part trafic</th><th>CA attribué</th><th>Δ CA</th><th>Conv.</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="note">💡 Vue d'ensemble du trafic de l'opération par type de canal. Le détail <b>CRM</b> (emails) et <b>Acquisition</b> (payant + campagnes) suit ci-dessous.</div></div>`;
+}
+
+// Détail CRM (emails) dédiés à l'opération.
+function secCRM(rep) {
+  const ct = rep.channelTypes && rep.channelTypes.n; if (!ct) return '';
+  const ct1 = (rep.channelTypes && rep.channelTypes.n1) || [];
+  const m1 = {}; ct1.forEach(x => { m1[x.type] = x; });
+  const crm = ct.find(x => x.type === 'CRM'); if (!crm) return '';
+  const p = m1.CRM || {};
+  const tiles = `<div class="kgrid">${[
+    tile('Sessions Email/CRM', fInt(crm.sessions), crm.sessions, p.sessions),
+    tile('CA attribué Email/CRM', fEur(crm.revenue), crm.revenue, p.revenue),
+    tile('Conv. Email/CRM', crm.convRate != null ? fPct(crm.convRate) : '—', crm.convRate, p.convRate),
+    tile('Part du trafic', fPct(crm.share), null, null),
+  ].join('')}</div>`;
   const eh = rep.actionPlan && rep.actionPlan.emailHour;
-  if (eh && eh.n && eh.n.peakHour != null) out.push(`<div class="note">📧 Pic de trafic email ~<b>${eh.n.peakHour}h</b>${eh.n1 && eh.n1.peakHour != null ? ` (N-1 : ~${eh.n1.peakHour}h)` : ''} → caler les envois de l'opération sur ce créneau (et vérifier le pic CA du graphique de lancement).</div>`);
-  const camps = (rep.campaigns || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 10);
-  if (camps.length) {
-    const rows = camps.map(cm => `<tr><td title="${esc(cm.campaign)}">${esc((cm.campaign || '').slice(0, 34))}</td><td>${fInt(cm.sessions)}</td><td>${delta(cm.sessions, cm.sessionsN1)}</td><td>${fInt(cm.purchases)}</td><td>${cm.conv != null ? fPct(cm.conv) : '—'}</td><td>${fEur(cm.revenue)}</td><td>${delta(cm.revenue, cm.revenueN1)}</td></tr>`).join('');
-    out.push(`<h3 style="margin-top:12px">Campagnes actives sur la période (UTM)</h3>
-      <table><thead><tr><th>Campagne</th><th>Sessions</th><th>Δ</th><th>Achats</th><th>Conv.</th><th>CA</th><th>Δ</th></tr></thead><tbody>${rows}</tbody></table>`);
+  const ehNote = (eh && eh.n && eh.n.peakHour != null) ? `<div class="note">📧 Pic de trafic email ~<b>${eh.n.peakHour}h</b>${eh.n1 && eh.n1.peakHour != null ? ` (N-1 : ~${eh.n1.peakHour}h)` : ''} → caler les envois de l'opération sur ce créneau (et vérifier le pic CA du graphique de lancement).</div>` : '';
+  return `<div class="card"><h3>📧 Détail CRM — emails de l'opération</h3>${tiles}${ehNote}
+    <div class="note">Performances des envois dédiés à l'opération (canal Email/CRM GA4). Tague les campagnes CRM avec un UTM dédié pour les isoler.</div></div>`;
+}
+
+// Détail Acquisition : campagnes UTM (payant + autres) actives sur la période, vs N-1.
+function secAcquisition(rep) {
+  const camps = (rep.campaigns || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 12);
+  if (!camps.length) return '';
+  const rows = camps.map(cm => `<tr><td title="${esc(cm.campaign)}">${esc((cm.campaign || '').slice(0, 34))}</td><td>${fInt(cm.sessions)}</td><td>${delta(cm.sessions, cm.sessionsN1)}</td><td>${fInt(cm.purchases)}</td><td>${cm.conv != null ? fPct(cm.conv) : '—'}</td><td>${fEur(cm.revenue)}</td><td>${delta(cm.revenue, cm.revenueN1)}</td></tr>`).join('');
+  let adsTiles = '';
+  if (rep.ads && rep.ads.n) {
+    const a = rep.ads.n, a1 = rep.ads.n1, roas = rep.ads.roas || {}, cos = rep.ads.cos || {};
+    adsTiles = `<div class="kgrid" style="margin-bottom:8px">${[
+      tile('Dépense Ads', fEur(a.cost), a.cost, a1 ? a1.cost : null, true),
+      tile('CA Ads (val. conv.)', fEur(a.convValue), a.convValue, a1 ? a1.convValue : null),
+      `<div class="kc"><div class="l">ROAS</div><div class="v">${roas.n != null ? roas.n.toFixed(2) : '—'} ${(roas.n != null && roas.n1 != null) ? delta(roas.n, roas.n1) : ''}</div></div>`,
+      `<div class="kc"><div class="l">COS</div><div class="v">${cos.n != null ? fPct(cos.n) : '—'} ${(cos.n != null && cos.n1 != null) ? deltaInv(cos.n, cos.n1) : ''}</div></div>`,
+    ].join('')}</div>`;
   }
-  if (!out.length) return '';
-  return `<div class="card"><h3>📧 Emails & campagnes de l'opération</h3>${out.join('')}
-    <div class="note">Performances des envois dédiés à l'opération (canal Email/CRM GA4 + campagnes UTM sur la période). Tague les campagnes de l'opération avec un UTM dédié pour les isoler facilement.</div></div>`;
+  return `<div class="card"><h3>💰 Détail Acquisition — campagnes de l'opération (UTM)</h3>${adsTiles}
+    <table><thead><tr><th>Campagne</th><th>Sessions</th><th>Δ</th><th>Achats</th><th>Conv.</th><th>CA</th><th>Δ</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="note">Campagnes UTM (acquisition payante & autres sources) actives sur la période. Croise avec les KPI Ads (dépense / ROAS / COS) pour piloter le budget pendant l'opération.</div></div>`;
 }
 
 // Comparatif d'offre (largeur par famille × démarque vs N-1) — levier de croissance.
@@ -234,7 +317,7 @@ async function analyze() {
   box.innerHTML = '<div class="card">Chargement de l\'opération…</div>';
   let rep;
   try {
-    const r = await fetch(`/api/report?${q({ from, to, cfrom, cto, dim: DIM })}`);
+    const r = await fetch(`/api/report?${q({ from, to, cfrom, cto, dim: DIM, compare: COMPARE ? null : '0' })}`);
     rep = await r.json();
   } catch (e) { box.innerHTML = `<div class="card note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; return; }
   if (rep.empty) { box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée — importe l\'OMS depuis le Reporting.')}</div>`; return; }
@@ -242,10 +325,13 @@ async function analyze() {
   fillCountrySelect(rep);
   document.getElementById('metaNote').innerHTML = `<b>${esc(opName || 'Opération')}</b> · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ''}`;
   box.innerHTML = secBilan(rep, opName)
+    + secGlobal(rep)
     + `<div id="launchBox"></div>`
     + secTranches(rep)
     + secFamilles(rep)
-    + secEmails(rep)
+    + secCanaux(rep)
+    + secCRM(rep)
+    + secAcquisition(rep)
     + secOffre(rep)
     + secAlertes(rep);
   // Donut off/full
@@ -260,7 +346,7 @@ async function loadLaunch(day) {
   box.innerHTML = '<div class="card"><div class="note">Chargement du jour de lancement…</div></div>';
   let repL;
   try {
-    const r = await fetch(`/api/report?${q({ from: day, to: day, cfrom: shiftDays(day, -364), cto: shiftDays(day, -364), dim: DIM })}`);
+    const r = await fetch(`/api/report?${q({ from: day, to: day, cfrom: shiftDays(day, -364), cto: shiftDays(day, -364), dim: DIM, compare: COMPARE ? null : '0' })}`);
     repL = await r.json();
   } catch (e) { box.innerHTML = `<div class="card note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; return; }
   if (repL.empty || !repL.hourly || !repL.hourly.n || !repL.hourly.n.length) {
@@ -329,6 +415,31 @@ async function syncDelta() {
     if (v) { DIM = 'c:' + v; document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on')); }
     else { DIM = USER_DIM; document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === DIM)); }
     analyze();
+  });
+  // CTA « Comparer N-1 » : bascule la comparaison (compare=0 → analyse N seule).
+  const cmpBtn = document.getElementById('cmpToggle');
+  if (cmpBtn) cmpBtn.addEventListener('click', () => {
+    COMPARE = !COMPARE;
+    cmpBtn.classList.toggle('on', COMPARE);
+    cmpBtn.textContent = COMPARE ? '✓ Oui' : '✗ Non';
+    analyze();
+  });
+  // Import du listing d'offre (1 fichier scindé par saison → offre-N / offre-N1).
+  const offreBtn = document.getElementById('offreUpload'), offreInput = document.getElementById('offreFile'), offreNote = document.getElementById('offreNote');
+  if (offreBtn) offreBtn.addEventListener('click', async () => {
+    const f = offreInput && offreInput.files && offreInput.files[0];
+    if (!f) { offreNote.textContent = '⚠ Sélectionne d\'abord un fichier.'; return; }
+    offreBtn.disabled = true; offreNote.textContent = 'Import du listing…';
+    try {
+      const fd = new FormData(); fd.append('file', f);
+      const r = await fetch('/api/ingest/offre-listing', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) { offreNote.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); offreBtn.disabled = false; return; }
+      const sp = (j.splits || []).map(s => `${s.period}=${s.season} (${s.rows})`).join(', ');
+      offreNote.textContent = `✓ Listing importé : ${sp} — comparatif rechargé.`;
+      offreBtn.disabled = false;
+      analyze();
+    } catch (e) { offreNote.textContent = '⚠ ' + (e.message || 'Erreur réseau'); offreBtn.disabled = false; }
   });
   document.getElementById('analyze').addEventListener('click', analyze);
   document.getElementById('syncDelta').addEventListener('click', syncDelta);

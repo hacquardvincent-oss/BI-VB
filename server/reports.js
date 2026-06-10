@@ -471,6 +471,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
+    sessN: calc.sessionsByHour(gaEmailHourN),
+    sessN1: gaEmailHourN1 ? calc.sessionsByHour(gaEmailHourN1) : null,
   };
   // Alertes stock (back-in-stock WSHOP) : produits les plus attendus sur la période
   const bisDs = store.getDataset('bis', 'N');
@@ -646,6 +648,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
+    zoneFullOff: { n: calc.calcZoneFullOff(rowsN, omsN.map), n1: (rowsN1 && rowsN1.length) ? calc.calcZoneFullOff(rowsN1, mapN1) : null },
     marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {}) },
     pays,
     saison,
@@ -664,12 +667,18 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
       const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;
       const keys = new Set([...Object.keys(a), ...(b ? Object.keys(b) : [])]);
-      return [...keys].filter(k => k !== '(non référencé)').map(f => ({ fam: f, ca: (a[f] || {}).ca || 0, caFP: (a[f] || {}).caFP || 0, caOP: (a[f] || {}).caOP || 0, qte: (a[f] || {}).qte || 0, caN1: b ? ((b[f] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca);
+      return [...keys].filter(k => k !== '(non référencé)').map(f => ({
+        fam: f, ca: (a[f] || {}).ca || 0, caFP: (a[f] || {}).caFP || 0, caOP: (a[f] || {}).caOP || 0, qte: (a[f] || {}).qte || 0,
+        caN1: b ? ((b[f] || {}).ca || 0) : null, caFPn1: b ? ((b[f] || {}).caFP || 0) : null, caOPn1: b ? ((b[f] || {}).caOP || 0) : null,
+      })).sort((x, y) => y.ca - x.ca);
     })(),
     fullOffProduits: (() => {
       const a = calc.calcFullOffByProduct(rowsN, omsN.map); if (!a) return null;
       const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByProduct(rowsN1, mapN1) : null;
-      return Object.entries(a).map(([des, v]) => ({ des, ca: v.ca, caFP: v.caFP, caOP: v.caOP, qte: v.qte, caN1: b ? ((b[des] || {}).ca || 0) : null })).sort((x, y) => y.ca - x.ca).slice(0, 15);
+      return Object.entries(a).map(([des, v]) => ({
+        des, ca: v.ca, caFP: v.caFP, caOP: v.caOP, qte: v.qte,
+        caN1: b ? ((b[des] || {}).ca || 0) : null, caFPn1: b ? ((b[des] || {}).caFP || 0) : null, caOPn1: b ? ((b[des] || {}).caOP || 0) : null,
+      })).sort((x, y) => y.ca - x.ca).slice(0, 40);
     })(),
     produits,
     funnel,

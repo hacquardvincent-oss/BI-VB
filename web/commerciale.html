@@ -44,6 +44,8 @@
       <button class="pb" data-dim="fr">France</button>
       <button class="pb" data-dim="inter">International</button>
       <select id="countrySel" class="dt" title="Filtrer sur un pays précis" style="min-width:130px"><option value="">🌍 Tous pays</option></select>
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Comparer N-1</span>
+      <button class="pb on" id="cmpToggle" data-on="1" title="Activer / désactiver la comparaison vs N-1">✓ Oui</button>
       <div class="spacer" style="flex:1"></div>
       <button class="btn blue" id="analyze">Analyser l'opération</button>
     </div>
@@ -57,6 +59,12 @@
     <div class="toolbar">
       <button class="btn blue" id="syncDelta">⚡ Actualiser les données (delta WSHOP)</button>
       <span class="note" id="syncNote" style="margin:0">Récupère les commandes nouvelles/modifiées en quelques secondes → recharge l'analyse. À utiliser en boucle les jours de lancement pour un pilotage quasi temps réel.</span>
+    </div>
+    <div class="toolbar" style="margin-top:10px;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">📋 Listing d'offre</span>
+      <input type="file" id="offreFile" accept=".xlsx,.xls,.csv" class="dt" style="max-width:320px">
+      <button class="pb" id="offreUpload">Importer le listing N / N-1</button>
+      <span class="note" id="offreNote" style="margin:0">Dépose le fichier d'offre (colonnes : Saison E26/E25, Code, Regroupement famille, Listing, PV FR + démarque). Il est scindé automatiquement en N (saison la plus récente) et N-1 → alimente le comparatif d'offre ci-dessous.</span>
     </div>
   </div>
 
