@@ -36,15 +36,34 @@ function persist() {
 // Toutes les vues personnalisées (map module → [cartes]).
 router.get('/', requireAuth, (req, res) => res.json(LAYOUTS));
 
+// Widgets « from scratch » : mêmes whitelists que userviews.js.
+const W_DIMS = ['total', 'famille', 'pays', 'produit', 'saison', 'canal', 'canaltype', 'device', 'jour', 'tranche', 'campagne'];
+const W_METRICS = ['ca', 'qte', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'revenue', 'purchases', 'caFP', 'caOP', 'caFR', 'caInt'];
+const W_FORMS = ['kpi', 'table', 'bars', 'donut', 'line'];
+function cleanCard(c) {
+  if (typeof c === 'string') return KNOWN.has(c) ? c : null;
+  if (c && typeof c === 'object') {
+    const id = (c.id || '').toString().slice(0, 24).replace(/[^a-z0-9_-]/gi, '');
+    if (!id || !W_DIMS.includes(c.dim) || !W_METRICS.includes(c.metric) || !W_FORMS.includes(c.form)) return null;
+    return { id, title: (c.title || '').toString().slice(0, 60), dim: c.dim, metric: c.metric, form: c.form, top: Math.min(50, Math.max(1, parseInt(c.top) || 10)), n1: !!c.n1 };
+  }
+  return null;
+}
+
 // Enregistre/écrase la vue d'un module.
 router.put('/:module', requireAuth, (req, res) => {
   const m = (req.params.module || '').toString().slice(0, 40);
   const arr = (req.body && Array.isArray(req.body.layout)) ? req.body.layout : null;
   if (!m || !arr) return res.status(400).json({ error: 'layout invalide' });
-  const clean = [...new Set(arr.filter(k => typeof k === 'string' && KNOWN.has(k)))].slice(0, 60);
+  const seen = new Set(); const clean = [];
+  arr.forEach(c => {
+    const v = cleanCard(c); if (!v) return;
+    const k = typeof v === 'string' ? v : 'w:' + v.id;
+    if (seen.has(k)) return; seen.add(k); clean.push(v);
+  });
   if (!clean.length) return res.status(400).json({ error: 'aucun tableau valide' });
-  LAYOUTS[m] = clean; persist();
-  res.json({ module: m, layout: clean });
+  LAYOUTS[m] = clean.slice(0, 60); persist();
+  res.json({ module: m, layout: LAYOUTS[m] });
 });
 
 // Réinitialise la vue (retour au layout d'origine).
