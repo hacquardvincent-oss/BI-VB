@@ -359,6 +359,32 @@ async function loadLaunch(day) {
   if (dp) dp.addEventListener('change', () => loadLaunch(dp.value));
 }
 
+// Import COMPLET WSHOP sur la fenêtre de l'opération + N-1 (charge N ET N-1, ce que le delta ne fait pas).
+async function fullImport() {
+  const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
+  if (!from || !to) { document.getElementById('syncNote').textContent = '⚠ Renseigne les dates de l\'opération.'; return; }
+  const cfrom = document.getElementById('dCFrom').value || shiftDays(from, -364);
+  const cto = document.getElementById('dCTo').value || shiftDays(to, -364);
+  const btn = document.getElementById('fullImport'), note = document.getElementById('syncNote');
+  btn.disabled = true; note.textContent = 'Import complet de l\'opération + N-1…';
+  try {
+    const r = await fetch(`/api/wshop/refresh?${q({ from, to, cfrom: COMPARE ? cfrom : null, cto: COMPARE ? cto : null })}`, { method: 'POST' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btn.disabled = false; return; }
+  const poll = async () => {
+    try {
+      const j = await (await fetch('/api/wshop/job')).json();
+      if (j.running) { note.textContent = '⏳ Import… ' + (j.phase || ''); return setTimeout(poll, 2000); }
+      btn.disabled = false;
+      if (j.error) { note.textContent = '⚠ ' + j.error; return; }
+      const res = j.result || {};
+      note.textContent = `✓ Import complet terminé (${res.rows != null ? res.rows + ' lignes N' : 'ok'}${res.n1 ? ', N-1 chargé' : ''}) — analyse rechargée.`;
+      analyze();
+    } catch (e) { note.textContent = '⚠ Suivi interrompu'; btn.disabled = false; }
+  };
+  setTimeout(poll, 1500);
+}
+
 // Sync delta WSHOP (quasi temps réel) puis recharge l'analyse.
 async function syncDelta() {
   const btn = document.getElementById('syncDelta'), note = document.getElementById('syncNote');
@@ -443,5 +469,6 @@ async function syncDelta() {
   });
   document.getElementById('analyze').addEventListener('click', analyze);
   document.getElementById('syncDelta').addEventListener('click', syncDelta);
+  const fi = document.getElementById('fullImport'); if (fi) fi.addEventListener('click', fullImport);
   analyze();
 })();
