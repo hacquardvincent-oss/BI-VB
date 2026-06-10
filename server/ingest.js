@@ -174,6 +174,42 @@ function ingestOmsProjected(source, period, buffer, filename, uploadedBy) {
   return { rows: outRows.length, columns: outHdrs.length, dateMin: min, dateMax: max, anonymized: ['colonnes non-OMS / client écartées'] };
 }
 
+// Comparatif d'offre : UN seul fichier listant N et N-1 (colonne « Saison », ex. E26/E25).
+// On le scinde par saison → offre-N (saison la plus récente) et offre-N1 (la précédente),
+// puis on stocke chaque sous-listing via le pipeline offre standard.
+function ingestOffreListing(buffer, filename, uploadedBy) {
+  let { hdrs, rows } = parseBuffer(buffer, filename, 'offre');
+  if (!hdrs.length) throw new Error('Fichier vide ou illisible');
+  const map = calc.autoMap(hdrs, calc.OFFRE_ALIASES);
+  const si = map.saison;
+  if (si === undefined) throw new Error('Colonne « Saison » introuvable — impossible de scinder N / N-1. Ajoute une colonne Saison (ex. E26 / E25) ou dépose un listing par période.');
+  const groups = {};
+  rows.forEach(r => { const s = (r[si] || '').toString().trim(); if (!s) return; (groups[s] || (groups[s] = [])).push(r); });
+  const seasons = Object.keys(groups).sort((a, b) => b.localeCompare(a, 'fr')); // E26 avant E25
+  if (!seasons.length) throw new Error('Aucune valeur de saison exploitable dans la colonne « Saison ».');
+  const out = [];
+  const periods = [['N', seasons[0]], ['N1', seasons[1]]];
+  for (const [period, season] of periods) {
+    if (!season) continue;
+    const grpRows = groups[season];
+    store.setDataset('offre', period, {
+      hdrs, rows: grpRows, map, filename: `${filename} · ${season}`,
+      row_count: grpRows.length, date_min: null, date_max: null,
+      uploaded_by: uploadedBy || 'import', uploaded_at: new Date().toISOString(),
+    });
+    out.push({ period, season, rows: grpRows.length });
+  }
+  return { saisons: seasons, splits: out };
+}
+
+router.post('/offre-listing', requireAuth, uploadSingle, (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+  try {
+    const r = ingestOffreListing(req.file.buffer, req.file.originalname, req.session.username);
+    res.json({ ok: true, filename: req.file.originalname, ...r });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
   const { source, period } = req.params;
   if (!SOURCES.includes(source) || !PERIODS.includes(period))
@@ -196,4 +232,4 @@ router.delete('/:source/:period', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router, ingestBuffer, ingestOmsProjected };
+module.exports = { router, ingestBuffer, ingestOmsProjected, ingestOffreListing };

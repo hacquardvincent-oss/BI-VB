@@ -189,10 +189,12 @@ GA (`parseGAcsv`, saute les `#`), XLSX (1ʳᵉ feuille), CSV `;` latin1. Routes 
 | `caMkt` | Σ p où `isMkt` |
 | `caFR` / `caInt` | (hors mkt) `pays === 'france'` / sinon |
 | `caEnt` / `caSFS` | (hors mkt) `NOM MAGASIN === 'webstore eur'` (Entrepôt) / sinon (Ship-from-store) |
-| `caFP` / `caOP` | (hors mkt) **Full price** si `pvr === 0 || |pvr−pv| < 0.01`, sinon **Off price** (démarque) |
+| `caFP` / `caOP` | (hors mkt) **Full price** si `isFullPriceLine(pv,pvr,payé)` (= payé ≥ MAX(catalogue,remisé,payé)−0,01), sinon **Off price** (démarque). ⚠️ cf §12 : on NE se fie PLUS à `pvr===0` (souvent 0 même en soldes) → la démarque se lit à l'écart **payé < catalogue (Prix Vente)** |
 | `caEShop` | `caFR + caInt` · `caOmni` | `caEnt + caSFS` |
 - **CA = « Prix de vente payé » = `unitPrice × quantityOrdered`** (champ OMS confirmé par audit CA).
-- **Full/Off** : la démarque est encodée par WSHOP dans `originalDiscountedUnitPrice` (Prix Vente Remisé).
+- **Full/Off** : règle robuste `isFullPriceLine(pvFull,pvRemise,paid)` / `discountDepthOf(...)` (calc.js, partagées par `calcOMS`,
+  `calcKPIEShop`, `fullOffSplit`, `calcDiscountDepth`, `hourlySeries`, `calcZoneFullOff`). **Ne pas** rebrancher sur
+  `originalDiscountedUnitPrice` seul : WSHOP le laisse souvent à 0 → tout passait en full price (bug soldes, cf §12).
 
 ---
 
@@ -305,10 +307,17 @@ Cartes commerciales (thème `CO`, dispo dans l'éditeur de vue) : `demarque` (CA
 `calcOffreCompare` : largeur par famille, réfs par niveau de démarque, origine, « à réintégrer », « démarquées sans
 vente ») · `comalerts` (campagnes manquantes/flop/saturées/bridées, landing en chute, pages perdues).
 **Page dédiée « Analyse commerciale »** (`commerciale.html`/`commerciale.js`, onglet header — PAS une vue Reporting) :
-pilotage d'UNE opération (avant-première/soldes) : Bilan 360 avec **poids off/full permanent** (donut), **🚀 lancement
-= CA à l'heure du jour J** (barres + cumul vs cumul N-1 à heure équivalente, via `/api/report?from=J&to=J` → `hourly`),
-tranches de démarque, familles off VS full côte à côte, emails/campagnes (canal CRM + UTM), comparatif d'offre,
-alertes. Bouton **⚡ delta WSHOP** intégré = quasi temps réel les jours de lancement. Reporting = analyses génériques.
+pilotage d'UNE opération (avant-première/soldes). Sections (ordre) : **secBilan** (360 + poids off/full + donut) ·
+**secGlobal** (pivot FR/Inter × Démarqué/Full : CA, poids, vs N-1, évol € ; démarque en inversé ; via `rep.zoneFullOff`) ·
+**🚀 secLancement** (CA à l'heure du jour J ; tuile **« CA cumulé à Hh » vs N-1 à heure équivalente** = en avance/retard ;
+`chartLancement` = **bâtons empilés Full/Off N + N-1 côte à côte** [`stack:'N'`/`'N1'`] + courbes **Sessions N plein /
+N-1 pointillé** [`rep.hourly.sessN/sessN1` via `sessionsByHour(gaemailhour)`]) · **secTranches** (profondeur démarque) ·
+**secFamilles** (`perfBlock` Off price puis Full price : familles CA/poids/vsN-1/Dif + top produits vs N-1 ; via
+`fullOffFamille`+`fullOffProduits` enrichis `caOPn1/caFPn1`) · **secCanaux** (vue groupée canaux : sessions+CA+conv vs N-1) ·
+**secCRM** (détail emails) · **secAcquisition** (campagnes UTM + KPI Ads) · **secOffre** (comparatif d'offre) · **secAlertes**.
+**CTA « Comparer N-1 »** (`#cmpToggle` → `compare=0` = analyse N seule). **Zone de dépôt listing d'offre** (`#offreUpload`
+→ `POST /api/ingest/offre-listing` : 1 fichier scindé par colonne **Saison** [E26→N, E25→N-1] → `offre-N`/`offre-N1`).
+Bouton **⚡ delta WSHOP** intégré = quasi temps réel les jours de lancement. Reporting = analyses génériques.
 
 ### Graphiques (Chart.js) — comment ils sont construits
 Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. Couleurs : `--a #f5a623` (CA/ambre), `--b #4a9eff`
@@ -366,7 +375,9 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
 | **Test connexion / import en 504** | Appels WSHOP lents **en série** (auth + 5 sondes ≈ 8 s) ou échantillon 300 cmd. | **`Promise.all` (parallèle) + `Promise.race` (timeout 9 s)** → réponse partielle ; échantillons réduits. |
 | **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (démarque dans `originalDiscountedUnitPrice`). |
+| **CA full price ≈ 98 % un jour de SOLDES (81 K/83 K)** | La règle FP/OP testait `pvr (Prix Vente Remise = originalDiscountedUnitPrice) === 0 → full price`. Or WSHOP laisse ce champ **à 0 même en démarque** → tout comptait en full price. | Nouvelle règle **`isFullPriceLine(catalogue, remisé, payé)`** = full ⇔ payé ≥ MAX(catalogue,remisé,payé)−0,01 ; off ⇔ **payé < catalogue (Prix Vente)**. Profondeur `discountDepthOf` = 1−payé/catalogue. Appliquée partout (calcOMS, KPI, fullOffSplit, discountDepth, hourly, zoneFullOff). |
 | **Données OMS pas mises à jour après changement de règle** | « Synchroniser le delta » ne recalcule pas le passé. | Exiger **« Importer OMS depuis WSHOP » (import complet)**. |
+| **0 commande le jour de lancement (Analyse commerciale)** | `syncIncremental` réutilisait le `to` figé du dernier import complet ; `guard` (created ∈ [from,to]) **rejetait les commandes créées APRÈS** cette date → les ventes du jour J n'entraient jamais. De plus le delta **ne charge JAMAIS N-1** (« PAS DE N-1 »). | `syncIncremental` **étend `to` à aujourd'hui** (`max(to, today)`). Bouton **« ⬇️ Import complet (opération + N-1) »** sur la page commerciale → `POST /api/wshop/refresh?from&to&cfrom&cto` (charge N **et** N-1 sur la fenêtre de l'opération). |
 | **Conflits de merge à répétition** | Branche = sur-ensemble de `main` (squash-merges). | Résoudre `git checkout --ours <fichier>`, vérifier (`node -c`, `grep`), push, re-merge. |
 
 ---

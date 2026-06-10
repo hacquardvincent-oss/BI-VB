@@ -17,6 +17,25 @@ function norm(s) {
 
 // ── Parse numérique FR ("1 234,56" → 1234.56) ───────────────────────────────
 const fN = s => parseFloat((s || '').toString().replace(/\s/g, '').replace(',', '.')) || 0;
+
+// ── Full price vs Off price (démarque) — règle robuste ──────────────────────
+// La démarque se lit à l'ÉCART entre le prix RÉELLEMENT PAYÉ (« Prix de vente payé »
+// = unitPrice × qté) et le prix CATALOGUE plein (« Prix Vente » = originalUnitPrice × qté).
+// ⚠️ Le champ « Prix Vente Remise » (originalDiscountedUnitPrice) n'étant PAS toujours
+// renseigné par WSHOP (souvent 0 même un jour de soldes), on ne s'y fie plus seul : on prend
+// comme référence « plein tarif » le MAX(catalogue, remisé, payé).
+//   full price ⇔ payé ≈ référence pleine (aucune démarque)
+//   off price  ⇔ payé < référence pleine (démarque appliquée)
+// `prof` (optionnel) → profondeur de démarque ∈ [0,1] = 1 − payé / référence pleine.
+function fullRef(pvFull, pvRemise, paid) { return Math.max(pvFull || 0, pvRemise || 0, paid || 0); }
+function isFullPriceLine(pvFull, pvRemise, paid) {
+  const full = fullRef(pvFull, pvRemise, paid);
+  return full <= 0 ? true : (paid >= full - 0.01);
+}
+function discountDepthOf(pvFull, pvRemise, paid) {
+  const full = fullRef(pvFull, pvRemise, paid);
+  return full <= 0 ? 0 : Math.min(1, Math.max(0, 1 - paid / full));
+}
 // ── Parse numérique GA (format US "1234.56", pas de virgule) ────────────────
 const fGA = s => parseFloat((s || '').toString().replace(/\s/g, '')) || 0;
 
@@ -263,12 +282,25 @@ function calcOMS(rows, map) {
       if (mag === 'webstore eur') caEnt += p; else caSFS += p;
       if (pvi !== undefined && pvri !== undefined) {
         const pv = fN(r[pvi]); const pvr = fN(r[pvri]);
-        const isFP = (pvr === 0) || (Math.abs(pvr - pv) < 0.01);
-        if (isFP) caFP += p; else caOP += p;
+        if (isFullPriceLine(pv, pvr, p)) caFP += p; else caOP += p;
       }
     }
   });
   return { caGlob, caEShop: caFR + caInt, caFR, caInt, caEnt, caSFS, caMkt, caOmni: caEnt + caSFS, total, caFP, caOP };
+}
+
+// ── CA par ZONE (FR / Inter) × Full/Off (hors mkt) — pivot GLOBAL commercial ─
+function calcZoneFullOff(rows, map) {
+  const pi = map.prix, pai = map.pays, ti = map.type, pvi = map.pv, pvri = map.pv_remise;
+  if (pvi === undefined || pvri === undefined) return null;
+  const z = { fr: { caFP: 0, caOP: 0 }, inter: { caFP: 0, caOP: 0 } };
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const p = fN(r[pi]);
+    const zone = (r[pai] || '').trim().toLowerCase() === 'france' ? z.fr : z.inter;
+    if (isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p)) zone.caFP += p; else zone.caOP += p;
+  });
+  return z;
 }
 
 // ── KPIs EShop synthèse (CA, commandes, pièces, PM, sessions, TT) ───────────
@@ -287,8 +319,7 @@ function calcKPIEShop(rows, map, sessions) {
       if (ni !== undefined && r[ni]) ordersSet.add(r[ni]);
       if (hasFPOP) {
         const pv = fN(r[pvi]); const pvr = fN(r[pvri]);
-        const isFP = (pvr === 0) || (Math.abs(pvr - pv) < 0.01);
-        if (isFP) caFP += prix; else caOP += prix;
+        if (isFullPriceLine(pv, pvr, prix)) caFP += prix; else caOP += prix;
       }
     }
   });
@@ -655,6 +686,8 @@ function dailySeries(rows, map, ga, sessByDay) {
 // ── Série horaire (OMS) : CA + commandes par heure (colonne « Heure ») ──────
 function hourlySeries(rows, map) {
   const pi = map.prix, ni = map.num, ti = map.type, hi = map.heure;
+  const pvi = map.pv, pvri = map.pv_remise;
+  const hasFPOP = pvi !== undefined && pvri !== undefined;
   if (hi === undefined) return null;
   const by = {};
   rows.forEach(r => {
@@ -662,13 +695,32 @@ function hourlySeries(rows, map) {
     const h = (r[hi] || '').toString().trim().slice(0, 2);
     if (!/^\d{1,2}$/.test(h)) return;
     const k = h.padStart(2, '0');
-    if (!by[k]) by[k] = { ca: 0, orders: new Set() };
-    by[k].ca += fN(r[pi]);
+    if (!by[k]) by[k] = { ca: 0, caFP: 0, caOP: 0, orders: new Set() };
+    const p = fN(r[pi]);
+    by[k].ca += p;
+    if (hasFPOP) { if (isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p)) by[k].caFP += p; else by[k].caOP += p; }
     if (ni !== undefined && r[ni]) by[k].orders.add(r[ni]);
   });
   const hours = Object.keys(by).sort();
   if (!hours.length) return null;
-  return hours.map(h => ({ hour: h, ca: by[h].ca, commandes: by[h].orders.size }));
+  return hours.map(h => ({ hour: h, ca: by[h].ca, caFP: by[h].caFP, caOP: by[h].caOP, commandes: by[h].orders.size }));
+}
+
+// ── Sessions GA par HEURE (jeu gaemailhour : hour × canal → sessions) ────────
+// Agrège toutes les sources pour obtenir un total sessions/heure (courbe de lancement).
+function sessionsByHour(gaHour) {
+  if (!gaHour || !gaHour.rows || !gaHour.hdrs) return null;
+  const hi = gaHour.hdrs.findIndex(h => { const n = norm(h); return n === 'heure' || n === 'hour'; });
+  const si = gaHour.hdrs.findIndex(h => norm(h) === 'sessions');
+  if (hi < 0 || si < 0) return null;
+  const by = {};
+  gaHour.rows.forEach(r => {
+    let h = (r[hi] || '').toString().trim();
+    if (!/^\d{1,2}$/.test(h)) return;
+    h = h.padStart(2, '0');
+    by[h] = (by[h] || 0) + fGA(r[si]);
+  });
+  return Object.keys(by).length ? by : null;
 }
 
 // ── Référentiel : ref. externe → famille (regroupement prioritaire) ─────────
@@ -701,11 +753,11 @@ function calcCAFamille(rows, omsMap, refMap) {
 }
 
 // Full/Off price par famille (hors mkt) — { fam: { ca, caFP, caOP, qte } }
-// Off price = toute remise : Prix Vente Remisé ≠ 0 ET ≠ Prix Vente.
+// Off price = démarque détectée à l'écart payé vs catalogue (cf. isFullPriceLine).
 function fullOffSplit(omsMap) {
-  const pvi = omsMap.pv, pvri = omsMap.pv_remise;
+  const pvi = omsMap.pv, pvri = omsMap.pv_remise, pi = omsMap.prix;
   if (pvi === undefined || pvri === undefined) return null;
-  return r => { const pv = fN(r[pvi]), pvr = fN(r[pvri]); return (pvr === 0) || (Math.abs(pvr - pv) < 0.01); };
+  return r => isFullPriceLine(fN(r[pvi]), fN(r[pvri]), pi !== undefined ? fN(r[pi]) : 0);
 }
 function calcFullOffByFamille(rows, omsMap, refMap) {
   if (!refMap || Object.keys(refMap).length === 0) return null;
@@ -740,7 +792,7 @@ function calcFullOffByProduct(rows, omsMap) {
 }
 
 // ── Démarque : CA par TRANCHE de démarque (hors mkt) ────────────────────────
-// Profondeur = 1 − (Prix Vente Remisé / Prix Vente) sur les lignes démarquées.
+// Profondeur = 1 − (Prix payé / Prix catalogue) sur les lignes démarquées (cf. discountDepthOf).
 // → lire « où se fait le CA démarqué » (-20 / -30 / -40 / -50 %+) et comparer à N-1.
 const DISCOUNT_BUCKETS = ['< 20%', '20–30%', '30–40%', '40–50%', '≥ 50%'];
 function discountBucketOf(d) { return d < 0.2 ? '< 20%' : d < 0.3 ? '20–30%' : d < 0.4 ? '30–40%' : d < 0.5 ? '40–50%' : '≥ 50%'; }
@@ -752,9 +804,8 @@ function calcDiscountDepth(rows, omsMap) {
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const p = fN(r[pi]); const pv = fN(r[pvi]); const pvr = fN(r[pvri]);
-    const isFP = (pvr === 0) || (Math.abs(pvr - pv) < 0.01);
-    if (isFP || pv <= 0) { caFull += p; return; }
-    const depth = Math.min(1, Math.max(0, 1 - pvr / pv));
+    if (isFullPriceLine(pv, pvr, p)) { caFull += p; return; }
+    const depth = discountDepthOf(pv, pvr, p);
     const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
     const b = discountBucketOf(depth);
     const e = by[b] || (by[b] = { ca: 0, qte: 0 });
@@ -772,13 +823,14 @@ function calcDiscountDepth(rows, omsMap) {
 
 // ── Comparatif d'offre : listings produits N vs N-1 (largeur, démarque, origine) ──
 const OFFRE_ALIASES = {
-  ref: ['ref. externe', 'ref externe', 'reference externe', 'reference', 'ref'],
+  ref: ['ref. externe', 'ref externe', 'reference externe', 'reference', 'code', 'ref'],
   famille: ['regroupement', 'familles principales', 'famille principale', 'famille', 'categorie'],
   des: ['designation', 'libelle', 'titre', 'name', 'produit'],
-  prix: ['prix initial', 'prix de base', 'prix barre', 'prix catalogue', 'pvp', 'prix'],
-  prix_solde: ['prix solde', 'prix demarque', 'prix remise', 'prix promo'],
-  remise: ['taux de demarque', 'taux demarque', 'remise', 'demarque', 'discount'],
-  origine: ['origine', 'provenance', 'statut offre', 'type offre', 'source stock', 'stock origine'],
+  prix: ['prix initial', 'prix de base', 'prix barre', 'prix catalogue', 'pv fr', 'pvp', 'prix'],
+  prix_solde: ['pv fr remise', 'prix solde', 'prix demarque', 'prix remise', 'prix promo', 'pv remise'],
+  remise: ['taux de demarque', 'taux demarque', 'presoldes', 'remise', 'demarque', 'discount'],
+  origine: ['listing 2', 'listing', 'origine', 'provenance', 'statut offre', 'type offre', 'source stock', 'stock origine'],
+  saison: ['saison', 'season', 'collection'],
 };
 // Items d'un listing : { ref, fam, des, depth (0 = plein tarif), bucket, origine }
 function offreItems(ds) {
@@ -1334,9 +1386,10 @@ module.exports = {
   calcDiscountDepth, calcOffreCompare, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
-  filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
-  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries,
+  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
+  isFullPriceLine, discountDepthOf,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,

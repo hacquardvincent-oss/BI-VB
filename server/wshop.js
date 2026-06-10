@@ -397,7 +397,12 @@ async function syncIncremental(cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
   const baseOms = store.getDataset('oms', 'N');
   if (!baseOms || !baseOms.sync) throw new Error('Aucun import initial à synchroniser : lancez d\'abord « Importer OMS depuis WSHOP ».');
-  const { from, to, since } = baseOms.sync;
+  const { from, since } = baseOms.sync;
+  // ⚠️ On ÉTEND la fenêtre jusqu'à AUJOURD'HUI : sinon les commandes CRÉÉES après le dernier import
+  // complet (typiquement les ventes du jour de lancement) tombent hors de [from, to] et le guard
+  // (created ∈ [from,to]) les rejette → 0 commande remontée le jour J. La fenêtre ne fait que grandir.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const to = (baseOms.sync.to && baseOms.sync.to > todayISO) ? baseOms.sync.to : todayISO;
   const baseRet = store.getDataset('ret', 'N') || datasetFromRows(RET_HDRS, [], 'ret', from, to);
   const end = nowDT();
   if (cb.phase) cb.phase(`Delta depuis ${since}…`);
