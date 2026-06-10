@@ -2241,6 +2241,14 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
 (async () => {
   if (!(await me())) return;
   await loadServerLayouts(); // vues personnalisées partagées (avant le 1er rendu)
+  // Lien profond depuis le header (?view=) : ouvre directement une vue donnée (ex. Analyse commerciale).
+  const qView = new URLSearchParams(location.search).get('view');
+  if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) CURRENT_MODULE = qView;
+  // Onglet header actif selon la vue courante.
+  document.querySelectorAll('#hdr .pb').forEach(a => {
+    const isComm = (a.getAttribute('href') || '').includes('view=commerciale');
+    a.classList.toggle('on', isComm ? (CURRENT_MODULE === 'commerciale') : ((a.getAttribute('href') === '/app.html') && CURRENT_MODULE !== 'commerciale'));
+  });
   initModules();
   const m = MODULES[CURRENT_MODULE];
   CURRENT_DIM = m.dim || 'global';
