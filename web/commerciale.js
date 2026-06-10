@@ -212,6 +212,16 @@ function secAlertes(rep) {
 
 // ── Orchestration ──────────────────────────────────────────────────────────
 function q(params) { return Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&'); }
+let ALL_COUNTRIES = [];
+function fillCountrySelect(rep) {
+  const sel = document.getElementById('countrySel'); if (!sel) return;
+  const seen = new Set(ALL_COUNTRIES.map(c => c.toLowerCase()));
+  (rep && rep.pays || []).forEach(p => { const c = (p.pays || '').trim(); if (c && !seen.has(c.toLowerCase())) { seen.add(c.toLowerCase()); ALL_COUNTRIES.push(c); } });
+  if (DIM && DIM.indexOf('c:') === 0) { const c = DIM.slice(2); if (!seen.has(c.toLowerCase())) ALL_COUNTRIES.push(c); }
+  ALL_COUNTRIES.sort((a, b) => a.localeCompare(b, 'fr'));
+  const selVal = (DIM && DIM.indexOf('c:') === 0) ? DIM.slice(2) : '';
+  sel.innerHTML = '<option value="">🌍 Tous pays</option>' + ALL_COUNTRIES.map(c => `<option value="${esc(c)}"${c === selVal ? ' selected' : ''}>${esc(c)}</option>`).join('');
+}
 
 async function analyze() {
   const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
@@ -229,7 +239,8 @@ async function analyze() {
   } catch (e) { box.innerHTML = `<div class="card note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; return; }
   if (rep.empty) { box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée — importe l\'OMS depuis le Reporting.')}</div>`; return; }
   LAST = rep;
-  document.getElementById('metaNote').innerHTML = `<b>${esc(opName || 'Opération')}</b> · ${esc(rep.meta.from)} → ${esc(rep.meta.to)} vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})`;
+  fillCountrySelect(rep);
+  document.getElementById('metaNote').innerHTML = `<b>${esc(opName || 'Opération')}</b> · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ''}`;
   box.innerHTML = secBilan(rep, opName)
     + `<div id="launchBox"></div>`
     + secTranches(rep)
@@ -306,10 +317,19 @@ async function syncDelta() {
     if (f) document.getElementById('dCFrom').value = shiftDays(f, -364);
     if (t) document.getElementById('dCTo').value = shiftDays(t, -364);
   });
+  let USER_DIM = 'global';
   document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); DIM = b.dataset.dim; analyze();
+    b.classList.add('on'); DIM = b.dataset.dim; USER_DIM = b.dataset.dim;
+    const cs = document.getElementById('countrySel'); if (cs) cs.value = '';
+    analyze();
   }));
+  document.getElementById('countrySel').addEventListener('change', e => {
+    const v = e.target.value;
+    if (v) { DIM = 'c:' + v; document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on')); }
+    else { DIM = USER_DIM; document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === DIM)); }
+    analyze();
+  });
   document.getElementById('analyze').addEventListener('click', analyze);
   document.getElementById('syncDelta').addEventListener('click', syncDelta);
   analyze();

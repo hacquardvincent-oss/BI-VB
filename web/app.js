@@ -16,6 +16,8 @@ let IS_ADMIN = false;      // l'utilisateur courant est admin (→ CTA EDIT, pag
 let EDIT_VIEW = null;      // mode édition WYSIWYG : clé de la vue en cours d'édition (null = rendu normal)
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
+// Libellé d'une dimension, y compris un pays précis (c:<pays> → « 🌍 <pays> »).
+const dimLabelOf = d => (d && d.indexOf && d.indexOf('c:') === 0) ? ('🌍 ' + d.slice(2)) : (DIM_LABEL[d] || 'Global');
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
@@ -477,6 +479,7 @@ function initModules() {
     // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
     CURRENT_DIM = m.dim || USER_DIM;
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
+    { const cs = document.getElementById('countrySel'); if (cs) cs.value = ''; } // le changement de vue repasse en FR/Inter
     // Vue à période fixe (ex. Démarque E26/E25) : applique ses dates au sélecteur.
     if (m && m.dates) {
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
@@ -656,10 +659,11 @@ async function loadReport() {
   // Pré-remplit les calendriers (1ère fois) avec la plage du rapport
   fillDateInputs(rep.meta);
   document.getElementById('metaNote').innerHTML =
-    `<b>${DIM_LABEL[rep.meta.dim] || 'Global'}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
+    `<b>${dimLabelOf(rep.meta.dim)}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
     + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   LAST_REP = rep;
+  fillCountrySelect(rep);
   box.innerHTML = renderReport(rep);
   renderObjectives(rep);
   renderDailyChart(rep);
@@ -1022,7 +1026,7 @@ function renderReport(rep) {
   const clRows = (rep.campaignLanding || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td title="${esc(c.landing)}">${esc(c.landing)}</td><td>${fInt(c.sessions)}</td><td>${c.sessionsN1 ? delta(c.sessions, c.sessionsN1) : '—'}</td><td>${c.share != null ? fPct(c.share) : '—'}</td><td class="${c.conv != null && c.conv < 0.005 ? 'dn' : ''}">${c.conv != null ? fPct(c.conv) : '—'}</td><td>${c.convN1 != null ? fPct(c.convN1) : '—'}</td></tr>`).join('');
   const campaignLandingCard = clRows ? `<div class="card"><h3>Cohérence campagne → landing (N vs N-1)</h3><table><thead><tr><th>Campagne</th><th>Landing principale</th><th>Sess. N</th><th>Δ</th><th>% trafic</th><th>Conv. N</th><th>Conv. N-1</th></tr></thead><tbody>${clRows}</tbody></table><div class="note">Vérifie la combinaison campagne / redirection / landing / merch : une campagne qui pousse vers une landing à faible conversion (rouge) = mauvais atterrissage. Conv. N-1 = la même campagne convertissait-elle mieux l'an dernier ?</div></div>` : '';
 
-  const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
+  const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   // ── Pilotage 360 : sous-blocs (détail MP, Top 5 pays inter/canaux/pages, familles, produits) ──
   const miniPanel = (title, head, rows) => rows
     ? `<div><div class="note" style="margin:0 0 6px"><b>${title}</b></div><table style="font-size:11px"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`
@@ -1699,7 +1703,7 @@ function renderScorecard(title, pack, showDetails) {
 }
 function buildBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
-  const dimLabel = DIM_LABEL[rep.meta && rep.meta.dim] || 'Global';
+  const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   const cosPack = rep.ads && rep.ads.cos ? rep.ads.cos : {};
   const mainPack = {
     n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null },
@@ -2498,8 +2502,33 @@ document.getElementById('datesAll').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; USER_DIM = b.dataset.dim; loadReport();
+  b.classList.add('on'); CURRENT_DIM = b.dataset.dim; USER_DIM = b.dataset.dim;
+  const cs = document.getElementById('countrySel'); if (cs) cs.value = ''; // FR/Inter ↔ pays précis : exclusifs
+  loadReport();
 }));
+// Filtre par PAYS précis (ex. États-Unis seul) : dim = 'c:<pays>'. Désactive les boutons FR/Inter.
+document.getElementById('countrySel').addEventListener('change', e => {
+  const v = e.target.value;
+  if (v) {
+    CURRENT_DIM = 'c:' + v;
+    document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
+  } else {
+    CURRENT_DIM = USER_DIM || 'global';
+    document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
+  }
+  loadReport();
+});
+// Remplit la liste des pays — ACCUMULÉE (pour rester complète même quand on filtre sur un pays).
+let ALL_COUNTRIES = [];
+function fillCountrySelect(rep) {
+  const sel = document.getElementById('countrySel'); if (!sel) return;
+  const seen = new Set(ALL_COUNTRIES.map(c => c.toLowerCase()));
+  (rep && rep.pays || []).forEach(p => { const c = (p.pays || '').trim(); if (c && !seen.has(c.toLowerCase())) { seen.add(c.toLowerCase()); ALL_COUNTRIES.push(c); } });
+  if (CURRENT_DIM && CURRENT_DIM.indexOf('c:') === 0) { const c = CURRENT_DIM.slice(2); if (!seen.has(c.toLowerCase())) { ALL_COUNTRIES.push(c); } }
+  ALL_COUNTRIES.sort((a, b) => a.localeCompare(b, 'fr'));
+  const selVal = (CURRENT_DIM && CURRENT_DIM.indexOf('c:') === 0) ? CURRENT_DIM.slice(2) : '';
+  sel.innerHTML = '<option value="">🌍 Tous pays</option>' + ALL_COUNTRIES.map(c => `<option value="${esc(c)}"${c === selVal ? ' selected' : ''}>${esc(c)}</option>`).join('');
+}
 document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-scope]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); SCOPE = b.dataset.scope; loadReport();
