@@ -18,21 +18,24 @@ function norm(s) {
 // ── Parse numérique FR ("1 234,56" → 1234.56) ───────────────────────────────
 const fN = s => parseFloat((s || '').toString().replace(/\s/g, '').replace(',', '.')) || 0;
 
-// ── Full price vs Off price (démarque) — règle métier officielle ────────────
-// La DÉMARQUE (soldes) est encodée dans « Prix Vente Remisé » (originalDiscountedUnitPrice).
-// Formule de référence du client (export OMS, colonne Demarque) :
-//   Demarque = IF( OR( Remisé = 0 ; Remisé = Prix Vente ) ; "Full Price" ; "Off Price" )
-//   → full price ⇔ remisé absent (0) OU égal au prix catalogue (aucune démarque) ;
-//     off price  ⇔ remisé renseigné ET inférieur au catalogue.
-// ⚠️ On ne se fie PAS au « Prix de vente payé » : une remise par CODE PROMO baisse le payé
-// sans être une démarque soldes → resterait full price. Seul « Prix Vente Remisé » fait foi.
-// (Vérifié : reproduit le TCD client au centime — 31 966 € full / 60 275 € off.)
-// Profondeur de démarque (lignes off) = 1 − Remisé / Prix Vente.
+// ── Full price vs Off price (DÉMARQUE) — règle métier officielle ────────────
+// LA DÉMARQUE (soldes) SE LIT EN COMPARANT « Prix Vente Remisé » (originalDiscountedUnitPrice)
+// AU « Prix Vente » CATALOGUE — JAMAIS au « Prix de vente payé ».
+// Pourquoi pas le payé ? Une remise par CODE PROMO baisse le payé SANS être une démarque soldes
+// (le code promo a sa propre analyse, cf. calcPromoImpact) → resterait full price.
+// Formule client (export OMS, colonne Demarque) : IF(OR(Remisé=0 ; Remisé=Prix Vente); Full; Off).
+// ⚠️ TOLÉRANCE RÉSIDUELS DE SAISIE : les données contiennent des écarts parasites (Remisé
+// LÉGÈREMENT au-dessus/en-dessous du catalogue : erreurs de saisie). On ne compte donc en
+// OFF PRICE que si la démarque est ≥ DEMARQUE_MIN_DEPTH (2 %). En-dessous (et Remisé > Vente)
+// = full price. Seuil ajustable ci-dessous.
+// (Sans tolérance, reproduit le TCD client au centime : 31 966 € full / 60 275 € off.)
+const DEMARQUE_MIN_DEPTH = 0.02; // démarque mini pour qu'une ligne compte en off price (anti-résiduel)
 function isFullPriceLine(pvFull, pvRemise, paid) {
-  return (pvRemise === 0) || (Math.abs(pvRemise - pvFull) < 0.01);
+  if (pvRemise === 0 || !(pvFull > 0)) return true;          // remisé absent → plein tarif
+  return (1 - pvRemise / pvFull) < DEMARQUE_MIN_DEPTH;       // écart < 2 % (ou négatif) → résiduel = plein tarif
 }
 function discountDepthOf(pvFull, pvRemise, paid) {
-  if (!(pvFull > 0) || isFullPriceLine(pvFull, pvRemise, paid)) return 0;
+  if (isFullPriceLine(pvFull, pvRemise, paid)) return 0;
   return Math.min(1, Math.max(0, 1 - pvRemise / pvFull));
 }
 // ── Parse numérique GA (format US "1234.56", pas de virgule) ────────────────
@@ -114,6 +117,9 @@ const OMS_ALIASES = {
   pv_remise: ['prix vente remise'],
   lieu: ['lieu de prise de commande', 'lieu prise de commande', 'lieu de commande'],
   statut: ['statut commande', 'statut', 'status'],
+  promo_code: ['code promo', 'coupon', 'code reduction', 'code de reduction'],
+  promo_type: ['type code promo', 'type de code promo', 'type code reduction'],
+  promo_value: ['valeur code promo', 'valeur du code promo', 'valeur reduction'],
 };
 const Y2_ALIASES = {
   date: ['date'],
@@ -820,6 +826,45 @@ function calcDiscountDepth(rows, omsMap) {
   };
 }
 
+// ── Impact des CODES PROMO (distinct de la démarque soldes) ─────────────────
+// Analyse l'usage des codes promo et leur impact € : CA passé via code promo, nombre de
+// commandes, et estimation de la remise accordée (selon Type/Valeur du code quand dispo).
+// ⚠️ Indépendant du full/off price : un code promo n'est PAS une démarque soldes (cf. règle
+// isFullPriceLine). Nécessite les colonnes « Code Promo » (+ Type/Valeur) dans l'OMS.
+function calcPromoImpact(rows, map) {
+  const ci = map.promo_code, ti = map.type, pi = map.prix, ni = map.num;
+  const tyi = map.promo_type, vi = map.promo_value;
+  if (ci === undefined) return null;
+  const by = {}; let caPromo = 0, caTotal = 0, estRemise = 0;
+  const ordersPromo = new Set(), ordersAll = new Set();
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const p = fN(r[pi]); caTotal += p;
+    if (ni !== undefined && r[ni]) ordersAll.add(r[ni]);
+    const code = (r[ci] || '').toString().trim(); if (!code) return;
+    const key = code.toLowerCase();
+    const e = by[key] || (by[key] = { code, ca: 0, orders: new Set(), remise: 0, type: tyi !== undefined ? (r[tyi] || '').toString().trim() : '' });
+    e.ca += p; if (ni !== undefined && r[ni]) e.orders.add(r[ni]);
+    caPromo += p; if (ni !== undefined && r[ni]) ordersPromo.add(r[ni]);
+    // Estimation de la remise € accordée par le code (si % ou montant fourni)
+    let rem = 0;
+    if (vi !== undefined) {
+      const val = fN(r[vi]); const ty = (tyi !== undefined ? (r[tyi] || '').toString().toLowerCase() : '');
+      if (val > 0) { if (ty.includes('%') || ty.includes('pourcent') || ty.includes('reduction')) rem = p * (val > 1 ? val / 100 : val) / (1 - (val > 1 ? val / 100 : val) || 1); else rem = Math.min(val, p); }
+      if (!isFinite(rem) || rem < 0) rem = 0;
+    }
+    e.remise += rem; estRemise += rem;
+  });
+  const codes = Object.values(by).map(e => ({ code: e.code, type: e.type, ca: Math.round(e.ca * 100) / 100, orders: e.orders.size, remise: Math.round(e.remise * 100) / 100 }))
+    .sort((a, b) => b.ca - a.ca);
+  if (!codes.length) return { codes: [], caPromo: 0, caTotal, share: 0, ordersPromo: 0, ordersAll: ordersAll.size, estRemise: 0 };
+  return {
+    codes, caPromo: Math.round(caPromo * 100) / 100, caTotal: Math.round(caTotal * 100) / 100,
+    share: caTotal > 0 ? caPromo / caTotal : 0, ordersPromo: ordersPromo.size, ordersAll: ordersAll.size,
+    estRemise: Math.round(estRemise * 100) / 100,
+  };
+}
+
 // ── Comparatif d'offre : listings produits N vs N-1 (largeur, démarque, origine) ──
 const OFFRE_ALIASES = {
   ref: ['ref. externe', 'ref externe', 'reference externe', 'reference', 'code', 'ref'],
@@ -1413,7 +1458,7 @@ module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
-  calcDiscountDepth, calcOffreCompare, calcOffreCAByListing, offreItems,
+  calcDiscountDepth, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,

@@ -258,6 +258,27 @@ function secAcquisition(rep) {
     <div class="note">Campagnes UTM (acquisition payante & autres sources) actives sur la période. Croise avec les KPI Ads (dépense / ROAS / COS) pour piloter le budget pendant l'opération.</div></div>`;
 }
 
+// Impact des codes promo (distinct de la démarque soldes) — usage & € de remise vs N-1.
+function secPromo(rep) {
+  const pr = rep.promo && rep.promo.n, pr1 = rep.promo && rep.promo.n1;
+  if (!pr || !pr.codes || !pr.codes.length) return '';
+  const tiles = `<div class="kgrid">${[
+    tile('CA via code promo', fEur(pr.caPromo), pr.caPromo, pr1 ? pr1.caPromo : null),
+    `<div class="kc"><div class="l">Part du CA</div><div class="v">${fPct(pr.share)} ${pr1 ? deltaInv(pr.share, pr1.share) : ''}</div></div>`,
+    tile('Commandes avec promo', fInt(pr.ordersPromo), pr.ordersPromo, pr1 ? pr1.ordersPromo : null),
+    `<div class="kc"><div class="l">Remise estimée accordée</div><div class="v">${fEur(pr.estRemise)}</div></div>`,
+  ].join('')}</div>`;
+  const m1 = {}; ((pr1 && pr1.codes) || []).forEach(c => { m1[c.code.toLowerCase()] = c; });
+  const rows = pr.codes.slice(0, 15).map(c => {
+    const p = m1[c.code.toLowerCase()] || {};
+    return `<tr><td>${esc(c.code)}</td><td>${esc(c.type || '—')}</td><td>${fInt(c.orders)}</td><td>${fEur(c.ca)}</td><td>${p.ca != null ? delta(c.ca, p.ca) : '—'}</td><td>${pr.caTotal > 0 ? fPct(c.ca / pr.caTotal) : '—'}</td><td>${fEur(c.remise)}</td></tr>`;
+  }).join('');
+  const foot = `<tfoot><tr class="tot"><td colspan="2"><b>Total codes promo</b></td><td><b>${fInt(pr.ordersPromo)}</b></td><td><b>${fEur(pr.caPromo)}</b></td><td>${pr1 ? delta(pr.caPromo, pr1.caPromo) : '—'}</td><td>${fPct(pr.share)}</td><td><b>${fEur(pr.estRemise)}</b></td></tr></tfoot>`;
+  return `<div class="card"><h3>🎟️ Codes promo — usage & impact (distinct de la démarque soldes)</h3>${tiles}
+    <table style="margin-top:10px"><thead><tr><th>Code</th><th>Type</th><th>Commandes</th><th>CA</th><th>vs N-1</th><th>% du CA</th><th>Remise est.</th></tr></thead><tbody>${rows}</tbody>${foot}</table>
+    <div class="note">💡 Le code promo est <b>distinct de la démarque soldes</b> (qui se lit dans « Prix Vente Remisé ») : une commande au plein tarif avec un code promo reste <b>full price</b>. Ici on mesure le <b>levier promotionnel</b> : combien de CA passe par un code, et la remise € accordée. « Remise estimée » = reconstruction depuis le type/valeur du code (% ou montant).</div></div>`;
+}
+
 // Comparatif d'offre (largeur par famille × démarque vs N-1) — levier de croissance.
 function secOffre(rep) {
   const oc = rep.offreCompare;
@@ -333,14 +354,14 @@ function fillCountrySelect(rep) {
 const SECTION_FN = {
   bilan: rep => secBilan(rep), global: rep => secGlobal(rep), launch: () => '<div id="launchBox"></div>',
   tranches: rep => secTranches(rep), familles: rep => secFamilles(rep), canaux: rep => secCanaux(rep),
-  crm: rep => secCRM(rep), acquisition: rep => secAcquisition(rep), offre: rep => secOffre(rep), alertes: rep => secAlertes(rep),
+  crm: rep => secCRM(rep), acquisition: rep => secAcquisition(rep), promo: rep => secPromo(rep), offre: rep => secOffre(rep), alertes: rep => secAlertes(rep),
 };
 const SECTION_LABEL = {
   bilan: 'Bilan 360', global: 'Pivot GLOBAL (zone × démarque)', launch: 'Lancement — CA à l\'heure', tranches: 'Profondeur de démarque',
   familles: 'Performances produits (Off / Full)', canaux: 'Canaux (vue groupée)', crm: 'Détail CRM', acquisition: 'Détail Acquisition',
-  offre: 'Comparatif d\'offre', alertes: 'Alertes d\'exécution',
+  promo: 'Codes promo (usage & impact)', offre: 'Comparatif d\'offre', alertes: 'Alertes d\'exécution',
 };
-const DEFAULT_ORDER = ['bilan', 'global', 'launch', 'tranches', 'familles', 'canaux', 'crm', 'acquisition', 'offre', 'alertes'];
+const DEFAULT_ORDER = ['bilan', 'global', 'launch', 'tranches', 'familles', 'canaux', 'crm', 'acquisition', 'promo', 'offre', 'alertes'];
 let EDIT = false, LAST_DAY = null;
 function getOrder() {
   try { const o = JSON.parse(localStorage.getItem('vbCommOrder') || 'null');

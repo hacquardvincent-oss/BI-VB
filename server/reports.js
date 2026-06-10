@@ -546,6 +546,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n: calc.calcDiscountDepth(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.calcDiscountDepth(rowsN1, mapN1) : null,
   };
+  const promo = {
+    n: calc.calcPromoImpact(rowsN, omsN.map),
+    n1: (rowsN1 && rowsN1.length) ? calc.calcPromoImpact(rowsN1, mapN1) : null,
+  };
   const offreCompare = (offreN || offreN1) ? calc.calcOffreCompare(offreN, offreN1, salesRef, salesRefN1) : null;
   const offreCAByListing = (offreN || offreN1) ? {
     n: calc.calcOffreCAByListing(rowsN, omsN.map, offreN),
@@ -666,6 +670,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     familleDetail,
     familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
     demarqueDepth,
+    promo,
     offreCompare,
     offreCAByListing,
     fullOffFamille: (() => {

@@ -99,7 +99,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'channels', 'canaltype', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -112,7 +112,7 @@ const THEME_META = {
 const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'P',
-  demarque: 'CO', fulloff: 'CO', offrecompare: 'CO', comalerts: 'CO',
+  demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
@@ -142,9 +142,9 @@ const CARD_LABELS = {
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
-  demarque: 'Performance démarque', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
+  demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
@@ -1312,7 +1312,26 @@ function renderReport(rep) {
     }
     demarqueCard = `<div class="card"><h3>💰 Performance démarque vs Full Price — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}</h3>
       <div class="kgrid">${tiles}</div>${tranches}${famOff}
-      <div class="note">⚠️ <b>Taux de démarque</b> = CA Off ÷ CA EShop (couleur inversée : une hausse est rouge). Tranches = profondeur de remise (1 − Prix Remisé/Prix Vente) constatée sur les lignes vendues. Croiser avec le « Comparatif d'offre » ci-dessous pour relier l'offre (réfs disponibles) à la demande (CA).</div></div>`;
+      <div class="note">⚠️ <b>Règle démarque</b> : une ligne est <b>Off price</b> uniquement si « Prix Vente Remisé » est inférieur au « Prix Vente » de plus de 2 % (la démarque se lit sur ces deux champs, JAMAIS sur le prix payé — un code promo n'est pas une démarque). <b>Taux de démarque</b> = CA Off ÷ CA EShop (couleur inversée). Tranches = profondeur (1 − Remisé/Prix Vente). Croiser avec le « Comparatif d'offre » et les « Codes promo » ci-dessous.</div></div>`;
+  }
+
+  // ── Codes promo : usage & impact (distinct de la démarque soldes) ──
+  let promoCard = '';
+  const pr = rep.promo && rep.promo.n, pr1 = rep.promo && rep.promo.n1;
+  if (pr && pr.codes && pr.codes.length) {
+    const m1 = {}; ((pr1 && pr1.codes) || []).forEach(c => { m1[c.code.toLowerCase()] = c; });
+    const tiles = [
+      ['CA via code promo', fEur(pr.caPromo), pr.caPromo, pr1 ? pr1.caPromo : null, false],
+      ['Part du CA', fPct(pr.share), pr.share, pr1 ? pr1.share : null, true],
+      ['Commandes avec promo', fInt(pr.ordersPromo), pr.ordersPromo, pr1 ? pr1.ordersPromo : null, false],
+      ['Remise estimée', fEur(pr.estRemise), null, null, false],
+    ].map(([l, disp, n, n1, inv]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? (inv ? deltaInv(n, n1) : delta(n, n1)) : ''}</div></div>`).join('');
+    const rows = pr.codes.slice(0, 15).map(c => { const p = m1[c.code.toLowerCase()] || {}; return `<tr><td>${esc(c.code)}</td><td>${esc(c.type || '—')}</td><td>${fInt(c.orders)}</td><td>${fEur(c.ca)}</td><td>${p.ca != null ? delta(c.ca, p.ca) : '—'}</td><td>${pr.caTotal > 0 ? fPct(c.ca / pr.caTotal) : '—'}</td><td>${fEur(c.remise)}</td></tr>`; }).join('');
+    promoCard = `<div class="card"><h3>🎟️ Codes promo — usage & impact (≠ démarque soldes)</h3>
+      <div class="kgrid">${tiles}</div>
+      <table style="margin-top:10px"><thead><tr><th>Code</th><th>Type</th><th>Commandes</th><th>CA</th><th>vs N-1</th><th>% du CA</th><th>Remise est.</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr class="tot"><td colspan="2"><b>Total</b></td><td><b>${fInt(pr.ordersPromo)}</b></td><td><b>${fEur(pr.caPromo)}</b></td><td>${pr1 ? delta(pr.caPromo, pr1.caPromo) : '—'}</td><td>${fPct(pr.share)}</td><td><b>${fEur(pr.estRemise)}</b></td></tr></tfoot></table>
+      <div class="note">💡 Le <b>code promo est distinct de la démarque soldes</b> : une vente au plein tarif avec un code reste <b>full price</b> (la démarque se lit dans « Prix Vente Remisé »). Ici on mesure le levier promotionnel : part de CA passant par un code et remise € accordée. Nécessite la colonne « Code Promo » dans l'OMS.</div></div>`;
   }
 
   // ── Comparatif d'offre N vs N-1 (listings produits chargés par l'équipe) ──
@@ -1364,7 +1383,7 @@ function renderReport(rep) {
     }
   }
   const C = {
-    demarque: demarqueCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
+    demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard,
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
