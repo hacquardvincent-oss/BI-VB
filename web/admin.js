@@ -6,7 +6,7 @@ const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>'
 
 // Liste des vues (clé → libellé) — miroir des MODULES du reporting (mise à jour si on ajoute une vue).
 const VIEWS = [
-  ['direction', 'Direction'], ['commerciale', 'Analyse commerciale'], ['estore', 'Suivi e-store & trafic'], ['onsite', 'Comportement on-site'],
+  ['direction', 'Direction'], ['estore', 'Suivi e-store & trafic'], ['onsite', 'Comportement on-site'],
   ['acquisition', 'Acquisition (GA)'], ['international', 'International'], ['marketplace', 'Marketplace'],
   ['croisees', 'Analyses croisées'], ['saisonprod', 'Offre & Merchandising'], ['produit', 'Produit'],
   ['omnicanal', 'Omnicanal'], ['crosscanal', 'Cross-canal'], ['quotidien', 'Quotidien'], ['full', 'Full'],
