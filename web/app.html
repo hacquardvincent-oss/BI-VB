@@ -26,9 +26,18 @@
     <h3>1 · Type d'analyse</h3>
     <div class="toolbar" id="moduleBar"></div>
     <div class="toolbar" style="margin-top:8px">
-      <button class="btn" id="editViewBtn" title="Choisir et réordonner les tableaux affichés dans cette vue">✏️ Éditer la vue</button>
+      <button class="btn hidden" id="editViewBtn" title="Mode édition : choisir les tableaux de chaque vue et les réordonner (admin)">✏️ EDIT</button>
       <button class="btn" id="navToggle" title="Sommaire / navigation rapide dans la page">☰ Sommaire</button>
       <span class="note" id="customViewNote" style="margin:0"></span>
+    </div>
+    <div class="toolbar hidden" id="editBar" style="margin-top:8px;background:var(--s2);border:1px solid var(--a);border-radius:8px;padding:8px 10px">
+      <b style="font-size:12px">✏️ Édition de la vue :</b>
+      <select id="editViewSel" class="dt"></select>
+      <span class="note" style="margin:0">Coche les tableaux à inclure · glisse (⠿) pour réordonner le sens de lecture.</span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn" id="editReset" title="Revenir à la configuration d'origine de cette vue">↺ Réinitialiser</button>
+      <button class="btn" id="editCancel">Annuler</button>
+      <button class="btn primary" id="editSave">💾 Enregistrer</button>
     </div>
     <div class="note" id="modHint"></div>
   </div>
@@ -137,22 +146,6 @@
   <div id="report"></div>
 
   <!-- ADMIN · COMPTES ÉQUIPE (rattaché au compte admin, masqué par défaut) -->
-  <div class="card hidden" id="accountsCard">
-    <h3>👥 Admin — Comptes équipe</h3>
-    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
-      <input id="acUser" placeholder="identifiant" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
-      <input id="acPass" type="password" placeholder="mot de passe" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
-      <select id="acRole" style="background:var(--bg2,#11142a);color:inherit;border:1px solid var(--bd,#2e3350);border-radius:6px;padding:6px 9px;font-size:12px">
-        <option value="user">Utilisateur</option>
-        <option value="admin">Admin</option>
-      </select>
-      <button class="btn blue" id="acAdd">Ajouter / mettre à jour</button>
-    </div>
-    <div class="note" style="margin-top:8px">Vues autorisées (aucune cochée = accès à toutes) :</div>
-    <div id="acViews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
-    <div id="acList" style="margin-top:12px"></div>
-    <div class="note" id="acNote"></div>
-  </div>
 </div>
 
 <script src="/app.js"></script>

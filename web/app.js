@@ -11,6 +11,8 @@ let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
 let PERSIST = false;       // base de données active (persistance) ?
 let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
+let IS_ADMIN = false;      // l'utilisateur courant est admin (→ CTA EDIT, page Admin)
+let EDIT_VIEW = null;      // mode édition WYSIWYG : clé de la vue en cours d'édition (null = rendu normal)
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
 
@@ -144,8 +146,10 @@ const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', '
 let SERVER_LAYOUTS = {};
 async function loadServerLayouts() { try { const r = await fetch('/api/layouts'); if (r.ok) SERVER_LAYOUTS = (await r.json()) || {}; } catch (e) { SERVER_LAYOUTS = {}; } }
 function defaultLayout(m) { return (MODULES[m] && MODULES[m].layout) || FULL_LAYOUT; }
-function getLayout(m) { const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m); }
+function getLayout(m) { if (m === 'full') return ALL_CARDS.slice(); const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m); }
 function isCustomLayout(m) { const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
+// Vues éditables (la vue « Full » contient toujours TOUS les tableaux → non éditable).
+function editableViews() { return MODULE_ORDER.filter(k => MODULES[k] && k !== 'full'); }
 async function saveLayout(m, arr) {
   SERVER_LAYOUTS[m] = arr; // maj mémoire immédiate (rendu sync)
   const r = await fetch('/api/layouts/' + encodeURIComponent(m), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layout: arr }) });
@@ -195,77 +199,13 @@ async function me() {
   if (pn) pn.innerHTML = PERSIST
     ? '🟢 Persistance active : les fichiers sont conservés (base de données) — pas besoin de les re-déposer.'
     : '⚠️ <b>Mode mémoire</b> : les fichiers sont perdus si le serveur se met en veille ou redéploie → il faut les re-déposer. Pour ne plus jamais re-importer, activez la base (variable <code>DATABASE_URL</code>).';
-  if (u.role === 'admin' && u.dbAccounts) {
+  if (u.role === 'admin') {
+    IS_ADMIN = true;
     const ab = document.getElementById('adminBtn');
-    if (ab) ab.classList.remove('hidden'); // menu Admin (comptes) accessible via l'en-tête
-    loadUsers();
+    if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } // page d'admin dédiée
+    const ev = document.getElementById('editViewBtn'); if (ev) ev.classList.remove('hidden'); // CTA EDIT (admin)
   }
   return u;
-}
-
-// ── Gestion des comptes (admin) + droits par vue (RBAC simple) ──
-function viewList() {
-  return MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)))
-    .map(k => ({ key: k, label: MODULES[k].label }));
-}
-function renderViewChecks(container, selected) {
-  if (!container) return;
-  const sel = new Set(selected || []);
-  container.innerHTML = viewList().map(v => `<label style="font-size:11px;display:inline-flex;align-items:center;gap:3px;background:var(--s2);border:1px solid var(--bd,#2e3350);border-radius:6px;padding:3px 7px;cursor:pointer"><input type="checkbox" data-view="${v.key}"${sel.has(v.key) ? ' checked' : ''}> ${esc(v.label)}</label>`).join('');
-}
-function readViewChecks(container) {
-  return container ? [...container.querySelectorAll('input[data-view]')].filter(i => i.checked).map(i => i.dataset.view) : [];
-}
-async function loadUsers() {
-  const list = document.getElementById('acList'); if (!list) return;
-  renderViewChecks(document.getElementById('acViews'), null); // sélecteur du formulaire de création
-  const r = await fetch('/auth/users'); if (!r.ok) return;
-  const users = await r.json();
-  if (!users.length) { list.innerHTML = '<div class="note">Aucun compte en base (le compte admin d’environnement reste actif).</div>'; return; }
-  const vLabel = k => (MODULES[k] && MODULES[k].label) || k;
-  const rows = users.map(u => {
-    const av = Array.isArray(u.allowed_views) && u.allowed_views.length ? u.allowed_views : null;
-    const viewsTxt = u.role === 'admin' ? '<span class="na">toutes</span>' : (av ? esc(av.map(vLabel).join(', ')) : '<span class="na">toutes</span>');
-    const editor = u.role === 'admin' ? '' :
-      `<tr class="rights-row hidden" data-rights="${esc(u.username)}"><td colspan="5"><div class="note">Vues autorisées (aucune = toutes) :</div><div class="vbox" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0"></div><button class="btn blue" data-act="saverights" data-u="${esc(u.username)}">Enregistrer les droits</button></td></tr>`;
-    return `<tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
-      <td>${u.active ? '<span class="pill">actif</span>' : '<span class="pill miss">inactif</span>'}</td>
-      <td style="font-size:11px;color:var(--t2)">${viewsTxt}</td>
-      <td>${u.role === 'admin' ? '' : `<button class="btn" data-act="rights" data-u="${esc(u.username)}">Droits</button> `}<button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button> <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>${editor}`;
-  }).join('');
-  list.innerHTML = `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Vues</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
-  const rightsRow = u => [...list.querySelectorAll('tr[data-rights]')].find(tr => tr.dataset.rights === u);
-  list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', async () => {
-    const u = b.dataset.u;
-    if (b.dataset.act === 'del') { if (!confirm(`Supprimer le compte « ${u} » ?`)) return; await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'DELETE' }); loadUsers(); }
-    else if (b.dataset.act === 'toggle') { await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: b.dataset.v === '1' }) }); loadUsers(); }
-    else if (b.dataset.act === 'rights') {
-      const row = rightsRow(u); if (!row) return;
-      const wasHidden = row.classList.toggle('hidden');
-      if (!wasHidden) { const usr = users.find(x => x.username === u); renderViewChecks(row.querySelector('.vbox'), Array.isArray(usr.allowed_views) ? usr.allowed_views : null); }
-    }
-    else if (b.dataset.act === 'saverights') {
-      const row = rightsRow(u); if (!row) return;
-      const allowedViews = readViewChecks(row.querySelector('.vbox'));
-      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowedViews }) });
-      document.getElementById('acNote').textContent = `✓ Droits de « ${u} » mis à jour.`;
-      loadUsers();
-    }
-  }));
-}
-async function addUser() {
-  const note = document.getElementById('acNote');
-  const username = document.getElementById('acUser').value.trim();
-  const password = document.getElementById('acPass').value;
-  const role = document.getElementById('acRole').value;
-  if (!username || !password) { note.textContent = '⚠ Identifiant et mot de passe requis.'; return; }
-  const allowedViews = readViewChecks(document.getElementById('acViews'));
-  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role, allowedViews }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
-  note.textContent = `✓ Compte « ${username} » enregistré${allowedViews.length ? ` (${allowedViews.length} vue(s))` : ' (toutes vues)'}.`;
-  document.getElementById('acUser').value = ''; document.getElementById('acPass').value = '';
-  loadUsers();
 }
 
 function renderSources(status) {
@@ -344,8 +284,12 @@ function initModules() {
     renderModuleHint();
     loadReport();
   }));
-  const ev = document.getElementById('editViewBtn'); if (ev && !ev._wired) { ev._wired = true; ev.addEventListener('click', () => openViewEditor()); }
+  const ev = document.getElementById('editViewBtn'); if (ev && !ev._wired) { ev._wired = true; ev.addEventListener('click', () => enterEditMode()); }
   const nt = document.getElementById('navToggle'); if (nt && !nt._wired) { nt._wired = true; nt.addEventListener('click', () => { const n = document.getElementById('reportNav'); if (n) n.classList.toggle('open'); }); }
+  const es = document.getElementById('editViewSel'); if (es && !es._wired) { es._wired = true; es.addEventListener('change', () => { EDIT_VIEW = es.value; loadReport(); }); }
+  const sv = document.getElementById('editSave'); if (sv && !sv._wired) { sv._wired = true; sv.addEventListener('click', () => saveEditView()); }
+  const rs = document.getElementById('editReset'); if (rs && !rs._wired) { rs._wired = true; rs.addEventListener('click', async () => { if (!EDIT_VIEW) return; if (!confirm('Réinitialiser cette vue à sa configuration d\'origine ?')) return; try { await resetLayout(EDIT_VIEW); } catch (e) { /* best-effort */ } loadReport(); }); }
+  const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
 }
 
 const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace' };
@@ -479,8 +423,8 @@ async function loadReport() {
   renderTimelineChart(rep);
   renderTimeline2Chart(rep);
   renderCharts(rep);
-  wireBilan();
-  buildReportNav();
+  if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
+  else { wireBilan(); buildReportNav(); }
   updateViewControls();
 }
 
@@ -1099,6 +1043,7 @@ function renderReport(rep) {
     if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
     return html;
   };
+  if (EDIT_VIEW) return renderEditMode(rep, card); // mode édition WYSIWYG (admin)
   let body;
   if (isCustomLayout(CURRENT_MODULE)) {
     // Vue personnalisée : on respecte l'ORDRE exact du layout (drag'n'drop), bannière au changement de thème.
@@ -1159,60 +1104,69 @@ function buildReportNav() {
 }
 
 // ── Éditeur de vue : cocher / réordonner (drag'n'drop) les tableaux d'une vue ──────
-function openViewEditor() {
-  const mod = CURRENT_MODULE;
-  const modLabel = (MODULES[mod] && MODULES[mod].label) || mod;
-  const cur = getLayout(mod);
-  // Ordre affiché : cartes incluses (dans l'ordre du layout) puis les autres, décochées.
+// ── Mode édition WYSIWYG (admin) : case + poignée sur CHAQUE tableau, drag'n'drop sur la page ──
+// Rendu du rapport en mode édition : tous les tableaux, cochables et déplaçables. `card` = builder local de renderReport.
+function renderEditMode(rep, card) {
+  const cur = getLayout(EDIT_VIEW);
   const included = cur.filter(k => ALL_CARDS.includes(k));
-  const rest = ALL_CARDS.filter(k => !included.includes(k));
-  const ordered = included.concat(rest);
-  const row = k => `<li class="ve-item" draggable="true" data-key="${k}">
-      <span class="ve-grip" title="Glisser pour déplacer">⠿</span>
-      <label><input type="checkbox" ${included.includes(k) ? 'checked' : ''}> ${esc(CARD_LABELS[k] || k)}</label>
-      <span class="ve-theme">${esc((THEME_META[THEME_OF[k]] || '').replace(/^\S+\s/, ''))}</span>
-    </li>`;
-  const ov = document.createElement('div'); ov.className = 've-overlay';
-  ov.innerHTML = `<div class="ve-modal">
-      <div class="ve-head"><b>✏️ Éditer la vue — ${esc(modLabel)}</b><span class="ve-x" title="Fermer">✕</span></div>
-      <div class="note" style="margin:0 0 8px">Coche les tableaux à inclure, glisse-les (⠿) pour les réordonner. L'ordre coché = l'ordre d'affichage. Enregistré sur ce navigateur.</div>
-      <ul class="ve-list">${ordered.map(row).join('')}</ul>
-      <div class="toolbar" style="margin-top:12px;justify-content:flex-end">
-        <button class="btn" id="veReset" title="Revenir à la vue d'origine">↺ Réinitialiser</button>
-        <button class="btn" id="veCancel">Annuler</button>
-        <button class="btn primary" id="veSave">Enregistrer</button>
-      </div></div>`;
-  document.body.appendChild(ov);
-  const list = ov.querySelector('.ve-list');
-  // Drag'n'drop natif (sans dépendance)
-  let dragEl = null;
-  list.addEventListener('dragstart', e => { dragEl = e.target.closest('.ve-item'); if (dragEl) dragEl.classList.add('dragging'); });
-  list.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; });
-  list.addEventListener('dragover', e => {
-    e.preventDefault();
-    const after = [...list.querySelectorAll('.ve-item:not(.dragging)')].find(el => {
-      const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2;
-    });
-    if (!dragEl) return;
-    if (after) list.insertBefore(dragEl, after); else list.appendChild(dragEl);
-  });
-  const close = () => ov.remove();
-  ov.addEventListener('click', e => { if (e.target === ov) close(); });
-  ov.querySelector('.ve-x').onclick = close;
-  ov.querySelector('#veCancel').onclick = close;
-  ov.querySelector('#veReset').onclick = async () => { try { await resetLayout(mod); } catch (e) { /* best-effort */ } close(); loadReport(); };
-  ov.querySelector('#veSave').onclick = async () => {
-    const arr = [...list.querySelectorAll('.ve-item')].filter(li => li.querySelector('input').checked).map(li => li.dataset.key);
-    if (!arr.length) { alert('Sélectionne au moins un tableau.'); return; }
-    const btn = ov.querySelector('#veSave'); btn.disabled = true; btn.textContent = 'Enregistrement…';
-    try { await saveLayout(mod, arr); close(); loadReport(); }
-    catch (e) { btn.disabled = false; btn.textContent = 'Enregistrer'; alert('Échec de l\'enregistrement : ' + e.message); }
+  const excluded = ALL_CARDS.filter(k => !included.includes(k));
+  const ordered = included.concat(excluded); // inclus (dans l'ordre) puis le reste à ajouter
+  const wrap = k => {
+    const inView = included.includes(k);
+    let html = card(k);
+    if (!html) html = `<div class="card"><h3>${esc(CARD_LABELS[k] || k)}</h3><div class="note">Aucune donnée sur cette période — ce tableau s'affichera dès que la donnée sera disponible.</div></div>`;
+    return `<div class="edit-wrap${inView ? '' : ' off'}" draggable="true" data-key="${k}">
+      <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner">⠿</span>
+        <label><input type="checkbox" ${inView ? 'checked' : ''}> Dans cette vue</label>
+        <span class="edit-name">${esc(CARD_LABELS[k] || k)}</span></div>${html}</div>`;
   };
+  return `<div id="editCards">${ordered.map(wrap).join('')}</div>`;
 }
-
+// Branche le drag'n'drop + le toggle des cases (appelé après innerHTML en mode édition).
+function wireEditMode() {
+  const cont = document.getElementById('editCards'); if (!cont) return;
+  let dragEl = null;
+  cont.addEventListener('dragstart', e => { dragEl = e.target.closest('.edit-wrap'); if (dragEl) dragEl.classList.add('dragging'); });
+  cont.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; });
+  cont.addEventListener('dragover', e => {
+    e.preventDefault();
+    const after = [...cont.querySelectorAll('.edit-wrap:not(.dragging)')].find(el => { const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if (!dragEl) return;
+    if (after) cont.insertBefore(dragEl, after); else cont.appendChild(dragEl);
+  });
+  cont.querySelectorAll('.edit-wrap input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => cb.closest('.edit-wrap').classList.toggle('off', !cb.checked)));
+}
+// Enregistre la vue en édition (cartes cochées, dans l'ordre affiché).
+async function saveEditView() {
+  const cont = document.getElementById('editCards'); if (!cont || !EDIT_VIEW) return;
+  const arr = [...cont.querySelectorAll('.edit-wrap')].filter(w => w.querySelector('input[type=checkbox]').checked).map(w => w.dataset.key);
+  if (!arr.length) { alert('Sélectionne au moins un tableau pour cette vue.'); return; }
+  const btn = document.getElementById('editSave'); if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+  try { await saveLayout(EDIT_VIEW, arr); exitEditMode(); }
+  catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; } alert('Échec de l\'enregistrement : ' + e.message); }
+}
+function enterEditMode() {
+  const views = editableViews();
+  if (!views.length) return;
+  EDIT_VIEW = views.includes(CURRENT_MODULE) ? CURRENT_MODULE : views[0];
+  const bar = document.getElementById('editBar');
+  if (bar) {
+    bar.classList.remove('hidden');
+    const sel = document.getElementById('editViewSel');
+    if (sel) sel.innerHTML = views.map(k => `<option value="${k}"${k === EDIT_VIEW ? ' selected' : ''}>${esc(MODULES[k].label)}</option>`).join('');
+  }
+  document.getElementById('editViewBtn').classList.add('hidden');
+  loadReport();
+}
+function exitEditMode() {
+  EDIT_VIEW = null;
+  const bar = document.getElementById('editBar'); if (bar) bar.classList.add('hidden');
+  if (IS_ADMIN) document.getElementById('editViewBtn').classList.remove('hidden');
+  loadReport();
+}
 function updateViewControls() {
   const note = document.getElementById('customViewNote');
-  if (note) note.innerHTML = isCustomLayout(CURRENT_MODULE) ? '<span class="pill">vue personnalisée</span>' : '';
+  if (note) note.innerHTML = (!EDIT_VIEW && isCustomLayout(CURRENT_MODULE)) ? '<span class="pill">vue personnalisée</span>' : '';
 }
 
 // ── Bilan en tête : scorecard N vs N-1 + signaux automatiques (règles) ──────────
@@ -2078,18 +2032,7 @@ function renderCAAudit(res) {
   }
 }
 
-// Menu Admin (en-tête) : affiche/masque la carte « Comptes équipe » (rattachée au compte admin)
-(() => {
-  const ab = document.getElementById('adminBtn');
-  if (!ab) return;
-  ab.addEventListener('click', () => {
-    const card = document.getElementById('accountsCard');
-    if (!card) return;
-    const wasHidden = card.classList.contains('hidden');
-    card.classList.toggle('hidden');
-    if (wasHidden) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-})();
+// Le bouton Admin (en-tête) redirige vers la page d'administration dédiée (câblé dans me()).
 
 // Événements
 document.getElementById('logout').addEventListener('click', async () => {
@@ -2103,7 +2046,6 @@ document.getElementById('pdf').addEventListener('click', () => {
   const type = (CURRENT_MODULE === 'quotidien' || oneDay) ? 'quotidien' : 'periode';
   window.open(`/api/report/pdf?${reportQuery()}&type=${type}`, '_blank');
 });
-document.getElementById('acAdd').addEventListener('click', addUser);
 document.getElementById('filesToggle').addEventListener('click', () => {
   setFilesOpen(document.getElementById('filesBody').classList.contains('hidden'));
 });
