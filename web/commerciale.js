@@ -474,16 +474,17 @@ async function fullImport() {
 // Diagnostic démarque WSHOP : montre comment l'API encode le prix remisé sur les lignes soldées.
 async function wshopPing() {
   const btn = document.getElementById('wshopPing'), box = document.getElementById('pingBox');
-  btn.disabled = true; box.innerHTML = '<div class="note">Test WSHOP en cours…</div>';
+  const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
+  btn.disabled = true; box.innerHTML = `<div class="note">Test WSHOP sur ${esc(from || '30 j')} → ${esc(to || '')}…</div>`;
   try {
-    const j = await (await fetch('/api/wshop/ping')).json();
+    const j = await (await fetch(`/api/wshop/ping?${q({ from, to })}`)).json();
     if (j.error) { box.innerHTML = `<div class="note">⚠ ${esc(j.error)}</div>`; btn.disabled = false; return; }
     const block = (t, v) => `<div style="margin-top:6px"><b>${t}</b></div><pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:2px;overflow-x:auto">${esc(typeof v === 'string' ? v : JSON.stringify(v || {}, null, 2))}</pre>`;
     box.innerHTML = `<div class="card" style="margin-top:8px"><h3>🏷️ Diagnostic démarque WSHOP</h3>
-      <div class="note">Auth : ${esc(j.auth || '—')} · échantillon : ${esc(String(j.sampleCount != null ? j.sampleCount : '—'))} commande(s) sur 30 j.</div>
+      <div class="note">Auth : ${esc(j.auth || '—')} · fenêtre : ${esc(j.window ? j.window.from + ' → ' + j.window.to : '30 j')} · ${esc(String(j.sampleCount != null ? j.sampleCount : '—'))} commande(s).</div>
       ${block('🏷️ Ligne démarquée détectée (le champ remisé est-il peuplé ?)', j.demarqueSample || '—')}
       ${block('Champs prix d\'une ligne (item)', j.itemPriceFields || {})}
-      <div class="note">💡 Si <b>originalDiscountedUnitPriceRenseigne</b> = 0/N, l'API ne fournit pas le prix remisé → le connecteur le reconstitue depuis le prix payé (cf. correctif). Si un autre champ contient le prix soldé, copie-moi ce bloc et je branche le mapping dessus.</div></div>`;
+      <div class="note">💡 Cible le <b>jour de lancement</b> (dates de l'opération ci-dessus) pour voir comment l'AVP/soldes encode la démarque. Si <b>originalDiscountedUnitPriceRenseigne</b> = 0/N mais que <b>compareAtPrice &gt; originalUnitPrice</b>, le prix d'origine est dans compareAtPrice (géré par le correctif). Copie-moi ce bloc si ça reste faux.</div></div>`;
     btn.disabled = false;
   } catch (e) { box.innerHTML = `<div class="note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; btn.disabled = false; }
 }

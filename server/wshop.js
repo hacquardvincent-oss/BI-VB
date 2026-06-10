@@ -179,12 +179,14 @@ function orderToRows(order) {
     if (cancelled) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : 0));      // annulée : tout le non-expédié
     else if (incomplete) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : qOrd)); // expédiée incomplète : le reste
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
-    // Full/Off price : Prix Vente = prix catalogue plein (originalUnitPrice) ; Prix Vente Remisé =
-    // prix APRÈS DÉMARQUE soldes. L'API peut fournir un champ dédié (originalDiscountedUnitPrice /
-    // discountedUnitPrice / salePrice) ; sinon il est à 0 même en soldes → on RECONSTITUE la démarque :
-    // si le prix unitaire payé (unit) est SOUS le catalogue, c'est qu'une démarque est appliquée
-    // → on prend `unit` comme prix remisé. Sans ce repli, tout passerait en full price (bug soldes WSHOP).
-    const pvUnit = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
+    // Full/Off price : « Prix Vente » = prix catalogue PLEIN. ⚠️ Selon l'encodage WSHOP (notamment
+    // en soldes/avant-première), `originalUnitPrice` peut DÉJÀ être le prix démarqué, le prix d'origine
+    // étant alors dans `compareAtPrice` → on prend le PLUS HAUT des deux comme catalogue plein.
+    // « Prix Vente Remisé » = prix après démarque : champ dédié de l'API si présent, sinon, si le prix
+    // payé est sous le catalogue, on prend `unitPrice` (la démarque est dans le payé).
+    const cmpAt = Number(it.compareAtPrice || 0) || 0;
+    const ouPrice = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
+    const pvUnit = Math.max(cmpAt, ouPrice) || 0;
     let pvrUnit = Number(it.originalDiscountedUnitPrice || it.discountedUnitPrice || it.salePrice || it.markdownPrice || 0) || 0;
     if (!(pvrUnit > 0) && pvUnit > 0 && unit > 0 && unit < pvUnit) pvrUnit = unit;
     // Coloris (best-effort selon le schéma WSHOP) → ajouté à la désignation produit.
@@ -514,9 +516,14 @@ router.get('/ping', requireAuth, async (req, res) => {
   catch (e) { out.auth = 'KO — ' + e.message; out.authMs = Date.now() - t; return res.json(out); }
   t = Date.now();
   try {
-    const to = new Date(), from = new Date(); from.setDate(from.getDate() - 30);
     const iso = d => d.toISOString().slice(0, 10);
+    // Fenêtre : par défaut 30 derniers jours, sinon dates explicites (?from&to) → cible un jour précis
+    // (ex. le jour de lancement d'une opération soldes) pour voir comment la démarque y est encodée.
+    const qf = (req.query.from || '').toString().slice(0, 10), qt = (req.query.to || '').toString().slice(0, 10);
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(qt) ? new Date(qt) : new Date();
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(qf) ? new Date(qf) : (() => { const d = new Date(to); d.setDate(d.getDate() - 30); return d; })();
     const win = { created_from: `${iso(from)} 00:00:00`, created_to: `${iso(to)} 23:59:59` };
+    out.window = { from: iso(from), to: iso(to) };
     const getArr = r => (r && r.__err) ? [] : (Array.isArray(r) ? r : (r && (r.data || r.orders || r.results)) || []);
     // Garde-fou anti-504 : chaque appel WSHOP est plafonné en temps → on renvoie une réponse PARTIELLE
     // plutôt que de laisser le proxy couper. Les 3 requêtes en parallèle (échantillon + 2 sondes statut).
