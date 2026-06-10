@@ -144,6 +144,16 @@ CancelledInternal, ReturnPreparation, PickupStoreProcessed, WaitingValidation, P
 total plateforme → l'utiliser pour le KPI sessions et le TT/jour. `refresh` : `fetchGA4` essentiel (awaité), le reste
 sous `safe()` (un 502 secondaire n'interrompt pas l'import). `gacampcat` = N seul. Routes : `/status`, `/refresh`, `/saison-items`.
 
+### 3.3bis SFTP (`sftp.js`) — automatisation Y2/ERP
+**Env** : `SFTP_HOST`, `SFTP_PORT` (22), `SFTP_USER`, `SFTP_PASSWORD` **ou** `SFTP_PRIVATE_KEY` (PEM ou base64,
++ `SFTP_PASSPHRASE`), `SFTP_DIR`, **`SFTP_FILES`** (JSON `[{source,period,match}]`, ex.
+`[{"source":"y2","period":"N","match":"Y2_N_*.csv"},{"source":"y2","period":"N1","match":"Y2_N1_*.csv"}]`),
+`SFTP_POLL_MINUTES` (optionnel = auto-import). Dépendance `ssh2-sftp-client` (require **paresseux** : pas d'erreur si
+non configuré). `fetchAll` : connecte, prend le fichier **le plus récent** matchant chaque motif (glob `*`/`?`), télécharge
+→ **`ingest.ingestBuffer`** (même pipeline + anti-PII que l'upload manuel). Routes : `/status`, `/ping` (liste le dossier +
+résolution des motifs, sans rien ingérer), `/refresh`. UI : `#sftpbox` (Importer / Tester). Recommandé pour **Y2/ERP**
+(une API n'existe que si l'ERP en publie une ; le SFTP est universel pour les exports fichiers). Poll auto = instance toujours active.
+
 ### 3.3 Google Ads (`googleads.js`)
 **Env** : `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`/`CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`,
 `GOOGLE_ADS_CUSTOMER_ID` (10 chiffres), `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (MCC, optionnel), `GOOGLE_ADS_API_VERSION`.
