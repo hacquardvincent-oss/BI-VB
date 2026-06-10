@@ -15,7 +15,8 @@ let LAYOUTS = {}; // { moduleKey: [cardKeys] }
 const KNOWN = new Set(['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages',
   'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga',
   'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel',
-  'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca']);
+  'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca',
+  'fulloff', 'demarque', 'offrecompare', 'comalerts']);
 
 async function hydrate() {
   if (!db.enabled) return;

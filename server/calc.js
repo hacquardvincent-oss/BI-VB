@@ -736,6 +736,102 @@ function calcFullOffByProduct(rows, omsMap) {
   return by;
 }
 
+// ── Démarque : CA par TRANCHE de démarque (hors mkt) ────────────────────────
+// Profondeur = 1 − (Prix Vente Remisé / Prix Vente) sur les lignes démarquées.
+// → lire « où se fait le CA démarqué » (-20 / -30 / -40 / -50 %+) et comparer à N-1.
+const DISCOUNT_BUCKETS = ['< 20%', '20–30%', '30–40%', '40–50%', '≥ 50%'];
+function discountBucketOf(d) { return d < 0.2 ? '< 20%' : d < 0.3 ? '20–30%' : d < 0.4 ? '30–40%' : d < 0.5 ? '40–50%' : '≥ 50%'; }
+function calcDiscountDepth(rows, omsMap) {
+  const pi = omsMap.prix, pvi = omsMap.pv, pvri = omsMap.pv_remise, ti = omsMap.type, qi = omsMap.qte, di = omsMap.des;
+  if (pvi === undefined || pvri === undefined) return null;
+  const by = {}; let caOff = 0, caFull = 0, qteOff = 0;
+  const prods = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const p = fN(r[pi]); const pv = fN(r[pvi]); const pvr = fN(r[pvri]);
+    const isFP = (pvr === 0) || (Math.abs(pvr - pv) < 0.01);
+    if (isFP || pv <= 0) { caFull += p; return; }
+    const depth = Math.min(1, Math.max(0, 1 - pvr / pv));
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const b = discountBucketOf(depth);
+    const e = by[b] || (by[b] = { ca: 0, qte: 0 });
+    e.ca += p; e.qte += q; caOff += p; qteOff += q;
+    const des = (di !== undefined ? (r[di] || '').trim() : '');
+    if (des) { const pe = prods[des] || (prods[des] = { des, ca: 0, qte: 0, depthSum: 0 }); pe.ca += p; pe.qte += q; pe.depthSum += depth * q; }
+  });
+  return {
+    buckets: DISCOUNT_BUCKETS.map(label => ({ label, ca: (by[label] || {}).ca || 0, qte: (by[label] || {}).qte || 0 })),
+    caOff, caFull, qteOff,
+    topProduits: Object.values(prods).map(p => ({ des: p.des, ca: Math.round(p.ca * 100) / 100, qte: p.qte, depth: p.qte > 0 ? p.depthSum / p.qte : 0 }))
+      .sort((a, b) => b.ca - a.ca).slice(0, 10),
+  };
+}
+
+// ── Comparatif d'offre : listings produits N vs N-1 (largeur, démarque, origine) ──
+const OFFRE_ALIASES = {
+  ref: ['ref. externe', 'ref externe', 'reference externe', 'reference', 'ref'],
+  famille: ['regroupement', 'familles principales', 'famille principale', 'famille', 'categorie'],
+  des: ['designation', 'libelle', 'titre', 'name', 'produit'],
+  prix: ['prix initial', 'prix de base', 'prix barre', 'prix catalogue', 'pvp', 'prix'],
+  prix_solde: ['prix solde', 'prix demarque', 'prix remise', 'prix promo'],
+  remise: ['taux de demarque', 'taux demarque', 'remise', 'demarque', 'discount'],
+  origine: ['origine', 'provenance', 'statut offre', 'type offre', 'source stock', 'stock origine'],
+};
+// Items d'un listing : { ref, fam, des, depth (0 = plein tarif), bucket, origine }
+function offreItems(ds) {
+  if (!ds || !ds.rows || !ds.hdrs) return [];
+  const m = (ds.map && Object.keys(ds.map).length) ? ds.map : autoMap(ds.hdrs, OFFRE_ALIASES);
+  const ri = m.ref; if (ri === undefined) return [];
+  return ds.rows.map(r => {
+    const ref = (r[ri] || '').toString().trim(); if (!ref) return null;
+    const fam = (m.famille !== undefined ? (r[m.famille] || '').trim() : '') || '(n.c.)';
+    const des = m.des !== undefined ? (r[m.des] || '').trim() : '';
+    let depth = 0;
+    if (m.remise !== undefined) { let v = fN(r[m.remise]); if (v > 1) v = v / 100; if (v > 0 && v <= 1) depth = v; }
+    if (!depth && m.prix !== undefined && m.prix_solde !== undefined) {
+      const p0 = fN(r[m.prix]), p1 = fN(r[m.prix_solde]);
+      if (p0 > 0 && p1 > 0 && p1 < p0 - 0.01) depth = Math.min(1, 1 - p1 / p0);
+    }
+    const origine = m.origine !== undefined ? ((r[m.origine] || '').trim() || '(n.c.)') : null;
+    return { ref, fam, des, depth, bucket: depth > 0 ? discountBucketOf(depth) : 'Plein tarif', origine };
+  }).filter(Boolean);
+}
+// Compare deux listings + croise avec les ventes (salesByRef) → largeur d'offre, tranches, recos.
+function calcOffreCompare(offN, offN1, salesN, salesN1) {
+  const A = offreItems(offN), B = offreItems(offN1);
+  if (!A.length && !B.length) return null;
+  const cnt = (arr, key) => { const o = {}; arr.forEach(x => { const k = key(x); o[k] = (o[k] || 0) + 1; }); return o; };
+  const famN = cnt(A, x => x.fam), famN1 = cnt(B, x => x.fam);
+  const bkN = cnt(A, x => x.bucket), bkN1 = cnt(B, x => x.bucket);
+  const fams = [...new Set([...Object.keys(famN), ...Object.keys(famN1)])]
+    .map(f => ({ fam: f, n: famN[f] || 0, n1: famN1[f] || 0, delta: (famN[f] || 0) - (famN1[f] || 0) }))
+    .sort((a, b) => b.n - a.n);
+  const BORDER = ['Plein tarif', ...DISCOUNT_BUCKETS];
+  const buckets = BORDER.map(b => ({ bucket: b, n: bkN[b] || 0, n1: bkN1[b] || 0, delta: (bkN[b] || 0) - (bkN1[b] || 0) })).filter(x => x.n || x.n1);
+  const origN = A.some(x => x.origine != null) ? cnt(A.filter(x => x.origine != null), x => x.origine) : null;
+  // Jointure ventes : par ref exacte puis par modèle (baseRef) des deux côtés.
+  const mkIdx = sales => { const o = {}; Object.entries(sales || {}).forEach(([ref, v]) => { o[ref] = v; const b = baseRef(ref); if (!o[b]) o[b] = v; }); return o; };
+  const sN = mkIdx(salesN), sN1 = mkIdx(salesN1);
+  const refsN = new Set(); A.forEach(x => { refsN.add(x.ref); refsN.add(baseRef(x.ref)); });
+  // Recos 1 : best-sellers N-1 (présents au listing N-1) absents du listing N → réintégrer.
+  const reintegrer = B
+    .map(x => ({ ...x, ca: (sN1[x.ref] || sN1[baseRef(x.ref)] || {}).ca || 0 }))
+    .filter(x => x.ca > 300 && !refsN.has(x.ref) && !refsN.has(baseRef(x.ref)))
+    .sort((a, b) => b.ca - a.ca).slice(0, 8)
+    .map(x => ({ ref: x.ref, des: x.des || (sN1[x.ref] || {}).desig || '', fam: x.fam, caN1: Math.round(x.ca), bucket: x.bucket }));
+  // Recos 2 : réfs du listing N fortement démarquées (≥30 %) SANS vente sur la période → visibilité/merch.
+  const sansVente = A
+    .filter(x => x.depth >= 0.3 && !((sN[x.ref] || sN[baseRef(x.ref)] || {}).ca > 0))
+    .sort((a, b) => b.depth - a.depth).slice(0, 10)
+    .map(x => ({ ref: x.ref, des: x.des, fam: x.fam, depth: x.depth }));
+  return {
+    totals: { n: A.length, n1: B.length, delta: A.length - B.length },
+    familles: fams, buckets,
+    origines: origN ? Object.entries(origN).map(([origine, n]) => ({ origine, n })).sort((a, b) => b.n - a.n) : null,
+    reintegrer, sansVente,
+  };
+}
+
 // CA ET Quantité par famille (hors marketplaces) — { fam: { ca, qte } }
 function calcFamilleDetail(rows, omsMap, refMap) {
   if (!refMap || Object.keys(refMap).length === 0) return null;
@@ -1231,7 +1327,8 @@ function dateBounds(rows, map) {
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
+  calcDiscountDepth, calcOffreCompare, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,

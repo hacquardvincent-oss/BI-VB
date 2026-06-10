@@ -64,6 +64,7 @@ Clé store = `${source}-${period}`, `period ∈ {N, N1}`. Forme dataset : `{hdrs
 | `ref` | upload / `specs/` | Référentiel produit : ref_ext → **famille/regroupement/saison**. |
 | `impl` | upload / `specs/` | Implantation catalogue saison (E26 N / E25 N1). |
 | `ads` | Google Ads API / upload | Campagne×jour : coût, impressions, clics, conversions, valeur conv. |
+| `offre` | upload équipe commerciale | Listing produits N/N-1 : réf, famille, prix initial/soldé (ou % démarque), origine (initial/outlet) → comparatif d'offre. |
 | `adsis` | Google Ads API | Impression share (search IS, lost budget/rank). |
 | `ga` | GA4 API | **date×canal×device×pays** (sur-compte les sessions — cf §12). |
 | `gasess` | GA4 API | **date×pays** (faible cardinalité) → **KPI sessions + TT/jour fiables**. |
@@ -288,7 +289,12 @@ donuts N/N-1) · `canaltype` (récap par type) · `device` · `marketplace` (don
 (barres empilées + arbitrage) · `pays` (barres croissance/décroissance) · `ttpays` · `fampays` · `saison`/`saisoncompare` ·
 `annulations` (tuiles delta **inversé**, entrepôt/magasin, **incomplètes à part**, byStatut, byCanal) · `retours` (tuiles,
 top produits + raisons, raisons N vs N-1) · `stockalerts` (top 10) · `produits`/`itemfunnel`/`renta` · `pages`/`landing`/
-`pagesrc`/`lostpages`/`campaignland` · `famille` (barres croissance/décroissance) · `ga` · `campaigns` · `ads`.
+`pagesrc`/`lostpages`/`campaignland` · `famille` (barres croissance/décroissance) · `ga` · `campaigns` · `ads` ·
+**Vue « Analyse commerciale »** (thème `CO`) : `demarque` (CA off/full, taux de démarque inversé, **CA par tranche de
+démarque** via `calcDiscountDepth` sur pv/pv_remise, top produits/familles en démarque) · `fulloff` · `offrecompare`
+(**comparatif de listings N vs N-1** via `calcOffreCompare` : largeur par famille, réfs par niveau de démarque, origine,
+« à réintégrer » = vendeurs N-1 absents du listing N, « démarquées sans vente ») · `comalerts` (campagnes manquantes/
+flop/saturées/bridées, landing en chute de conversion, pages perdues).
 
 ### Graphiques (Chart.js) — comment ils sont construits
 Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. Couleurs : `--a #f5a623` (CA/ambre), `--b #4a9eff`

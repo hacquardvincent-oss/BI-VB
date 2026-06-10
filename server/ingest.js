@@ -25,7 +25,7 @@ function uploadSingle(req, res, next) {
   });
 }
 
-const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl', 'saisonoms', 'saisony2', 'saisonref', 'saisonstock', 'saisonret'];
+const SOURCES = ['oms', 'y2', 'ga', 'ads', 'ref', 'ret', 'impl', 'offre', 'saisonoms', 'saisony2', 'saisonref', 'saisonstock', 'saisonret'];
 const PERIODS = ['N', 'N1'];
 const ANONYMIZE = new Set(['oms', 'ret', 'saisonoms', 'saisonret']); // sources contenant du PII client
 // Sources de type OMS (mêmes colonnes/alias, index ref. externe, bornes de dates)
@@ -112,7 +112,7 @@ function parseBuffer(buf, filename, source) {
   return source === 'ga' ? calc.parseGAcsv(text) : calc.parseCSV(text);
 }
 
-const aliasesFor = s => ({ oms: calc.OMS_ALIASES, saisonoms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, saisony2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, saisonref: calc.REF_ALIASES, ret: calc.RET_ALIASES, saisonret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES, saisonstock: calc.STOCK_ALIASES }[s]);
+const aliasesFor = s => ({ oms: calc.OMS_ALIASES, saisonoms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, saisony2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, saisonref: calc.REF_ALIASES, ret: calc.RET_ALIASES, saisonret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES, offre: calc.OFFRE_ALIASES, saisonstock: calc.STOCK_ALIASES }[s]);
 
 // Parse + anonymise + mappe + stocke un buffer (réutilisé par la route ET le chargement auto SPECS)
 function ingestBuffer(source, period, buffer, filename, uploadedBy) {
