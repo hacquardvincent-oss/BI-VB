@@ -61,6 +61,10 @@
       <button class="pb" id="fullImport" title="Réimporte l'OMS complet sur la fenêtre de l'opération + N-1 (nécessaire le 1er jour ou si N-1 manque)">⬇️ Import complet (opération + N-1)</button>
       <span class="note" id="syncNote" style="margin:0">Récupère les commandes nouvelles/modifiées en quelques secondes → recharge l'analyse. À utiliser en boucle les jours de lancement pour un pilotage quasi temps réel.</span>
     </div>
+    <div class="toolbar" style="margin-top:8px">
+      <button class="pb" id="ga4Refresh" title="Recharge les données Google Analytics (sessions, canaux, campagnes) sur la fenêtre de l'opération + N-1">🔄 Actualiser GA4 (trafic & canaux)</button>
+      <span class="note" id="ga4Note" style="margin:0">Met à jour les sessions, canaux de communication et campagnes GA4 sur la période (et N-1) → alimente le Bilan, les canaux et l'acquisition.</span>
+    </div>
     <div class="toolbar" style="margin-top:10px;align-items:center">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">📋 Listing d'offre</span>
       <input type="file" id="offreFile" accept=".xlsx,.xls,.csv" class="dt" style="max-width:320px">

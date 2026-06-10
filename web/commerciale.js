@@ -179,9 +179,11 @@ function perfBlock(title, ff, fp, key, keyN1, prods, color) {
     }).join('');
   const top = (fp || []).filter(p => (p[key] || 0) > 0).sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10)
     .map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fEur(p[key] || 0)}</td><td>${fInt(p.qte)}</td><td>${p[keyN1] != null ? delta(p[key] || 0, p[keyN1]) : '—'}</td></tr>`).join('');
+  const totDif = tot - totN1;
+  const famFoot = `<tfoot><tr class="tot"><td><b>Total</b></td><td><b>${fEur(tot)}</b></td><td>100%</td><td>${totN1 ? fEur(totN1) : '—'}</td><td>${totN1 ? delta(tot, totN1) : '—'}</td><td class="${totDif >= 0 ? 'up' : 'dn'}">${totN1 ? (totDif >= 0 ? '+' : '') + fEur(totDif) : '—'}</td></tr></tfoot>`;
   return `<h3 style="margin-top:6px;color:${color}">${title} — ${fEur(tot)}${totN1 ? ` <span class="note" style="display:inline">(N-1 ${fEur(totN1)}, ${delta(tot, totN1)})</span>` : ''}</h3>
     <div class="grid cols2">
-      <div><table><thead><tr><th>Famille</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>vs N-1</th><th>Dif €</th></tr></thead><tbody>${famRows}</tbody></table></div>
+      <div><table><thead><tr><th>Famille</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>vs N-1</th><th>Dif €</th></tr></thead><tbody>${famRows}</tbody>${famFoot}</table></div>
       <div><h4 style="margin:0 0 4px;font-size:12px;color:var(--t2)">Top produits</h4><table><thead><tr><th>#</th><th>Produit</th><th>CA</th><th>Qté</th><th>vs N-1</th></tr></thead><tbody>${top}</tbody></table></div>
     </div>`;
 }
@@ -206,9 +208,12 @@ function secCanaux(rep) {
     const p = m1[c.type] || {};
     return `<tr><td>${CHAN_ICON[c.type] || '•'} ${esc(c.type)}</td><td>${fInt(c.sessions)}</td><td>${delta(c.sessions, p.sessions)}</td><td>${fPct(c.share)}</td><td>${fEur(c.revenue)}</td><td>${delta(c.revenue, p.revenue)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td></tr>`;
   }).join('');
+  const tSess = ct.reduce((s, c) => s + (c.sessions || 0), 0), tSess1 = ct1.reduce((s, c) => s + (c.sessions || 0), 0);
+  const tCA = ct.reduce((s, c) => s + (c.revenue || 0), 0), tCA1 = ct1.reduce((s, c) => s + (c.revenue || 0), 0);
+  const foot = `<tfoot><tr class="tot"><td><b>Total</b></td><td><b>${fInt(tSess)}</b></td><td>${tSess1 ? delta(tSess, tSess1) : '—'}</td><td>100%</td><td><b>${fEur(tCA)}</b></td><td>${tCA1 ? delta(tCA, tCA1) : '—'}</td><td>—</td></tr></tfoot>`;
   return `<div class="card"><h3>📡 Canaux de communication — vue groupée (sessions & perfs vs N-1)</h3>
-    <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ sess.</th><th>Part trafic</th><th>CA attribué</th><th>Δ CA</th><th>Conv.</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="note">💡 Vue d'ensemble du trafic de l'opération par type de canal. Le détail <b>CRM</b> (emails) et <b>Acquisition</b> (payant + campagnes) suit ci-dessous.</div></div>`;
+    <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ sess.</th><th>Part trafic</th><th>CA attribué</th><th>Δ CA</th><th>Conv.</th></tr></thead><tbody>${rows}</tbody>${foot}</table>
+    <div class="note">💡 Vue d'ensemble du trafic de l'opération par type de canal. <b>Total sessions / CA attribué</b> en pied de tableau (à recouper avec le Bilan 360). Le détail <b>CRM</b> (emails) et <b>Acquisition</b> (payant + campagnes) suit ci-dessous.</div></div>`;
 }
 
 // Détail CRM (emails) dédiés à l'opération.
@@ -235,6 +240,9 @@ function secAcquisition(rep) {
   const camps = (rep.campaigns || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 12);
   if (!camps.length) return '';
   const rows = camps.map(cm => `<tr><td title="${esc(cm.campaign)}">${esc((cm.campaign || '').slice(0, 34))}</td><td>${fInt(cm.sessions)}</td><td>${delta(cm.sessions, cm.sessionsN1)}</td><td>${fInt(cm.purchases)}</td><td>${cm.conv != null ? fPct(cm.conv) : '—'}</td><td>${fEur(cm.revenue)}</td><td>${delta(cm.revenue, cm.revenueN1)}</td></tr>`).join('');
+  const sumK = k => camps.reduce((s, cm) => s + (cm[k] || 0), 0);
+  const tSess = sumK('sessions'), tSess1 = sumK('sessionsN1'), tAch = sumK('purchases'), tCA = sumK('revenue'), tCA1 = sumK('revenueN1');
+  const foot = `<tfoot><tr class="tot"><td><b>Total (top ${camps.length})</b></td><td><b>${fInt(tSess)}</b></td><td>${tSess1 ? delta(tSess, tSess1) : '—'}</td><td><b>${fInt(tAch)}</b></td><td>—</td><td><b>${fEur(tCA)}</b></td><td>${tCA1 ? delta(tCA, tCA1) : '—'}</td></tr></tfoot>`;
   let adsTiles = '';
   if (rep.ads && rep.ads.n) {
     const a = rep.ads.n, a1 = rep.ads.n1, roas = rep.ads.roas || {}, cos = rep.ads.cos || {};
@@ -246,7 +254,7 @@ function secAcquisition(rep) {
     ].join('')}</div>`;
   }
   return `<div class="card"><h3>💰 Détail Acquisition — campagnes de l'opération (UTM)</h3>${adsTiles}
-    <table><thead><tr><th>Campagne</th><th>Sessions</th><th>Δ</th><th>Achats</th><th>Conv.</th><th>CA</th><th>Δ</th></tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th>Campagne</th><th>Sessions</th><th>Δ</th><th>Achats</th><th>Conv.</th><th>CA</th><th>Δ</th></tr></thead><tbody>${rows}</tbody>${foot}</table>
     <div class="note">Campagnes UTM (acquisition payante & autres sources) actives sur la période. Croise avec les KPI Ads (dépense / ROAS / COS) pour piloter le budget pendant l'opération.</div></div>`;
 }
 
@@ -269,11 +277,26 @@ function secOffre(rep) {
     <table><thead><tr><th>Réf</th><th>Produit</th><th>Famille</th><th>CA N-1</th><th>Niveau N-1</th></tr></thead><tbody>${oc.reintegrer.map(x => `<tr><td>${esc(x.ref)}</td><td>${esc((x.des || '').slice(0, 32))}</td><td>${esc(x.fam)}</td><td>${fEur(x.caN1)}</td><td>${esc(x.bucket)}</td></tr>`).join('')}</tbody></table>` : '';
   const sv = (oc.sansVente || []).length ? `<h3 style="margin-top:12px">🚨 Démarquées ≥ 30 % sans vente sur la période</h3>
     <table><thead><tr><th>Réf</th><th>Produit</th><th>Famille</th><th>Démarque</th></tr></thead><tbody>${oc.sansVente.map(x => `<tr><td>${esc(x.ref)}</td><td>${esc((x.des || '').slice(0, 32))}</td><td>${esc(x.fam)}</td><td class="dn">${fPct(x.depth)}</td></tr>`).join('')}</tbody></table>` : '';
+  // CA OMS ventilé par type de listing et par démarque (jointure offre × ventes).
+  const ca = rep.offreCAByListing, caN = ca && ca.n, caN1 = ca && ca.n1;
+  let caBlock = '';
+  if (caN && (caN.byListing.length || caN.byBucket.length)) {
+    const merge = (arrN, arrN1) => { const m = {}; (arrN || []).forEach(x => { m[x.key] = { key: x.key, n: x.ca, n1: 0 }; }); (arrN1 || []).forEach(x => { (m[x.key] || (m[x.key] = { key: x.key, n: 0, n1: 0 })).n1 = x.ca; }); return Object.values(m).sort((a, b) => b.n - a.n); };
+    const totRow = (arr, label) => { const tn = arr.reduce((s, x) => s + x.n, 0), tn1 = arr.reduce((s, x) => s + x.n1, 0); return `<tfoot><tr class="tot"><td><b>${label}</b></td><td><b>${fEur(tn)}</b></td><td>100%</td><td>${tn1 ? fEur(tn1) : '—'}</td><td>${tn1 ? delta(tn, tn1) : '—'}</td></tr></tfoot>`; };
+    const rowsOf = arr => { const tot = arr.reduce((s, x) => s + x.n, 0); return arr.map(x => `<tr><td>${esc(x.key)}</td><td>${fEur(x.n)}</td><td>${tot > 0 ? fPct(x.n / tot) : '—'}</td><td>${x.n1 ? fEur(x.n1) : '—'}</td><td>${x.n1 ? delta(x.n, x.n1) : '—'}</td></tr>`).join(''); };
+    const byL = merge(caN.byListing, caN1 && caN1.byListing), byB = merge(caN.byBucket, caN1 && caN1.byBucket);
+    caBlock = `<h3 style="margin-top:14px">💶 CA par type de listing & par démarque (ventes × offre)</h3>
+      <div class="grid cols2">
+        <div><h4 style="margin:0 0 4px;font-size:12px;color:var(--t2)">CA par type de listing</h4><table><thead><tr><th>Listing</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>vs N-1</th></tr></thead><tbody>${rowsOf(byL)}</tbody>${totRow(byL, 'Total listing')}</table></div>
+        <div><h4 style="margin:0 0 4px;font-size:12px;color:var(--t2)">CA par niveau de démarque</h4><table><thead><tr><th>Niveau</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>vs N-1</th></tr></thead><tbody>${rowsOf(byB)}</tbody>${totRow(byB, 'Total démarque')}</table></div>
+      </div>
+      <div class="note">CA des ventes OMS rapprochées du listing d'offre par référence (${fEur(caN.caMatched)} sur ${fEur(caN.caTotal)} de CA EShop, soit ${caN.caTotal > 0 ? fPct(caN.caMatched / caN.caTotal) : '—'} apparié). Le reste = réfs vendues hors listing d'offre.</div>`;
+  }
   return `<div class="card"><h3>📋 Comparatif d'offre — nombre de RC par famille et par démarque vs N-1</h3>${tiles}
     <div class="grid cols2" style="margin-top:12px">
       <div><h3>Largeur d'offre par famille</h3><table><thead><tr><th>Famille</th><th>RC N</th><th>RC N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>
       <div><h3>RC par niveau de démarque</h3><table><thead><tr><th>Niveau</th><th>RC N</th><th>RC N-1</th><th>Δ</th></tr></thead><tbody>${bkRows}</tbody></table></div>
-    </div>${reint}${sv}
+    </div>${caBlock}${reint}${sv}
     <div class="note">💡 La largeur d'offre est un levier de croissance : si une famille a −20 RC vs N-1 alors qu'elle vendait, l'ajout depuis le stock outlet/magasins est la 1ʳᵉ action. Croisé avec les ventes OMS de la période.</div></div>`;
 }
 
@@ -427,6 +450,24 @@ async function fullImport() {
   setTimeout(poll, 1500);
 }
 
+// Actualisation GA4 (trafic, canaux, campagnes) sur la fenêtre de l'opération + N-1.
+async function ga4Refresh() {
+  const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
+  if (!from || !to) { document.getElementById('ga4Note').textContent = '⚠ Renseigne les dates de l\'opération.'; return; }
+  const cfrom = document.getElementById('dCFrom').value || shiftDays(from, -364);
+  const cto = document.getElementById('dCTo').value || shiftDays(to, -364);
+  const btn = document.getElementById('ga4Refresh'), note = document.getElementById('ga4Note');
+  btn.disabled = true; note.textContent = 'Actualisation GA4…';
+  try {
+    const r = await fetch(`/api/ga4/refresh?${q({ from, to, cfrom: COMPARE ? cfrom : null, cto: COMPARE ? cto : null })}`, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    btn.disabled = false;
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    note.textContent = '✓ GA4 à jour — analyse rechargée.';
+    analyze();
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); btn.disabled = false; }
+}
+
 // Sync delta WSHOP (quasi temps réel) puis recharge l'analyse.
 async function syncDelta() {
   const btn = document.getElementById('syncDelta'), note = document.getElementById('syncNote');
@@ -520,5 +561,6 @@ async function syncDelta() {
   document.getElementById('analyze').addEventListener('click', analyze);
   document.getElementById('syncDelta').addEventListener('click', syncDelta);
   const fi = document.getElementById('fullImport'); if (fi) fi.addEventListener('click', fullImport);
+  const g4 = document.getElementById('ga4Refresh'); if (g4) g4.addEventListener('click', ga4Refresh);
   analyze();
 })();

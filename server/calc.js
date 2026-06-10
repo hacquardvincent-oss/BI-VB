@@ -18,23 +18,22 @@ function norm(s) {
 // ── Parse numérique FR ("1 234,56" → 1234.56) ───────────────────────────────
 const fN = s => parseFloat((s || '').toString().replace(/\s/g, '').replace(',', '.')) || 0;
 
-// ── Full price vs Off price (démarque) — règle robuste ──────────────────────
-// La démarque se lit à l'ÉCART entre le prix RÉELLEMENT PAYÉ (« Prix de vente payé »
-// = unitPrice × qté) et le prix CATALOGUE plein (« Prix Vente » = originalUnitPrice × qté).
-// ⚠️ Le champ « Prix Vente Remise » (originalDiscountedUnitPrice) n'étant PAS toujours
-// renseigné par WSHOP (souvent 0 même un jour de soldes), on ne s'y fie plus seul : on prend
-// comme référence « plein tarif » le MAX(catalogue, remisé, payé).
-//   full price ⇔ payé ≈ référence pleine (aucune démarque)
-//   off price  ⇔ payé < référence pleine (démarque appliquée)
-// `prof` (optionnel) → profondeur de démarque ∈ [0,1] = 1 − payé / référence pleine.
-function fullRef(pvFull, pvRemise, paid) { return Math.max(pvFull || 0, pvRemise || 0, paid || 0); }
+// ── Full price vs Off price (démarque) — règle métier officielle ────────────
+// La DÉMARQUE (soldes) est encodée dans « Prix Vente Remisé » (originalDiscountedUnitPrice).
+// Formule de référence du client (export OMS, colonne Demarque) :
+//   Demarque = IF( OR( Remisé = 0 ; Remisé = Prix Vente ) ; "Full Price" ; "Off Price" )
+//   → full price ⇔ remisé absent (0) OU égal au prix catalogue (aucune démarque) ;
+//     off price  ⇔ remisé renseigné ET inférieur au catalogue.
+// ⚠️ On ne se fie PAS au « Prix de vente payé » : une remise par CODE PROMO baisse le payé
+// sans être une démarque soldes → resterait full price. Seul « Prix Vente Remisé » fait foi.
+// (Vérifié : reproduit le TCD client au centime — 31 966 € full / 60 275 € off.)
+// Profondeur de démarque (lignes off) = 1 − Remisé / Prix Vente.
 function isFullPriceLine(pvFull, pvRemise, paid) {
-  const full = fullRef(pvFull, pvRemise, paid);
-  return full <= 0 ? true : (paid >= full - 0.01);
+  return (pvRemise === 0) || (Math.abs(pvRemise - pvFull) < 0.01);
 }
 function discountDepthOf(pvFull, pvRemise, paid) {
-  const full = fullRef(pvFull, pvRemise, paid);
-  return full <= 0 ? 0 : Math.min(1, Math.max(0, 1 - paid / full));
+  if (!(pvFull > 0) || isFullPriceLine(pvFull, pvRemise, paid)) return 0;
+  return Math.min(1, Math.max(0, 1 - pvRemise / pvFull));
 }
 // ── Parse numérique GA (format US "1234.56", pas de virgule) ────────────────
 const fGA = s => parseFloat((s || '').toString().replace(/\s/g, '')) || 0;
@@ -887,6 +886,37 @@ function calcOffreCompare(offN, offN1, salesN, salesN1) {
   };
 }
 
+// ── CA OMS ventilé par TYPE DE LISTING et par DÉMARQUE de l'offre (jointure réf.) ──
+// Croise les ventes OMS (CA = prix payé, hors mkt) avec le listing d'offre (ref → origine/bucket)
+// → « CA par type de listing (Initial / AJOUT…) » et « CA par tranche de démarque du listing ».
+function calcOffreCAByListing(rows, omsMap, offreDs) {
+  if (!offreDs) return null;
+  const items = offreItems(offreDs); if (!items.length) return null;
+  const idx = {}; // ref (exacte ET modèle) → { origine, bucket }
+  items.forEach(x => { const v = { origine: x.origine || '(n.c.)', bucket: x.bucket }; idx[x.ref] = v; const b = baseRef(x.ref); if (!idx[b]) idx[b] = v; });
+  const pi = omsMap.prix, ti = omsMap.type, qi = omsMap.qte;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined) return null;
+  const byList = {}, byBucket = {}; let matched = 0, caMatched = 0, caTotal = 0;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const p = fN(r[pi]); const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    caTotal += p;
+    const ref = (r[refIdx] || '').trim();
+    const hit = idx[ref] || idx[baseRef(ref)];
+    if (!hit) return;
+    matched++; caMatched += p;
+    const l = byList[hit.origine] || (byList[hit.origine] = { key: hit.origine, ca: 0, qte: 0 }); l.ca += p; l.qte += q;
+    const bk = byBucket[hit.bucket] || (byBucket[hit.bucket] = { key: hit.bucket, ca: 0, qte: 0 }); bk.ca += p; bk.qte += q;
+  });
+  const BORDER = ['Plein tarif', ...DISCOUNT_BUCKETS];
+  return {
+    byListing: Object.values(byList).sort((a, b) => b.ca - a.ca),
+    byBucket: BORDER.filter(b => byBucket[b]).map(b => byBucket[b]),
+    caMatched, caTotal,
+  };
+}
+
 // CA ET Quantité par famille (hors marketplaces) — { fam: { ca, qte } }
 function calcFamilleDetail(rows, omsMap, refMap) {
   if (!refMap || Object.keys(refMap).length === 0) return null;
@@ -1383,7 +1413,7 @@ module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
-  calcDiscountDepth, calcOffreCompare, offreItems,
+  calcDiscountDepth, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,

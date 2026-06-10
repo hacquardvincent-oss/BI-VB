@@ -547,6 +547,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n1: (rowsN1 && rowsN1.length) ? calc.calcDiscountDepth(rowsN1, mapN1) : null,
   };
   const offreCompare = (offreN || offreN1) ? calc.calcOffreCompare(offreN, offreN1, salesRef, salesRefN1) : null;
+  const offreCAByListing = (offreN || offreN1) ? {
+    n: calc.calcOffreCAByListing(rowsN, omsN.map, offreN),
+    n1: (rowsN1 && rowsN1.length) ? calc.calcOffreCAByListing(rowsN1, mapN1, offreN1) : null,
+  } : null;
 
   // ── Analyse cross-canal (EShop / Boutiques / GL / Printemps / PDT / Lulli) ──
   // famByRef : RC → famille, depuis référentiel + implantation (saison courante prioritaire).
@@ -663,6 +667,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
     demarqueDepth,
     offreCompare,
+    offreCAByListing,
     fullOffFamille: (() => {
       const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
       const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;

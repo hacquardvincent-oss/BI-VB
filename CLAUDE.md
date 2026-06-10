@@ -189,12 +189,12 @@ GA (`parseGAcsv`, saute les `#`), XLSX (1ʳᵉ feuille), CSV `;` latin1. Routes 
 | `caMkt` | Σ p où `isMkt` |
 | `caFR` / `caInt` | (hors mkt) `pays === 'france'` / sinon |
 | `caEnt` / `caSFS` | (hors mkt) `NOM MAGASIN === 'webstore eur'` (Entrepôt) / sinon (Ship-from-store) |
-| `caFP` / `caOP` | (hors mkt) **Full price** si `isFullPriceLine(pv,pvr,payé)` (= payé ≥ MAX(catalogue,remisé,payé)−0,01), sinon **Off price** (démarque). ⚠️ cf §12 : on NE se fie PLUS à `pvr===0` (souvent 0 même en soldes) → la démarque se lit à l'écart **payé < catalogue (Prix Vente)** |
+| `caFP` / `caOP` | (hors mkt) **Full price** si `isFullPriceLine(pv,pvr,payé)` = `pvr===0 \|\| pvr≈pv` (Prix Vente Remisé absent ou égal au catalogue), sinon **Off price** (démarque). ⚠️ La démarque se lit dans **« Prix Vente Remisé »** (originalDiscountedUnitPrice), PAS dans le payé : une remise par **code promo** baisse le payé sans être une démarque soldes → reste full price. Formule = celle du TCD client (reproduit au centime : 31 966 € full / 60 275 € off). |
 | `caEShop` | `caFR + caInt` · `caOmni` | `caEnt + caSFS` |
 - **CA = « Prix de vente payé » = `unitPrice × quantityOrdered`** (champ OMS confirmé par audit CA).
-- **Full/Off** : règle robuste `isFullPriceLine(pvFull,pvRemise,paid)` / `discountDepthOf(...)` (calc.js, partagées par `calcOMS`,
-  `calcKPIEShop`, `fullOffSplit`, `calcDiscountDepth`, `hourlySeries`, `calcZoneFullOff`). **Ne pas** rebrancher sur
-  `originalDiscountedUnitPrice` seul : WSHOP le laisse souvent à 0 → tout passait en full price (bug soldes, cf §12).
+- **Full/Off** : règle `isFullPriceLine(pvFull,pvRemise,paid)` = `pvRemise===0 || |pvRemise−pvFull|<0.01` ; `discountDepthOf` = `1−pvRemise/pvFull` (calc.js, partagées par `calcOMS`,
+  `calcKPIEShop`, `fullOffSplit`, `calcDiscountDepth`, `hourlySeries`, `calcZoneFullOff`). **Ne PAS** rebrancher sur le payé (`paid`) :
+  les codes promo fausseraient la démarque. ⚠️ Suppose **« Prix Vente Remisé » renseigné** (l'export OMS le fait ; via WSHOP API, vérifier que `originalDiscountedUnitPrice` est bien peuplé, sinon tout passe en full price).
 
 ---
 
@@ -375,7 +375,7 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
 | **Test connexion / import en 504** | Appels WSHOP lents **en série** (auth + 5 sondes ≈ 8 s) ou échantillon 300 cmd. | **`Promise.all` (parallèle) + `Promise.race` (timeout 9 s)** → réponse partielle ; échantillons réduits. |
 | **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (démarque dans `originalDiscountedUnitPrice`). |
-| **CA full price ≈ 98 % un jour de SOLDES (81 K/83 K)** | La règle FP/OP testait `pvr (Prix Vente Remise = originalDiscountedUnitPrice) === 0 → full price`. Or WSHOP laisse ce champ **à 0 même en démarque** → tout comptait en full price. | Nouvelle règle **`isFullPriceLine(catalogue, remisé, payé)`** = full ⇔ payé ≥ MAX(catalogue,remisé,payé)−0,01 ; off ⇔ **payé < catalogue (Prix Vente)**. Profondeur `discountDepthOf` = 1−payé/catalogue. Appliquée partout (calcOMS, KPI, fullOffSplit, discountDepth, hourly, zoneFullOff). |
+| **CA full price faux** | (1) 1ʳᵉ tentative : on s'est appuyé sur le **payé < catalogue** → faux car les **codes promo** (≠ démarque soldes) baissent le payé → comptait en off price à tort. (2) Si `Prix Vente Remisé` n'est pas peuplé (WSHOP API), tout passe en full price. | Règle **officielle client** (validée sur leur TCD, reproduit au centime — 31 966 € full / 60 275 € off) : `Demarque = IF(OR(Remisé=0; Remisé=Prix Vente); "Full"; "Off")`. `isFullPriceLine = pvRemise===0 || |pvRemise−pvFull|<0.01` ; profondeur `1−pvRemise/pvFull`. **La démarque se lit UNIQUEMENT dans « Prix Vente Remisé », jamais dans le payé.** S'assurer que ce champ est bien peuplé (export OMS ou `originalDiscountedUnitPrice` WSHOP). |
 | **Données OMS pas mises à jour après changement de règle** | « Synchroniser le delta » ne recalcule pas le passé. | Exiger **« Importer OMS depuis WSHOP » (import complet)**. |
 | **0 commande le jour de lancement (Analyse commerciale)** | `syncIncremental` réutilisait le `to` figé du dernier import complet ; `guard` (created ∈ [from,to]) **rejetait les commandes créées APRÈS** cette date → les ventes du jour J n'entraient jamais. De plus le delta **ne charge JAMAIS N-1** (« PAS DE N-1 »). | `syncIncremental` **étend `to` à aujourd'hui** (`max(to, today)`). Bouton **« ⬇️ Import complet (opération + N-1) »** sur la page commerciale → `POST /api/wshop/refresh?from&to&cfrom&cto` (charge N **et** N-1 sur la fenêtre de l'opération). |
 | **Conflits de merge à répétition** | Branche = sur-ensemble de `main` (squash-merges). | Résoudre `git checkout --ours <fichier>`, vérifier (`node -c`, `grep`), push, re-merge. |
