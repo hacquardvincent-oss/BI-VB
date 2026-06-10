@@ -31,12 +31,13 @@
   <div class="card">
     <h3>1 · Opération commerciale</h3>
     <div class="toolbar">
-      <input id="opName" class="dt" placeholder="Nom de l'opération (ex. Avant-première soldes)" style="min-width:260px">
+      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Comparer N-1</span>
+      <button class="pb on" id="cmpToggle" data-on="1" title="Activer / désactiver la comparaison vs N-1">✓ Oui</button>
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Du</span>
       <input type="date" id="dFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dTo" class="dt">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Période de comparaison N-1 — libre (les opérations peuvent être décalées d'une semaine vs N-1)">N-1</span>
+      <span id="n1Wrap"><span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Période de comparaison N-1 — libre (les opérations peuvent être décalées d'une semaine vs N-1)">N-1</span>
       <input type="date" id="dCFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCTo" class="dt">
-      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine)">≈ −364 j</button>
+      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine)">≈ −364 j</button></span>
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
@@ -44,9 +45,8 @@
       <button class="pb" data-dim="fr">France</button>
       <button class="pb" data-dim="inter">International</button>
       <select id="countrySel" class="dt" title="Filtrer sur un pays précis" style="min-width:130px"><option value="">🌍 Tous pays</option></select>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Comparer N-1</span>
-      <button class="pb on" id="cmpToggle" data-on="1" title="Activer / désactiver la comparaison vs N-1">✓ Oui</button>
       <div class="spacer" style="flex:1"></div>
+      <button class="pb" id="editLayout" title="Réorganiser les tableaux par glisser-déposer">⠿ Éditer la disposition</button>
       <button class="btn blue" id="analyze">Analyser l'opération</button>
     </div>
     <div class="note">Le comparable N-1 se cale automatiquement à <b>−364 jours</b> (mêmes jours de semaine). Pour le <b>comparatif d'offre</b>, dépose les listings produits N / N-1 dans <a href="/app.html">Reporting → Import manuel</a> (source « 🏷️ Offre »).</div>
