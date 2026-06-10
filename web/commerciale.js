@@ -33,7 +33,7 @@ const tile = (label, disp, n, n1, inv) => `<div class="kc"><div class="l">${labe
 // ── Sections de rendu ──────────────────────────────────────────────────────
 
 // Bilan 360 de l'opération : CA global EShop + poids off/full permanent + TT/trafic.
-function secBilan(rep, opName) {
+function secBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
   const c = rep.ca.n, c1 = rep.ca.n1 || {};
   const txOff = c.caEShop > 0 && c.caOP != null ? c.caOP / c.caEShop : null;
@@ -48,7 +48,7 @@ function secBilan(rep, opName) {
     tile('Taux de transfo', k.tt != null ? fPct(k.tt) : '—', k.tt, k1.tt),
     tile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
   ].join('');
-  return `<div class="card bilan"><h3>🎯 Bilan 360 — ${esc(opName || 'Opération')} · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de N-1</span>'}</h3>
+  return `<div class="card bilan"><h3>🎯 Bilan 360 — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">N seule</span>'}</h3>
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
       <div style="flex:1;min-width:300px"><div class="kgrid">${tiles}</div></div>
       <div style="width:160px"><div style="height:140px"><canvas id="opDonut"></canvas></div><div class="note" style="text-align:center">Poids Off / Full</div></div>
@@ -306,13 +306,69 @@ function fillCountrySelect(rep) {
   sel.innerHTML = '<option value="">🌍 Tous pays</option>' + ALL_COUNTRIES.map(c => `<option value="${esc(c)}"${c === selVal ? ' selected' : ''}>${esc(c)}</option>`).join('');
 }
 
+// ── Sections réorganisables (drag'n'drop, ordre mémorisé par utilisateur) ────
+const SECTION_FN = {
+  bilan: rep => secBilan(rep), global: rep => secGlobal(rep), launch: () => '<div id="launchBox"></div>',
+  tranches: rep => secTranches(rep), familles: rep => secFamilles(rep), canaux: rep => secCanaux(rep),
+  crm: rep => secCRM(rep), acquisition: rep => secAcquisition(rep), offre: rep => secOffre(rep), alertes: rep => secAlertes(rep),
+};
+const SECTION_LABEL = {
+  bilan: 'Bilan 360', global: 'Pivot GLOBAL (zone × démarque)', launch: 'Lancement — CA à l\'heure', tranches: 'Profondeur de démarque',
+  familles: 'Performances produits (Off / Full)', canaux: 'Canaux (vue groupée)', crm: 'Détail CRM', acquisition: 'Détail Acquisition',
+  offre: 'Comparatif d\'offre', alertes: 'Alertes d\'exécution',
+};
+const DEFAULT_ORDER = ['bilan', 'global', 'launch', 'tranches', 'familles', 'canaux', 'crm', 'acquisition', 'offre', 'alertes'];
+let EDIT = false, LAST_DAY = null;
+function getOrder() {
+  try { const o = JSON.parse(localStorage.getItem('vbCommOrder') || 'null');
+    if (Array.isArray(o)) { const v = o.filter(k => SECTION_FN[k]); DEFAULT_ORDER.forEach(k => { if (!v.includes(k)) v.push(k); }); return v; } } catch (e) { /* ignore */ }
+  return DEFAULT_ORDER.slice();
+}
+function saveOrder(order) { try { localStorage.setItem('vbCommOrder', JSON.stringify(order)); } catch (e) { /* ignore */ } }
+
+function renderAll(rep, day) {
+  const box = document.getElementById('report');
+  const noData = !(rep.ca && rep.ca.n && (rep.ca.n.caEShop > 0 || rep.ca.n.total > 0));
+  const banner = noData ? `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623;margin-bottom:8px">⚠️ <b>Aucune vente dans l'OMS sur ${esc(rep.meta.from)} → ${esc(rep.meta.to)}.</b> Les données WSHOP de cette période ne sont pas encore importées. Le <b>delta</b> n'actualise que ce qui est déjà importé — pour une nouvelle période (et pour charger le N-1), lance l'<b>import complet</b>. En soldes/lancement : import complet le 1ᵉʳ jour, puis delta en boucle.</div><button class="btn blue" id="bannerImport">⬇️ Lancer l'import complet (opération + N-1) maintenant</button></div>` : '';
+  const sections = getOrder().map(key => {
+    let html = SECTION_FN[key] ? SECTION_FN[key](rep) : '';
+    if (EDIT && !html) html = `<div class="card" style="opacity:.45"><div class="note">${esc(SECTION_LABEL[key] || key)} — (vide pour cette sélection)</div></div>`;
+    if (!html) return '';
+    const handle = EDIT ? `<div class="dragbar">⠿ ${esc(SECTION_LABEL[key] || key)}</div>` : '';
+    return `<div class="csec${EDIT ? ' editing' : ''}" data-key="${key}" draggable="${EDIT ? 'true' : 'false'}">${handle}${html}</div>`;
+  }).join('');
+  box.innerHTML = banner + sections;
+  // Donut off/full (Bilan)
+  const c = rep.ca.n;
+  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#4a9eff', '#f5a623'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } });
+  const bi = document.getElementById('bannerImport'); if (bi) bi.addEventListener('click', fullImport);
+  if (EDIT) wireDnD(rep, day);
+  if (document.getElementById('launchBox')) loadLaunch(day || LAST_DAY);
+}
+
+// Glisser-déposer des sections (réordonne + mémorise, re-render sans refetch).
+function wireDnD(rep, day) {
+  const box = document.getElementById('report'); let dragKey = null;
+  box.querySelectorAll('.csec').forEach(el => {
+    el.addEventListener('dragstart', e => { dragKey = el.dataset.key; el.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; });
+    el.addEventListener('dragend', () => el.classList.remove('drag'));
+    el.addEventListener('dragover', e => { e.preventDefault(); if (el.dataset.key !== dragKey) el.classList.add('over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault(); el.classList.remove('over');
+      const targetKey = el.dataset.key; if (!dragKey || dragKey === targetKey) return;
+      const order = getOrder(); order.splice(order.indexOf(dragKey), 1); order.splice(order.indexOf(targetKey), 0, dragKey);
+      saveOrder(order); renderAll(rep, day);
+    });
+  });
+}
+
 async function analyze() {
   const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
   if (!from || !to) { document.getElementById('metaNote').textContent = '⚠ Renseigne les dates de l\'opération.'; return; }
   const cfrom = document.getElementById('dCFrom').value || shiftDays(from, -364);
   const cto = document.getElementById('dCTo').value || shiftDays(to, -364);
-  const opName = document.getElementById('opName').value.trim();
-  try { localStorage.setItem('vbOp', JSON.stringify({ opName, from, to, cfrom, cto })); } catch (e) { /* ignore */ }
+  try { localStorage.setItem('vbOp', JSON.stringify({ from, to, cfrom, cto })); } catch (e) { /* ignore */ }
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement de l\'opération…</div>';
   let rep;
@@ -320,25 +376,11 @@ async function analyze() {
     const r = await fetch(`/api/report?${q({ from, to, cfrom, cto, dim: DIM, compare: COMPARE ? null : '0' })}`);
     rep = await r.json();
   } catch (e) { box.innerHTML = `<div class="card note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; return; }
-  if (rep.empty) { box.innerHTML = `<div class="card">${esc(rep.message || 'Aucune donnée — importe l\'OMS depuis le Reporting.')}</div>`; return; }
-  LAST = rep;
+  if (rep.empty) { box.innerHTML = `<div class="card"><div class="note">${esc(rep.message || 'Aucune donnée — clique « ⬇️ Import complet (opération + N-1) » pour charger l\'OMS WSHOP de la période.')}</div></div>`; return; }
+  LAST = rep; LAST_DAY = from;
   fillCountrySelect(rep);
-  document.getElementById('metaNote').innerHTML = `<b>${esc(opName || 'Opération')}</b> · ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ''}`;
-  box.innerHTML = secBilan(rep, opName)
-    + secGlobal(rep)
-    + `<div id="launchBox"></div>`
-    + secTranches(rep)
-    + secFamilles(rep)
-    + secCanaux(rep)
-    + secCRM(rep)
-    + secAcquisition(rep)
-    + secOffre(rep)
-    + secAlertes(rep);
-  // Donut off/full
-  const c = rep.ca.n;
-  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#4a9eff', '#f5a623'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } });
-  // Lancement (jour J = début de l'opération par défaut)
-  await loadLaunch(from);
+  document.getElementById('metaNote').innerHTML = `<b>${esc(rep.meta.from)} → ${esc(rep.meta.to)}</b>${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ' · <span class="na">N seule</span>'}`;
+  renderAll(rep, from);
 }
 
 async function loadLaunch(day) {
@@ -418,7 +460,6 @@ async function syncDelta() {
   let saved = null; try { saved = JSON.parse(localStorage.getItem('vbOp') || 'null'); } catch (e) { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
   const from = (saved && saved.from) || shiftDays(today, -6), to = (saved && saved.to) || today;
-  document.getElementById('opName').value = (saved && saved.opName) || '';
   document.getElementById('dFrom').value = from; document.getElementById('dTo').value = to;
   document.getElementById('dCFrom').value = (saved && saved.cfrom) || shiftDays(from, -364);
   document.getElementById('dCTo').value = (saved && saved.cto) || shiftDays(to, -364);
@@ -442,13 +483,22 @@ async function syncDelta() {
     else { DIM = USER_DIM; document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === DIM)); }
     analyze();
   });
-  // CTA « Comparer N-1 » : bascule la comparaison (compare=0 → analyse N seule).
-  const cmpBtn = document.getElementById('cmpToggle');
+  // CTA « Comparer N-1 » : bascule la comparaison (compare=0 → analyse N seule), masque les dates N-1.
+  const cmpBtn = document.getElementById('cmpToggle'), n1Wrap = document.getElementById('n1Wrap');
   if (cmpBtn) cmpBtn.addEventListener('click', () => {
     COMPARE = !COMPARE;
     cmpBtn.classList.toggle('on', COMPARE);
     cmpBtn.textContent = COMPARE ? '✓ Oui' : '✗ Non';
+    if (n1Wrap) n1Wrap.style.display = COMPARE ? '' : 'none';
     analyze();
+  });
+  // Édition de la disposition : drag'n'drop des tableaux (ordre mémorisé par utilisateur).
+  const editBtn = document.getElementById('editLayout');
+  if (editBtn) editBtn.addEventListener('click', () => {
+    EDIT = !EDIT;
+    editBtn.classList.toggle('on', EDIT);
+    editBtn.textContent = EDIT ? '✓ Terminer l\'édition' : '⠿ Éditer la disposition';
+    if (LAST) renderAll(LAST, LAST_DAY);
   });
   // Import du listing d'offre (1 fichier scindé par saison → offre-N / offre-N1).
   const offreBtn = document.getElementById('offreUpload'), offreInput = document.getElementById('offreFile'), offreNote = document.getElementById('offreNote');
