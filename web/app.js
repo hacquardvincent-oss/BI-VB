@@ -18,13 +18,19 @@ const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' }
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'commerciale', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
     intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
     layout: ['kpi', 'ca', 'ads', 'funnel', 'produits'],
+  },
+  commerciale: {
+    icon: '💰', label: 'Analyse commerciale', preset: 'all',
+    intro: 'Pilotage de l\'offre commerciale : performance de la démarque vs full price (CA, taux, tranches), comparatif de largeur d\'offre N vs N-1 (listings produits), familles qui performent en démarque, campagnes/landing qui sur- ou sous-performent et alertes d\'exécution.',
+    files: { required: ['oms'], optional: ['ga', 'ads', 'ref', 'offre'] },
+    layout: ['demarque', 'fulloff', 'offrecompare', 'comalerts', 'famille', 'produits', 'campaigns', 'campaignland', 'landing', 'pages', 'lostpages', 'timeline2'],
   },
   estore: {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
@@ -102,13 +108,14 @@ const MODULES = {
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', T: '📈 Suivi temporel', ES: '🛒 E-Store', AQ: '📡 Acquisition',
+  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'P',
+  demarque: 'CO', fulloff: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
@@ -117,7 +124,7 @@ const THEME_OF = {
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP',
   campaignland: 'CR',
-  fulloff: 'OF', saisoncompare: 'OF', saison: 'OF', renta: 'OF',
+  saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
 };
 // Regroupe les blocs d'un module par thème, dans l'ordre du récit analytique
@@ -138,8 +145,9 @@ const CARD_LABELS = {
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
+  demarque: 'Performance démarque', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
@@ -184,6 +192,7 @@ const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS) — secours si pas d\'API WSHOP', periods: ['N', 'N1'] },
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
   { key: 'ads', name: '📣 Google Ads (export campagnes : coût/clics/conv.)', periods: ['N', 'N1'] },
+  { key: 'offre', name: '🏷️ Offre / listing produits (analyse commerciale)', periods: ['N', 'N1'] },
 ];
 
 async function me() {
@@ -292,7 +301,7 @@ function initModules() {
   const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
 }
 
-const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace' };
+const FILE_LABEL = { oms: 'EShop (OMS)', ga: 'Google Analytics', ret: 'Retours', ref: 'Référentiel', y2: 'Y2 Marketplace', ads: 'Google Ads', impl: 'Implantation', offre: 'Offre / listing produits' };
 function fileLoaded(key) { return LAST_STATUS.some(s => s.source === key); }
 function renderModuleHint() {
   const el = document.getElementById('modHint'); if (!el) return;
@@ -1026,7 +1035,96 @@ function renderReport(rep) {
       <table><thead><tr><th>Produit</th><th>CA</th><th>Δ N-1</th><th>Full</th><th>Off</th><th>% Off</th><th>Qté</th></tr></thead><tbody>${prodR}</tbody></table>
       <div class="note">Off price = toute remise (Prix Vente Remisé ≠ Prix Vente). % Off &gt; 30 % en rouge. Période = celle du sélecteur (vue « Démarque E26/E25 » = 1 déc → 7 juin vs N-1).</div></div>`;
   }
+
+  // ── Analyse commerciale : performance de la démarque (CA off, taux, tranches) ──
+  let demarqueCard = '';
+  if (rep.ca && rep.ca.n && rep.ca.n.caFP != null) {
+    const c = rep.ca.n, c1 = rep.ca.n1 || {};
+    const tx = c.caEShop > 0 ? c.caOP / c.caEShop : null;
+    const tx1 = (c1.caEShop > 0 && c1.caOP != null) ? c1.caOP / c1.caEShop : null;
+    const tiles = [
+      ['CA démarqué (Off)', fEur(c.caOP), c.caOP, c1.caOP, false],
+      ['Taux de démarque', tx != null ? fPct(tx) : '—', tx, tx1, true],
+      ['CA Full Price', fEur(c.caFP), c.caFP, c1.caFP, false],
+      ['Part Full Price', c.caEShop > 0 ? fPct(c.caFP / c.caEShop) : '—', c.caEShop > 0 ? c.caFP / c.caEShop : null, (c1.caEShop > 0 && c1.caFP != null) ? c1.caFP / c1.caEShop : null, false],
+    ].map(([l, disp, n, n1, inv]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? (inv ? deltaInv(n, n1) : delta(n, n1)) : ''}</div></div>`).join('');
+    // Tranches de démarque N vs N-1 (où se fait le CA démarqué ?)
+    let tranches = '';
+    const dd = rep.demarqueDepth && rep.demarqueDepth.n, dd1 = rep.demarqueDepth && rep.demarqueDepth.n1;
+    if (dd && dd.caOff > 0) {
+      const b1 = {}; ((dd1 && dd1.buckets) || []).forEach(b => { b1[b.label] = b; });
+      const rows = dd.buckets.filter(b => b.ca > 0 || (b1[b.label] && b1[b.label].ca > 0)).map(b => {
+        const o = b1[b.label] || {};
+        return `<tr><td>${esc(b.label)}</td><td>${fEur(b.ca)}</td><td>${o.ca != null ? fEur(o.ca) : '—'}</td><td>${o.ca != null ? delta(b.ca, o.ca) : '—'}</td><td>${fInt(b.qte)}</td><td>${dd.caOff > 0 ? fPct(b.ca / dd.caOff) : '—'}</td></tr>`;
+      }).join('');
+      const topOff = (dd.topProduits || []).slice(0, 8).map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 38))}</td><td>${fEur(p.ca)}</td><td>${fInt(p.qte)}</td><td>${fPct(p.depth)}</td></tr>`).join('');
+      tranches = `<h3 style="margin-top:12px">CA démarqué par tranche de démarque — N vs N-1</h3>
+        <table><thead><tr><th>Tranche</th><th>CA N</th><th>CA N-1</th><th>Δ</th><th>Qté</th><th>% du CA démarqué</th></tr></thead><tbody>${rows}</tbody></table>
+        ${topOff ? `<h3 style="margin-top:12px">Top produits en démarque</h3><table><thead><tr><th>#</th><th>Produit</th><th>CA Off</th><th>Qté</th><th>Démarque moy.</th></tr></thead><tbody>${topOff}</tbody></table>` : ''}`;
+    }
+    // Familles qui performent en démarque (CA off décroissant)
+    let famOff = '';
+    if (rep.fullOffFamille && rep.fullOffFamille.length) {
+      const fr = rep.fullOffFamille.filter(f => f.caOP > 0).sort((a, b) => b.caOP - a.caOP).slice(0, 8)
+        .map(f => `<tr><td>${esc(f.fam)}</td><td>${fEur(f.caOP)}</td><td>${f.ca > 0 ? fPct(f.caOP / f.ca) : '—'}</td><td>${fEur(f.caFP)}</td><td>${f.caN1 != null ? delta(f.ca, f.caN1) : '—'}</td></tr>`).join('');
+      if (fr) famOff = `<h3 style="margin-top:12px">Familles qui performent en démarque</h3>
+        <table><thead><tr><th>Famille</th><th>CA Off</th><th>% Off</th><th>CA Full</th><th>Δ CA vs N-1</th></tr></thead><tbody>${fr}</tbody></table>`;
+    }
+    demarqueCard = `<div class="card"><h3>💰 Performance démarque vs Full Price — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}</h3>
+      <div class="kgrid">${tiles}</div>${tranches}${famOff}
+      <div class="note">⚠️ <b>Taux de démarque</b> = CA Off ÷ CA EShop (couleur inversée : une hausse est rouge). Tranches = profondeur de remise (1 − Prix Remisé/Prix Vente) constatée sur les lignes vendues. Croiser avec le « Comparatif d'offre » ci-dessous pour relier l'offre (réfs disponibles) à la demande (CA).</div></div>`;
+  }
+
+  // ── Comparatif d'offre N vs N-1 (listings produits chargés par l'équipe) ──
+  let offreCompareCard = '';
+  const oc = rep.offreCompare;
+  if (oc) {
+    const t = oc.totals;
+    const tiles = `<div class="kgrid">
+      <div class="kc"><div class="l">Largeur d'offre N</div><div class="v">${fInt(t.n)} réfs ${t.n1 ? delta(t.n, t.n1) : ''}</div></div>
+      <div class="kc"><div class="l">Largeur d'offre N-1</div><div class="v">${fInt(t.n1)} réfs</div></div>
+      ${oc.origines ? `<div class="kc"><div class="l">Origines (N)</div><div class="v" style="font-size:12px;line-height:1.6">${oc.origines.slice(0, 3).map(o => `${esc(o.origine)} : <b>${fInt(o.n)}</b>`).join('<br>')}</div></div>` : ''}
+    </div>`;
+    const famRows = oc.familles.slice(0, 15).map(f => `<tr><td>${esc(f.fam)}</td><td>${fInt(f.n)}</td><td>${fInt(f.n1)}</td><td class="${f.delta > 0 ? 'up' : (f.delta < 0 ? 'dn' : 'na')}">${f.delta > 0 ? '+' : ''}${fInt(f.delta)}</td></tr>`).join('');
+    const bkRows = oc.buckets.map(b => `<tr><td>${esc(b.bucket)}</td><td>${fInt(b.n)}</td><td>${fInt(b.n1)}</td><td class="${b.delta > 0 ? 'up' : (b.delta < 0 ? 'dn' : 'na')}">${b.delta > 0 ? '+' : ''}${fInt(b.delta)}</td></tr>`).join('');
+    const reint = (oc.reintegrer || []).length ? `<h3 style="margin-top:12px">🎯 À réintégrer — vendeurs N-1 absents du listing N</h3>
+      <table><thead><tr><th>Réf</th><th>Produit</th><th>Famille</th><th>CA N-1</th><th>Niveau N-1</th></tr></thead><tbody>${oc.reintegrer.map(x => `<tr><td>${esc(x.ref)}</td><td>${esc((x.des || '').slice(0, 32))}</td><td>${esc(x.fam)}</td><td>${fEur(x.caN1)}</td><td>${esc(x.bucket)}</td></tr>`).join('')}</tbody></table>
+      <div class="note">Ces références se vendaient en N-1 (au niveau de démarque indiqué) et ne figurent plus au listing N → candidates au réassort (stock outlet/magasins ?).</div>` : '';
+    const sv = (oc.sansVente || []).length ? `<h3 style="margin-top:12px">🚨 Démarquées ≥ 30 % sans vente sur la période</h3>
+      <table><thead><tr><th>Réf</th><th>Produit</th><th>Famille</th><th>Démarque</th></tr></thead><tbody>${oc.sansVente.map(x => `<tr><td>${esc(x.ref)}</td><td>${esc((x.des || '').slice(0, 32))}</td><td>${esc(x.fam)}</td><td class="dn">${fPct(x.depth)}</td></tr>`).join('')}</tbody></table>
+      <div class="note">Fortement démarquées mais zéro vente → problème de visibilité (pas poussées en page/campagne ?), de taille restante, ou de prix pas assez agressif.</div>` : '';
+    offreCompareCard = `<div class="card"><h3>📋 Comparatif d'offre — listing N vs N-1</h3>${tiles}
+      <div class="grid cols2" style="margin-top:12px">
+        <div><h3>Largeur d'offre par famille</h3><table><thead><tr><th>Famille</th><th>Réfs N</th><th>Réfs N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>
+        <div><h3>Réfs par niveau de démarque</h3><table><thead><tr><th>Niveau</th><th>Réfs N</th><th>Réfs N-1</th><th>Δ</th></tr></thead><tbody>${bkRows}</tbody></table></div>
+      </div>${reint}${sv}
+      <div class="note">Source : listings produits déposés (« Offre » N et N-1 dans l'import manuel) — réf, famille, prix initial/soldé (ou % de démarque), origine (initial / ajout outlet…). Croisé avec les ventes OMS de la période.</div></div>`;
+  } else if (CURRENT_MODULE === 'commerciale') {
+    offreCompareCard = `<div class="card"><h3>📋 Comparatif d'offre — listing N vs N-1</h3>
+      <div class="note">Dépose les <b>listings produits N et N-1</b> (source « 🏷️ Offre » dans <b>Import manuel de fichiers</b>) pour activer ce comparatif : largeur d'offre par famille, réfs par niveau de démarque (-30/-40/-50 %), origine (offre initiale vs ajouts outlet), références à réintégrer (vendeurs N-1 absents du listing N) et démarquées sans vente.<br>Colonnes attendues : <b>Réf. externe</b> · <b>Famille/Regroupement</b> · <b>Désignation</b> · <b>Prix initial</b> et <b>Prix soldé</b> (ou <b>% de démarque</b>) · <b>Origine</b> (optionnel).</div></div>`;
+  }
+
+  // ── Alertes commerciales : campagnes / assets / landing à corriger ──
+  let comAlertsCard = '';
+  {
+    const al = [];
+    (rep.lostCampaigns || []).slice(0, 3).forEach(cmp => al.push({ tone: 'dn', icon: '🚫', txt: `Campagne manquante vs N-1 : <b>${esc(cmp.campaign)}</b> (≈ ${fEur(cmp.revenueN1)} de CA et ${fInt(cmp.sessionsN1)} sessions en N-1) → relancer ou remplacer.` }));
+    if (rep.ads) {
+      (rep.ads.flop || []).slice(0, 2).forEach(cmp => al.push({ tone: 'dn', icon: '🔴', txt: `Campagne <b>${esc(cmp.campaign)}</b> : ${cmp.caGA > 0 ? 'COS ' + (cmp.cos * 100).toFixed(0) + '%' : 'aucun CA attribué'} pour ${fEur(cmp.spend)} dépensés → optimiser ou couper.` }));
+      (rep.ads.saturated || []).slice(0, 2).forEach(cmp => al.push({ tone: 'dn', icon: '🪫', txt: `Campagne <b>${esc(cmp.campaign)}</b> en saturation (dépense en hausse, ROAS en baisse vs N-1) → plafonner le budget.` }));
+      (rep.ads.budgetLimited || []).slice(0, 2).forEach(cmp => al.push({ tone: 'up', icon: '💰', txt: `Campagne <b>${esc(cmp.campaign)}</b> rentable mais bridée par le budget (${(cmp.lostBudget * 100).toFixed(0)}% d'impressions perdues) → augmenter le budget.` }));
+    }
+    (rep.landingPages || []).filter(l => l.sessions >= 100 && l.convRateN1 > 0 && l.convRate != null && l.convRate < l.convRateN1 * 0.6).slice(0, 3)
+      .forEach(l => al.push({ tone: 'dn', icon: '📉', txt: `Landing <b>${esc((l.page || '').slice(0, 40))}</b> : conversion ${fPct(l.convRate)} vs ${fPct(l.convRateN1)} en N-1 (${fInt(l.sessions)} sessions) → vérifier asset/offre/stock de la page.` }));
+    (rep.lostPages || []).slice(0, 3).forEach(p => al.push({ tone: 'dn', icon: '🗑️', txt: `Page performante N-1 disparue/en chute : <b>${esc((p.page || '').slice(0, 40))}</b> (${fInt(p.viewsN1)} vues N-1) → redirection cassée ou produit retiré ?` }));
+    if (al.length) {
+      comAlertsCard = `<div class="card"><h3>🚨 Alertes commerciales — campagnes / assets / landing pages</h3>
+        <div class="bilan-sigs">${al.slice(0, 10).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>
+        <div class="note">Alertes d'exécution générées automatiquement : campagnes N-1 non reconduites, campagnes payantes en dérive (COS/saturation/budget), landing pages dont la conversion décroche, pages fortes disparues.</div></div>`;
+    }
+  }
   const C = {
+    demarque: demarqueCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard,
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,

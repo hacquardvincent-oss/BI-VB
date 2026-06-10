@@ -66,6 +66,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const retProdN = await loadDataset('retprod', 'N');
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
   const adsN = await loadDataset('ads', 'N'), adsN1 = await loadDataset('ads', 'N1');
+  const offreN = await loadDataset('offre', 'N'), offreN1 = await loadDataset('offre', 'N1');
 
   // Période N (preset hérité, ou plage de dates explicite)
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
@@ -534,6 +535,13 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const salesRefN1 = (rowsN1 && rowsN1.length) ? calc.salesByRef(rowsN1, mapN1) : {};
   const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRef, salesRefN1) : null;
 
+  // ── Analyse commerciale : tranches de démarque (OMS) + comparatif d'offre (listings N/N-1) ──
+  const demarqueDepth = {
+    n: calc.calcDiscountDepth(rowsN, omsN.map),
+    n1: (rowsN1 && rowsN1.length) ? calc.calcDiscountDepth(rowsN1, mapN1) : null,
+  };
+  const offreCompare = (offreN || offreN1) ? calc.calcOffreCompare(offreN, offreN1, salesRef, salesRefN1) : null;
+
   // ── Analyse cross-canal (EShop / Boutiques / GL / Printemps / PDT / Lulli) ──
   // famByRef : RC → famille, depuis référentiel + implantation (saison courante prioritaire).
   const famByRef = Object.assign({}, refMap);
@@ -646,6 +654,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     topProduitsQte: { n: topListQte(topNobj), n1: topN1obj ? topListQte(topN1obj) : null },
     familleDetail,
     familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
+    demarqueDepth,
+    offreCompare,
     fullOffFamille: (() => {
       const a = calc.calcFullOffByFamille(rowsN, omsN.map, refMap); if (!a) return null;
       const b = (rowsN1 && rowsN1.length) ? calc.calcFullOffByFamille(rowsN1, mapN1, refMap) : null;
