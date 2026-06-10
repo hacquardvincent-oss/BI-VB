@@ -210,9 +210,11 @@ function filterOutstore(rows, map) {
 }
 
 // ── Filtre par dimension Global / FR / International (sur 'Pays livraison') ──
+// dim : 'global' | 'fr' | 'inter' | 'c:<pays>' (pays précis, ex. 'c:États-Unis' → comparaison via normCountry).
 function filterDim(rows, map, dim) {
   if (!dim || dim === 'global') return rows;
   const pai = map.pays; if (pai === undefined) return rows;
+  if (dim.indexOf('c:') === 0) { const c = normCountry(dim.slice(2)); return rows.filter(r => normCountry(r[pai]) === c); }
   const fr = dim === 'fr';
   return rows.filter(r => {
     const p = (r[pai] || '').trim().toLowerCase();
@@ -224,6 +226,7 @@ function filterGADim(ga, dim) {
   if (!ga || !dim || dim === 'global') return ga;
   const m = (ga.map && Object.keys(ga.map).length) ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
   const ci = m.country; if (ci === undefined) return null;
+  if (dim.indexOf('c:') === 0) { const c = normCountry(dim.slice(2)); return { hdrs: ga.hdrs, rows: ga.rows.filter(r => normCountry(r[ci]) === c), map: m }; }
   const fr = dim === 'fr';
   const rows = ga.rows.filter(r => {
     const c = (r[ci] || '').trim().toLowerCase();
