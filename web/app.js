@@ -664,7 +664,7 @@ async function loadReport() {
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   LAST_REP = rep;
   fillCountrySelect(rep);
-  box.innerHTML = renderReport(rep);
+  box.innerHTML = coverageBanner(rep) + renderReport(rep);
   renderObjectives(rep);
   renderDailyChart(rep);
   renderTimelineChart(rep);
@@ -674,6 +674,22 @@ async function loadReport() {
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
   else { wireBilan(); buildReportNav(); }
   updateViewControls();
+}
+
+// Bannière de couverture : la période sélectionnée ne recoupe pas l'OMS importé (→ 0 vente).
+// Cause n°1 des « chiffres qui ne chargent plus » : la plage d'analyse est hors de la fenêtre importée.
+function coverageBanner(rep) {
+  const m = rep.meta || {};
+  const fmtR = (a, b) => (a && b) ? `${a} → ${b}` : '—';
+  const out = [];
+  if (m.rowsN === 0 && m.omsDataMin) {
+    out.push(`⚠️ <b>Aucune vente OMS sur la période sélectionnée (${esc(m.from)} → ${esc(m.to)}).</b> L'OMS importé couvre <b>${esc(fmtR(m.omsDataMin, m.omsDataMax))}</b>. → choisis une période dans cette plage, ou clique « Importer OMS depuis WSHOP » sur la fenêtre voulue.`);
+  }
+  if (!m.hasN1 && m.rowsN1 === 0 && m.omsN1DataMin) {
+    out.push(`ℹ️ <b>Pas de N-1 sur ${esc(m.cf)} → ${esc(m.ct)}</b> : l'OMS N-1 importé couvre ${esc(fmtR(m.omsN1DataMin, m.omsN1DataMax))}. Ajuste les dates N-1 ou réimporte le N-1 sur cette fenêtre.`);
+  }
+  if (!out.length) return '';
+  return `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623;margin:0">${out.join('<br>')}</div></div>`;
 }
 
 function renderReport(rep) {
@@ -2515,16 +2531,13 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   // sinon comparable −364 j (même jour de semaine : hier, semaine, fenêtres glissantes).
   let calendarCompare = false;
   if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
-  else if (kind === '7d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 7); }
-  else if (kind === '30d') { to.setDate(today.getDate() - 1); from.setDate(today.getDate() - 30); }
-  else if (kind === 'week') { // semaine en cours, lundi → dimanche
+  else if (kind === 'week') { // SEMAINE DERNIÈRE complète (lundi → dimanche précédents)
     const dow = (today.getDay() + 6) % 7; // 0 = lundi
-    from = new Date(today); from.setDate(today.getDate() - dow);
-    to = new Date(from); to.setDate(from.getDate() + 6);
+    to = new Date(today); to.setDate(today.getDate() - dow - 1);   // dimanche dernier
+    from = new Date(to); from.setDate(to.getDate() - 6);           // lundi de cette semaine-là
   }
-  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = new Date(today.getFullYear(), today.getMonth() + 1, 0); calendarCompare = true; }
-  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }
-  else if (kind === 'year') { from = new Date(today.getFullYear(), 0, 1); to = new Date(today.getFullYear(), 11, 31); calendarCompare = true; }
+  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; calendarCompare = true; } // cumul du mois EN COURS
+  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }                  // cumul de l'année EN COURS
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
   document.getElementById('dCfrom').value = calendarCompare ? shiftYearStr(nf) : comparable364(nf);

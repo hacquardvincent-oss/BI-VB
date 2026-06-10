@@ -652,6 +652,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
       hasImpl: !!implN, hasImplN1: !!implN1, hasAds: !!adsN, scope: scopeColl ? 'collection' : 'all',
+      omsDataMin: omsN.dateMin, omsDataMax: omsN.dateMax, rowsN: rowsN.length,
+      omsN1DataMin: omsN1 ? omsN1.dateMin : null, omsN1DataMax: omsN1 ? omsN1.dateMax : null, rowsN1: rowsN1 ? rowsN1.length : 0,
       consent: { n: rateN, n1: rateN1, sessionsRawN, sessionsRawN1 },
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
