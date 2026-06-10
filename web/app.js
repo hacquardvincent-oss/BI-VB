@@ -2413,7 +2413,8 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `<pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:4px;overflow-x:auto">`
         + `orderItems[0] champs : ${esc(Array.isArray(j.itemKeys) ? j.itemKeys.join(', ') : (j.itemKeys || '—'))}\n\n`
         + `Montants ligne (item) : ${esc(JSON.stringify(j.itemPriceFields || {}, null, 2))}\n\n`
-        + `Montants commande : ${esc(JSON.stringify(j.orderPriceFields || {}, null, 2))}</pre>`;
+        + `Montants commande : ${esc(JSON.stringify(j.orderPriceFields || {}, null, 2))}\n\n`
+        + `🏷️ DÉMARQUE (ligne soldée détectée) : ${esc(JSON.stringify(j.demarqueSample || '—', null, 2))}</pre>`;
     }
     if (j.statusDistinct || j.simNonLivrePieces != null) {
       html += `<div style="margin-top:8px"><b>Diagnostic annulations</b> (statuts, anonyme) :</div>`

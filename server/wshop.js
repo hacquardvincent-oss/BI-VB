@@ -179,11 +179,14 @@ function orderToRows(order) {
     if (cancelled) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : 0));      // annulée : tout le non-expédié
     else if (incomplete) nonLivre = Math.max(0, qOrd - (qShipKnown != null ? qShipKnown : qOrd)); // expédiée incomplète : le reste
     const unit = Number(it.unitPrice != null ? it.unitPrice : (it.originalUnitPrice || 0)) || 0;
-    // Full/Off price : Prix Vente = prix catalogue (originalUnitPrice) ; Prix Vente Remisé =
-    // prix après démarque (originalDiscountedUnitPrice, 0 si pas de démarque). calc.js : full price
-    // si remisé == 0 ou == prix vente, sinon off price.
+    // Full/Off price : Prix Vente = prix catalogue plein (originalUnitPrice) ; Prix Vente Remisé =
+    // prix APRÈS DÉMARQUE soldes. L'API peut fournir un champ dédié (originalDiscountedUnitPrice /
+    // discountedUnitPrice / salePrice) ; sinon il est à 0 même en soldes → on RECONSTITUE la démarque :
+    // si le prix unitaire payé (unit) est SOUS le catalogue, c'est qu'une démarque est appliquée
+    // → on prend `unit` comme prix remisé. Sans ce repli, tout passerait en full price (bug soldes WSHOP).
     const pvUnit = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
-    const pvrUnit = Number(it.originalDiscountedUnitPrice || 0) || 0;
+    let pvrUnit = Number(it.originalDiscountedUnitPrice || it.discountedUnitPrice || it.salePrice || it.markdownPrice || 0) || 0;
+    if (!(pvrUnit > 0) && pvUnit > 0 && unit > 0 && unit < pvUnit) pvrUnit = unit;
     // Coloris (best-effort selon le schéma WSHOP) → ajouté à la désignation produit.
     const v = it.variant || {};
     const color = (it.color || it.colour || it.colorLabel || it.couleur || it.colorName || v.color || v.colour || v.colorLabel || v.label || '').toString().trim();
@@ -577,6 +580,19 @@ router.get('/ping', requireAuth, async (req, res) => {
       out.orderPriceFields = pick(o0);
       out.itemPriceFields = items[0] ? pick(items[0]) : {};
       out.itemCount = items.length;
+      // Diagnostic « DÉMARQUE » : on cherche dans TOUT l'échantillon une ligne réellement démarquée
+      // (unitPrice < originalUnitPrice) et on montre ses champs prix → vérifie si l'API peuple un
+      // prix remisé (originalDiscountedUnitPrice…) ou si la démarque n'est QUE dans unitPrice.
+      const demoItems = [];
+      arr.forEach(o => (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+        const u = Number(it.unitPrice) || 0, cat = Number(it.originalUnitPrice) || 0;
+        if (cat > 0 && u > 0 && u < cat * 0.98) demoItems.push(it);
+      }));
+      out.demarqueSample = demoItems.length ? {
+        nbLignesDemarquees: demoItems.length,
+        exemple: pick(demoItems[0]),
+        originalDiscountedUnitPriceRenseigne: demoItems.filter(it => Number(it.originalDiscountedUnitPrice) > 0).length + '/' + demoItems.length,
+      } : 'aucune ligne démarquée détectée dans l\'échantillon (unitPrice < catalogue)';
       // Champs de statut (pour caler la règle « annulation » sur les commandes finalisées)
       const ST = /(status|statut|state|etat|fulfil|ship|exped|livr|cancel|annul)/i;
       const pickSt = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (ST.test(k)) r[k] = obj[k]; }); return r; };
