@@ -23,6 +23,7 @@ const reco = require('./reco');
 const objectives = require('./objectives');
 const layouts = require('./layouts');
 const userviews = require('./userviews');
+const sftp = require('./sftp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/report', pdf.router);
 app.use('/api/ga4', ga4.router);
 app.use('/api/wshop', wshop.router);
 app.use('/api/googleads', googleads.router);
+app.use('/api/sftp', sftp.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 app.use('/api/layouts', layouts.router);
@@ -102,5 +104,6 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
   }
   loadSpecs();
+  try { sftp.startPolling(); } catch (e) { console.error('[sftp] poll KO:', e.message); }
   console.log(`[bidash] initialisation terminée — ${db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)'}`);
 })();

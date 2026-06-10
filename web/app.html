@@ -113,7 +113,12 @@
       <button class="btn" id="adsping">🩺 Tester la connexion</button>
       <span class="note" id="adsnote">Importe coût/clics/conversions par campagne depuis Google Ads sur la période N et N-1</span>
     </div>
-    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
+    <div id="sftpbox" class="toolbar hidden" style="margin-top:8px">
+      <button class="btn blue" id="sftprefresh">🔄 Importer depuis SFTP (Y2 / ERP)</button>
+      <button class="btn" id="sftpping">🩺 Tester la connexion</button>
+      <span class="note" id="sftpnote">Récupère les fichiers déposés sur le SFTP (ex. exports Y2) et les ingère automatiquement</span>
+    </div>
+    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads / SFTP). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
 
     <!-- Consentement cookies (RGPD) : ajuste les sessions GA (GA ne voit que les consentants) -->
     <div class="toolbar" style="margin-top:8px">

@@ -451,10 +451,10 @@ function setFilesOpen(open) {
 }
 // Affiche un message si aucun connecteur API n'est configuré
 function updateApiHint() {
-  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), ad = document.getElementById('adsbox'), no = document.getElementById('noApiNote');
+  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), ad = document.getElementById('adsbox'), sf = document.getElementById('sftpbox'), no = document.getElementById('noApiNote');
   if (!no) return;
   const vis = el => el && !el.classList.contains('hidden');
-  const anyApi = vis(ga) || vis(ws) || vis(ad);
+  const anyApi = vis(ga) || vis(ws) || vis(ad) || vis(sf);
   no.classList.toggle('hidden', anyApi);
 }
 
@@ -2247,6 +2247,44 @@ document.getElementById('adsping').addEventListener('click', async () => {
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
+// ── SFTP (Y2 / ERP) ──
+async function sftpStatus() {
+  try {
+    const r = await fetch('/api/sftp/status'); if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) {
+      document.getElementById('sftpbox').classList.remove('hidden');
+      const n = document.getElementById('sftpnote');
+      if (n) n.textContent = `SFTP ${s.host} · ${(s.files || []).join(' · ') || 'aucun fichier configuré'}${s.poll ? ` · auto toutes les ${s.poll} min` : ''}`;
+    }
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('sftprefresh').addEventListener('click', async () => {
+  const note = document.getElementById('sftpnote'), btn = document.getElementById('sftprefresh');
+  btn.disabled = true; note.textContent = 'Import SFTP en cours…';
+  try {
+    const r = await fetch('/api/sftp/refresh', { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
+    const ok = (j.result || []).filter(x => !x.error), ko = (j.result || []).filter(x => x.error);
+    note.innerHTML = `✓ ${ok.map(x => `${esc(x.source)}-${esc(x.period)} : ${fInt(x.rows)} lignes (${esc(x.file)})`).join(' · ') || 'rien à importer'}`
+      + (ko.length ? ` · <span style="color:var(--r)">⚠ ${ko.map(x => `${esc(x.source)}-${esc(x.period)} : ${esc(x.error)}`).join(' ; ')}</span>` : '');
+    await loadStatus(); loadReport();
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+  finally { btn.disabled = false; }
+});
+document.getElementById('sftpping').addEventListener('click', async () => {
+  const note = document.getElementById('sftpnote');
+  note.textContent = 'Test de connexion SFTP…';
+  try {
+    const r = await fetch('/api/sftp/ping');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    const res = (j.resolved || []).map(x => `${esc(x.cible)} ← ${esc(x.trouve)}`).join(' · ');
+    note.innerHTML = `✓ Connecté (${j.ms}ms) · ${j.count} fichiers dans ${esc(j.dir)}${res ? ' · ' + res : ''}`;
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
+});
+
 // Moteur de recommandations stratégiques (API Claude)
 async function recoStatus() {
   try {
@@ -2568,6 +2606,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await ga4Status();
   await wshopStatus();
   await googleAdsStatus();
+  await sftpStatus();
   await recoStatus();
   updateApiHint();
   await loadReport();
