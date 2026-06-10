@@ -149,6 +149,13 @@ function orderToRows(order) {
     : o.orderLocation) || '';
   const lieu = String(locName).trim() ? 'INSTORE' : 'OUTSTORE';
   const num = o.orderId || o.mainOrderId || '';
+  // Code promo (best-effort selon le schéma WSHOP — distinct de la démarque soldes).
+  // Le code promo a sa propre analyse (impact CA) ; il ne doit PAS influencer le full/off price.
+  const promoObj = o.coupon || o.promo || o.discount || (Array.isArray(o.coupons) && o.coupons[0]) || (Array.isArray(o.orderPromotions) && o.orderPromotions[0]) || {};
+  const promoCode = (o.couponCode || o.promoCode || o.discountCode || promoObj.code || promoObj.name || '').toString().trim();
+  const promoType = (o.couponType || promoObj.type || (promoObj.percentage != null ? '% Réduction' : (promoObj.amount != null ? 'Montant' : ''))).toString().trim();
+  let promoValue = o.couponValue != null ? o.couponValue : (promoObj.value != null ? promoObj.value : (promoObj.percentage != null ? promoObj.percentage : (promoObj.amount != null ? promoObj.amount : '')));
+  if (promoValue == null) promoValue = '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées.
   // Signal = orderCustomerStatus (enum API à 22 états, calque les libellés OMS) ; orderItems sans statut.
@@ -197,6 +204,9 @@ function orderToRows(order) {
       'Prix Vente': pvUnit * qOrd,
       'Prix Vente Remise': pvrUnit * qOrd,
       'Statut commande': rawStatus,
+      'Code Promo': promoCode,
+      'Type Code Promo': promoType,
+      'Valeur Code Promo': promoValue,
     };
   });
 }
@@ -246,7 +256,7 @@ function buildReturnsDataset(orders, from, to) {
 }
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
-const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise', 'Statut commande'];
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise', 'Statut commande', 'Code Promo', 'Type Code Promo', 'Valeur Code Promo'];
 // 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
 const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
 const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"
