@@ -2529,6 +2529,7 @@ document.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click',
   COMPARE = b.dataset.cmp === '1';
   ['dCfrom', 'dCto'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !COMPARE; });
   const nd = document.getElementById('n1Default'); if (nd) nd.disabled = !COMPARE;
+  const nw = document.getElementById('n1Wrap'); if (nw) nw.style.display = COMPARE ? '' : 'none';
   loadReport();
 }));
 document.getElementById('datesAll').addEventListener('click', () => {
