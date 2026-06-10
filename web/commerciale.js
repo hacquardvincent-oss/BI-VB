@@ -329,7 +329,7 @@ function saveOrder(order) { try { localStorage.setItem('vbCommOrder', JSON.strin
 function renderAll(rep, day) {
   const box = document.getElementById('report');
   const noData = !(rep.ca && rep.ca.n && (rep.ca.n.caEShop > 0 || rep.ca.n.total > 0));
-  const banner = noData ? `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623">⚠️ <b>Aucune vente dans l'OMS sur ${esc(rep.meta.from)} → ${esc(rep.meta.to)}.</b> Les données WSHOP de cette période ne sont pas encore importées. Clique <b>« ⬇️ Import complet (opération + N-1) »</b> ci-dessus pour les charger (le delta ne fait qu'actualiser ce qui est déjà importé). En soldes/lancement, fais l'import complet le 1ᵉʳ jour puis le delta en boucle.</div></div>` : '';
+  const banner = noData ? `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623;margin-bottom:8px">⚠️ <b>Aucune vente dans l'OMS sur ${esc(rep.meta.from)} → ${esc(rep.meta.to)}.</b> Les données WSHOP de cette période ne sont pas encore importées. Le <b>delta</b> n'actualise que ce qui est déjà importé — pour une nouvelle période (et pour charger le N-1), lance l'<b>import complet</b>. En soldes/lancement : import complet le 1ᵉʳ jour, puis delta en boucle.</div><button class="btn blue" id="bannerImport">⬇️ Lancer l'import complet (opération + N-1) maintenant</button></div>` : '';
   const sections = getOrder().map(key => {
     let html = SECTION_FN[key] ? SECTION_FN[key](rep) : '';
     if (EDIT && !html) html = `<div class="card" style="opacity:.45"><div class="note">${esc(SECTION_LABEL[key] || key)} — (vide pour cette sélection)</div></div>`;
@@ -341,6 +341,7 @@ function renderAll(rep, day) {
   // Donut off/full (Bilan)
   const c = rep.ca.n;
   if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#4a9eff', '#f5a623'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } });
+  const bi = document.getElementById('bannerImport'); if (bi) bi.addEventListener('click', fullImport);
   if (EDIT) wireDnD(rep, day);
   if (document.getElementById('launchBox')) loadLaunch(day || LAST_DAY);
 }
