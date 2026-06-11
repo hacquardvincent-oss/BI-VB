@@ -74,7 +74,7 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .dt:focus{outline:none;border-color:var(--accent-line)}
 
 /* KPI tiles — tuiles bordées + gaps transparents (pas de cellule vide grise, pas de rognage) */
-.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}
 .kc{background:var(--s);border:1px solid var(--br);border-radius:10px;padding:13px 15px;min-width:0}
 .kc .l{font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
 /* valeur + pilule delta : flex qui passe la pilule à la ligne plutôt que de la rogner */
