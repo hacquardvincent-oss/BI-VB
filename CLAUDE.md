@@ -272,7 +272,7 @@ Source **unique** consommée par `/api/report`, le **PDF**, et la **reco**. Clé
 `topProduits{n,n1}` · `topProduitsQte` · `familleDetail` · `familleParPays` · `fullOffFamille`/`fullOffProduits` ·
 `funnel{n,n1}` · `channels{n,n1}` · `channelTypes{n,n1}` · `device{n,n1}` · `daily`/`dailyN1` ·
 `timeline[]` (28 j, voir ci-dessous) · `timeline2{campN,campN1}` · `stockAlerts[]` · `hourly{n,n1}` · `gaFunnel{n,n1}` ·
-`ttPays[]` · `landingPages` · `itemFunnel` · `topPages`/`lostPages`/`newPages` · `campaigns`/`campaignsTotals` ·
+`ttPays[]` · `sessionsByZone{n,n1:{fr,inter}}` (sessions FR/Inter via gasess → donut Bilan `binDonutIntlSess`) · `landingPages` · `itemFunnel` · `topPages`/`lostPages`/`newPages` · `campaigns`/`campaignsTotals` ·
 `lostCampaigns`/`newCampaigns` · `actionPlan` (voir §8) · `campaignLanding` · `topPagesBySource`/`lostPagesBySource` ·
 `ga`/`gaN1` · `ads`.
 - **`timeline`** : fenêtre **28 jours** indépendante de la période (`tlEnd`=to ou `omsN.dateMax`, `tlStart=−27 j`). CA/jour +

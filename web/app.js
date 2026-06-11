@@ -1751,7 +1751,13 @@ function renderScorecard(title, pack, showDetails) {
         <div style="height:${donutPx}px;width:${donutPx}px;flex:0 0 auto"><canvas id="${donutId}"></canvas></div>
         <div style="${tilesRow ? 'display:flex;gap:8px;flex-wrap:wrap' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px'};flex:1 1 160px">${rows}</div>
       </div></div>` : '';
-    const intl = block('🌍 International', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt), 110);
+    const sz = n.sessZone || {}, sz1 = n1.sessZone || {};
+    const tInt = (l, v, v1) => bilanTile(l, fInt(v), v, v1);
+    const intlCa = block('🌍 International — CA', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt), 110);
+    const intlSess = (sz.fr != null && (sz.fr > 0 || sz.inter > 0))
+      ? block('🌍 International — Sessions', 'binDonutIntlSess', tInt('Sessions France', sz.fr, sz1.fr) + tInt('Sessions International', sz.inter, sz1.inter), 110)
+      : '';
+    const intl = intlCa + intlSess;
     const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS), 110);
     const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP), 110) : '';
     let mp = '';
@@ -1768,9 +1774,10 @@ function buildBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1;
   const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   const cosPack = rep.ads && rep.ads.cos ? rep.ads.cos : {};
+  const sz = rep.sessionsByZone || {};
   const mainPack = {
-    n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null },
-    n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null } : null,
+    n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null, sessZone: sz.n },
+    n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null, sessZone: sz.n1 } : null,
   };
   const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
   const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true);
@@ -2044,6 +2051,8 @@ function renderCharts(rep) {
     segDonut('binDonutOmni', [['Entrepôt', bca.caEnt], ['Ship-from-store', bca.caSFS]]);
     if (bca.caFP != null) segDonut('binDonutDem', [['Full Price', bca.caFP], ['Off Price', bca.caOP]]);
   }
+  const bsz = rep.sessionsByZone && rep.sessionsByZone.n;
+  if (bsz) segDonut('binDonutIntlSess', [['Sessions France', bsz.fr], ['Sessions International', bsz.inter]]);
   if (bmk && bmk.total > 0) segDonut('binDonutMP', [['GL', bmk.glTotal], ['Printemps', bmk.printemps], ['PDT', bmk.pdt], ['Lulli', bmk.lulli]]);
 
   if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
