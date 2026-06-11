@@ -448,6 +448,16 @@ l'import (jeter les pages brutes) ; PDF WinAnsi (pas de `→`/`Δ`) ; merges via
 
 ---
 
+## 14bis. Module Objectifs (`web/objectifs.html`/`objectifs.js`, onglet header)
+Prévision & suivi **mensuels** du CA EShop (mix auto + manuel). Backend : `objectives.js` étendu —
+`OBJ = { ca, sessions, tt (legacy global), months:{ "YYYY-MM":{ca,sessions,commandes} }, growth }`.
+Routes : `GET /api/objectives/history` (historique mensuel = `calc.monthlyEShopCA` agrégé sur `oms`+`saisonoms`
+N&N-1, périmètre EShop hors mkt + Outstore) ; `PUT /api/objectives/months` (objectifs mensuels + croissance).
+Front : tableau 12 mois × [Réalisé / N-1 / vs N-1 / Objectif éditable / % atteint / Reste à faire] + graphe
+(barres Réalisé/N-1 + courbe Objectif) + bouton **« ✨ Proposer »** (objectif = CA N-1 du mois × (1+croissance)).
+Plus l'OMS importé est large, plus l'historique mensuel est complet. **Connecteurs à venir** : META (Marketing API,
+dépense/ROAS comme Google Ads) et SPLIO (CRM emailing) — suivront le pattern connecteur (isConfigured/refresh/ping).
+
 ## 15. Idées / pistes ouvertes
 - Plan d'action : croisement offre×saison (drops/implantations datées), synthèse rédigée auto enrichie, export PDF/email du plan.
 - Segmentation équipes paramétrable (Trafic Manager, E-Merch, Studio…).
