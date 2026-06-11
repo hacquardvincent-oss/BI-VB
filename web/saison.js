@@ -9,7 +9,7 @@ let DIM = 'global';
 let SAISON = '';
 let LAST_REP = null;
 
-const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
