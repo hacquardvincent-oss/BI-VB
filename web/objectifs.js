@@ -1,4 +1,5 @@
 'use strict';
+if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color = '#9CA1AB'; Chart.defaults.font.size = 11; }
 // ============================================================================
 // objectifs.js — Module Objectifs : prévision & suivi mensuels du CA EShop.
 // Mix auto + manuel : proposition = CA N-1 du mois × (1 + croissance), ajustable,
@@ -101,17 +102,17 @@ function drawChart() {
     data: {
       labels: MONTHS.map(m => m.slice(0, 3)),
       datasets: [
-        { type: 'bar', label: 'Réalisé', data: real, backgroundColor: '#f5a623', borderWidth: 0 },
-        { type: 'bar', label: 'N-1', data: n1, backgroundColor: 'rgba(148,163,184,.45)', borderWidth: 0 },
-        { type: 'line', label: 'Objectif', data: obj.map(v => v || null), borderColor: '#22c55e', backgroundColor: 'transparent', tension: .25, pointRadius: 3, borderWidth: 2 },
+        { type: 'bar', label: 'Réalisé', data: real, backgroundColor: '#A8854A', borderWidth: 0 },
+        { type: 'bar', label: 'N-1', data: n1, backgroundColor: 'rgba(200,205,212,.45)', borderWidth: 0 },
+        { type: 'line', label: 'Objectif', data: obj.map(v => v || null), borderColor: '#1B9E6A', backgroundColor: 'transparent', tension: .25, pointRadius: 3, borderWidth: 2 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+      plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 11 } } } },
       scales: {
-        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
+        x: { ticks: { color: '#AEB3BC', font: { size: 10 } }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y: { ticks: { color: '#9CA1AB', font: { size: 10 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
       },
     },
   });

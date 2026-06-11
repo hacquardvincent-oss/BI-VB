@@ -1,4 +1,5 @@
 'use strict';
+if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color = '#9CA1AB'; Chart.defaults.font.size = 11; }
 // ============================================================================
 // saison.js — Page « Analyse de saison » (période longue, à part de l'app centrale).
 // Full price vs Off price par famille & top produits, E26 (N) vs E25 (N-1).
@@ -224,7 +225,7 @@ function render(rep) {
       <h3>🏷️ Démarque — opérations détectées sur la saison</h3>
       <div class="toolbar" style="margin-bottom:8px">
         <span class="note" style="margin:0">Seuil de détection (part off-price/jour)</span>
-        <input type="number" id="demSeuil" min="1" max="90" step="1" value="${Math.round((d.threshold || 0.15) * 100)}" style="width:70px;background:var(--s2);color:var(--fg);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span class="note" style="margin:0">%</span>
+        <input type="number" id="demSeuil" min="1" max="90" step="1" value="${Math.round((d.threshold || 0.15) * 100)}" style="width:70px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span class="note" style="margin:0">%</span>
       </div>
       <table><thead><tr><th>Opération</th><th>Période (1er → dernier jour)</th><th>Durée</th><th>CA Off</th><th>Profondeur</th><th>% du Off total</th><th>vs N-1</th></tr></thead><tbody>${opR}</tbody></table>
       <div class="kgrid" style="margin-top:10px">

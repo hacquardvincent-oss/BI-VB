@@ -1,4 +1,5 @@
 'use strict';
+if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color = '#9CA1AB'; Chart.defaults.font.size = 11; }
 // ============================================================================
 // commerciale.js — Page « Analyse commerciale » : pilotage d'UNE opération
 // (avant-première, soldes…). Zoom off/full price permanent + lancement à l'heure.
@@ -133,29 +134,29 @@ function chartLancement(repL) {
   const sessLineN = sessN ? hours.map(h => sAt(sessN, h)) : null;
   const sessLineN1 = sessN1 ? hours.map(h => sAt(sessN1, h)) : null;
   const ds = [
-    { type: 'bar', label: 'Full price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.fp[h] || 0)), backgroundColor: '#4a9eff', borderWidth: 0 },
-    { type: 'bar', label: 'Off price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.op[h] || 0)), backgroundColor: '#f5a623', borderWidth: 0 },
-    { type: 'bar', label: 'Full price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.fp[h] || 0)), backgroundColor: 'rgba(74,158,255,.4)', borderWidth: 0 },
-    { type: 'bar', label: 'Off price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.op[h] || 0)), backgroundColor: 'rgba(245,166,35,.4)', borderWidth: 0 },
+    { type: 'bar', label: 'Full price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.fp[h] || 0)), backgroundColor: '#6E7B8B', borderWidth: 0 },
+    { type: 'bar', label: 'Off price N', yAxisID: 'y', stack: 'N', data: hours.map(h => Math.round(a.op[h] || 0)), backgroundColor: '#A8854A', borderWidth: 0 },
+    { type: 'bar', label: 'Full price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.fp[h] || 0)), backgroundColor: 'rgba(110,123,139,.4)', borderWidth: 0 },
+    { type: 'bar', label: 'Off price N-1', yAxisID: 'y', stack: 'N1', data: hours.map(h => Math.round(b.op[h] || 0)), backgroundColor: 'rgba(168,133,74,.4)', borderWidth: 0 },
   ];
-  if (sessLineN) ds.push({ type: 'line', label: 'Sessions N', yAxisID: 'y1', data: sessLineN, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
-  if (sessLineN1) ds.push({ type: 'line', label: 'Sessions N-1', yAxisID: 'y1', data: sessLineN1, borderColor: '#22c55e', borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
+  if (sessLineN) ds.push({ type: 'line', label: 'Sessions N', yAxisID: 'y1', data: sessLineN, borderColor: '#1B9E6A', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
+  if (sessLineN1) ds.push({ type: 'line', label: 'Sessions N-1', yAxisID: 'y1', data: sessLineN1, borderColor: '#1B9E6A', borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
   // Marqueurs « heure d'envoi NL » (N plein / N-1 contour) sur l'axe sessions.
   const eh = repL.actionPlan && repL.actionPlan.emailHour;
   const ehN = eh && eh.n && eh.n.peakHour != null ? eh.n.peakHour : null;
   const ehN1 = eh && eh.n1 && eh.n1.peakHour != null ? eh.n1.peakHour : null;
   const maxSess = Math.max(1, ...(sessLineN || [0]), ...(sessLineN1 || [0]));
-  if (ehN != null) ds.push({ type: 'line', label: '✉️ Envoi NL N', yAxisID: 'y1', data: hours.map(h => h === ehN ? maxSess : null), borderColor: '#a78bfa', backgroundColor: '#a78bfa', pointRadius: 7, pointStyle: 'rectRot', showLine: false });
-  if (ehN1 != null) ds.push({ type: 'line', label: '✉️ Envoi NL N-1', yAxisID: 'y1', data: hours.map(h => h === ehN1 ? maxSess : null), borderColor: '#a78bfa', backgroundColor: 'transparent', pointRadius: 7, pointStyle: 'rectRot', borderWidth: 2, showLine: false });
+  if (ehN != null) ds.push({ type: 'line', label: '✉️ Envoi NL N', yAxisID: 'y1', data: hours.map(h => h === ehN ? maxSess : null), borderColor: '#9B8AA3', backgroundColor: '#9B8AA3', pointRadius: 7, pointStyle: 'rectRot', showLine: false });
+  if (ehN1 != null) ds.push({ type: 'line', label: '✉️ Envoi NL N-1', yAxisID: 'y1', data: hours.map(h => h === ehN1 ? maxSess : null), borderColor: '#9B8AA3', backgroundColor: 'transparent', pointRadius: 7, pointStyle: 'rectRot', borderWidth: 2, showLine: false });
   mk('launchChart', {
     data: { labels: hours.map(h => h + 'h'), datasets: ds },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+      plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } } },
       scales: {
-        x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { stacked: true, position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' }, title: { display: true, text: 'CA (€)', color: '#64748b', font: { size: 9 } } },
-        y1: { position: 'right', ticks: { color: '#22c55e', font: { size: 9 } }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Sessions', color: '#22c55e', font: { size: 9 } } },
+        x: { stacked: true, ticks: { color: '#AEB3BC', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y: { stacked: true, position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: 'CA (€)', color: '#AEB3BC', font: { size: 9 } } },
+        y1: { position: 'right', ticks: { color: '#1B9E6A', font: { size: 9 } }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Sessions', color: '#1B9E6A', font: { size: 9 } } },
       },
     },
   });
@@ -209,9 +210,9 @@ function secFamilles(rep) {
   const ff = rep.fullOffFamille, fp = rep.fullOffProduits;
   if (!ff || !ff.length) return '';
   return `<div class="card"><h3>👗 Performances produits — Démarqué (Off) puis Full price</h3>
-    ${perfBlock('🏷️ Off price (démarqué)', ff, fp, 'caOP', 'caOPn1', fp, '#f5a623')}
+    ${perfBlock('🏷️ Off price (démarqué)', ff, fp, 'caOP', 'caOPn1', fp, '#A8854A')}
     <div style="height:10px"></div>
-    ${perfBlock('💎 Full price (plein tarif)', ff, fp, 'caFP', 'caFPn1', fp, '#4a9eff')}
+    ${perfBlock('💎 Full price (plein tarif)', ff, fp, 'caFP', 'caFPn1', fp, '#6E7B8B')}
     <div class="note">💡 Off price = ce qui tire l'opération (top démarques). Full price = ce qui <b>résiste au plein tarif pendant l'opération</b> (futurs piliers : à protéger de la démarque, à réassortir). Le « Poids » est calculé dans chaque bloc (Off / Full). Nécessite le référentiel produit (familles).</div></div>`;
 }
 
@@ -391,7 +392,7 @@ function saveOrder(order) { try { localStorage.setItem('vbCommOrder', JSON.strin
 function renderAll(rep, day) {
   const box = document.getElementById('report');
   const noData = !(rep.ca && rep.ca.n && (rep.ca.n.caEShop > 0 || rep.ca.n.total > 0));
-  const banner = noData ? `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623;margin-bottom:8px">⚠️ <b>Aucune vente dans l'OMS sur ${esc(rep.meta.from)} → ${esc(rep.meta.to)}.</b> Les données WSHOP de cette période ne sont pas encore importées. Le <b>delta</b> n'actualise que ce qui est déjà importé — pour une nouvelle période (et pour charger le N-1), lance l'<b>import complet</b>. En soldes/lancement : import complet le 1ᵉʳ jour, puis delta en boucle.</div><button class="btn blue" id="bannerImport">⬇️ Lancer l'import complet (opération + N-1) maintenant</button></div>` : '';
+  const banner = noData ? `<div class="card" style="border-color:#A8854A"><div class="note" style="color:#A8854A;margin-bottom:8px">⚠️ <b>Aucune vente dans l'OMS sur ${esc(rep.meta.from)} → ${esc(rep.meta.to)}.</b> Les données WSHOP de cette période ne sont pas encore importées. Le <b>delta</b> n'actualise que ce qui est déjà importé — pour une nouvelle période (et pour charger le N-1), lance l'<b>import complet</b>. En soldes/lancement : import complet le 1ᵉʳ jour, puis delta en boucle.</div><button class="btn blue" id="bannerImport">⬇️ Lancer l'import complet (opération + N-1) maintenant</button></div>` : '';
   const sections = getOrder().map(key => {
     let html = SECTION_FN[key] ? SECTION_FN[key](rep) : '';
     if (EDIT && !html) html = `<div class="card" style="opacity:.45"><div class="note">${esc(SECTION_LABEL[key] || key)} — (vide pour cette sélection)</div></div>`;
@@ -402,7 +403,7 @@ function renderAll(rep, day) {
   box.innerHTML = banner + sections;
   // Donut off/full (Bilan)
   const c = rep.ca.n;
-  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#4a9eff', '#f5a623'], borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } });
+  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#6E7B8B', '#A8854A'], borderColor: '#FFFFFF', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } });
   const bi = document.getElementById('bannerImport'); if (bi) bi.addEventListener('click', fullImport);
   if (EDIT) wireDnD(rep, day);
   if (document.getElementById('launchBox')) loadLaunch(day || LAST_DAY);
