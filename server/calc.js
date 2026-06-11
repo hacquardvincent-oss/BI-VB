@@ -18,24 +18,22 @@ function norm(s) {
 // ── Parse numérique FR ("1 234,56" → 1234.56) ───────────────────────────────
 const fN = s => parseFloat((s || '').toString().replace(/\s/g, '').replace(',', '.')) || 0;
 
-// ── Full price vs Off price (DÉMARQUE) — règle métier officielle ────────────
-// LA DÉMARQUE (soldes) SE LIT EN COMPARANT « Prix Vente Remisé » (originalDiscountedUnitPrice)
-// AU « Prix Vente » CATALOGUE — JAMAIS au « Prix de vente payé ».
-// Pourquoi pas le payé ? Une remise par CODE PROMO baisse le payé SANS être une démarque soldes
-// (le code promo a sa propre analyse, cf. calcPromoImpact) → resterait full price.
-// Formule client (export OMS, colonne Demarque) : IF(OR(Remisé=0 ; Remisé=Prix Vente); Full; Off).
-// ⚠️ TOLÉRANCE RÉSIDUELS DE SAISIE : les données contiennent des écarts parasites (Remisé
-// LÉGÈREMENT au-dessus/en-dessous du catalogue : erreurs de saisie). On ne compte donc en
-// OFF PRICE que si la démarque est ≥ DEMARQUE_MIN_DEPTH (2 %). En-dessous (et Remisé > Vente)
-// = full price. Seuil ajustable ci-dessous.
-// (Sans tolérance, reproduit le TCD client au centime : 31 966 € full / 60 275 € off.)
-const DEMARQUE_MIN_DEPTH = 0.02; // démarque mini pour qu'une ligne compte en off price (anti-résiduel)
+// ── Full price vs Off price (DÉMARQUE) — règle métier OFFICIELLE (figée) ─────
+// LA DÉMARQUE SE LIT EN COMPARANT « Prix Vente Remisé » AU « Prix Vente » CATALOGUE.
+// Formule EXACTE du client (export OMS, colonne « Full Price / Off Price ») :
+//   IF( OR( Remisé = 0 ; Remisé = Prix Vente ) ; "Full Price" ; "Off Price" )
+//   → Full price ⇔ remisé ABSENT (0) OU ÉGAL au catalogue ; Off price sinon (toute autre valeur).
+// ⚠️ AUCUNE TOLÉRANCE : même un écart de 0,68 € compte en off price (c'est ce que fait leur TCD).
+//   Une tolérance de 2 % faisait basculer ~8 K€ de petites démarques en full → écart vs le TCD.
+//   La seule tolérance est `0.01` pour absorber le bruit de représentation flottante (Remisé≈Vente).
+// JAMAIS sur le « Prix de vente payé » : un CODE PROMO baisse le payé sans être une démarque
+// (analyse séparée `calcPromoImpact`). Vérifié : reproduit le TCD client à chaque cellule
+// FR/Inter × Full/Off × N/N-1 (ex. FR 2026 Full 31 879 / Off 54 238).
 function isFullPriceLine(pvFull, pvRemise, paid) {
-  if (pvRemise === 0 || !(pvFull > 0)) return true;          // remisé absent → plein tarif
-  return (1 - pvRemise / pvFull) < DEMARQUE_MIN_DEPTH;       // écart < 2 % (ou négatif) → résiduel = plein tarif
+  return (pvRemise === 0) || (Math.abs(pvRemise - pvFull) < 0.01);
 }
 function discountDepthOf(pvFull, pvRemise, paid) {
-  if (isFullPriceLine(pvFull, pvRemise, paid)) return 0;
+  if (!(pvFull > 0) || isFullPriceLine(pvFull, pvRemise, paid)) return 0;
   return Math.min(1, Math.max(0, 1 - pvRemise / pvFull));
 }
 // ── Parse numérique GA (format US "1234.56", pas de virgule) ────────────────
@@ -809,19 +807,19 @@ function calcFullOffByProduct(rows, omsMap) {
 function calcFullOffAudit(rows, map, sampleSize = 24) {
   const pi = map.prix, pvi = map.pv, pvri = map.pv_remise, ti = map.type, di = map.des;
   if (pvi === undefined || pvri === undefined) return null;
-  let caFull = 0, caOff = 0, nFull = 0, nOff = 0, nResidu = 0;
+  let caFull = 0, caOff = 0, nFull = 0, nOff = 0, nRemiseZero = 0;
   const offS = [], fullS = [];
   rows.forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     const p = fN(r[pi]), pv = fN(r[pvi]), pvr = fN(r[pvri]);
     const full = isFullPriceLine(pv, pvr, p);
     const row = { des: di !== undefined ? (r[di] || '').toString().slice(0, 32) : '', pv, pvr, paid: p, depth: full ? 0 : discountDepthOf(pv, pvr, p), classe: full ? 'Full' : 'Off' };
-    if (full) { caFull += p; nFull++; if (pvr > 0 && pv > 0 && (1 - pvr / pv) > 0 && (1 - pvr / pv) < DEMARQUE_MIN_DEPTH) nResidu++; if (fullS.length < sampleSize / 2) fullS.push(row); }
+    if (full) { caFull += p; nFull++; if (pvr === 0) nRemiseZero++; if (fullS.length < sampleSize / 2) fullS.push(row); }
     else { caOff += p; nOff++; if (offS.length < sampleSize / 2) offS.push(row); }
   });
   return {
     caFull: Math.round(caFull * 100) / 100, caOff: Math.round(caOff * 100) / 100, caTotal: Math.round((caFull + caOff) * 100) / 100,
-    nFull, nOff, nResidu, seuilPct: DEMARQUE_MIN_DEPTH * 100,
+    nFull, nOff, nRemiseZero,
     sample: [...offS, ...fullS],
   };
 }

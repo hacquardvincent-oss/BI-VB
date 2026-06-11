@@ -1344,15 +1344,15 @@ function renderReport(rep) {
       const recOk = Math.abs((au.caFull + au.caOff) - au.caTotal) < 1;
       const srows = (au.sample || []).map(s => `<tr><td title="${esc(s.des)}">${esc((s.des || '').slice(0, 28))}</td><td>${fEur(s.pv)}</td><td>${s.pvr > 0 ? fEur(s.pvr) : '<span class="na">0</span>'}</td><td>${fEur(s.paid)}</td><td>${s.depth > 0 ? fPct(s.depth) : '—'}</td><td class="${s.classe === 'Off' ? 'up' : ''}" style="${s.classe === 'Off' ? 'color:var(--a)' : 'color:var(--b)'}">${s.classe}</td></tr>`).join('');
       audit = `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;font-size:13px">🔍 Audit du calcul Full/Off (vérifier la règle)</summary>
-        <div class="note" style="margin-top:8px">Règle appliquée : <b>Off price</b> ⇔ « Prix Vente Remisé » &lt; « Prix Vente » de <b>≥ ${au.seuilPct} %</b> (tolérance anti-résidus de saisie). Sinon <b>Full price</b>.</div>
+        <div class="note" style="margin-top:8px">Règle EXACTE (= TCD client) : <b>Off price</b> ⇔ « Prix Vente Remisé » ≠ 0 ET ≠ « Prix Vente ». <b>Full price</b> ⇔ Remisé = 0 (aucune démarque) ou Remisé = Prix Vente.</div>
         <div class="kgrid" style="margin-top:6px">
           <div class="kc"><div class="l">CA Full + CA Off</div><div class="v">${fEur(au.caFull + au.caOff)}</div></div>
           <div class="kc"><div class="l">= CA total EShop (hors mkt)</div><div class="v">${fEur(au.caTotal)} ${recOk ? '<span class="up">✓</span>' : '<span class="dn">≠</span>'}</div></div>
           <div class="kc"><div class="l">Lignes Full / Off</div><div class="v">${fInt(au.nFull)} / ${fInt(au.nOff)}</div></div>
-          <div class="kc"><div class="l">Dont résidus &lt; ${au.seuilPct}% → Full</div><div class="v">${fInt(au.nResidu)}</div></div>
+          <div class="kc"><div class="l">Dont Full sans remisé (=0)</div><div class="v">${fInt(au.nRemiseZero)}</div></div>
         </div>
         <table style="margin-top:8px"><thead><tr><th>Produit (échantillon)</th><th>Prix Vente</th><th>Prix Remisé</th><th>Payé</th><th>Démarque</th><th>Classe</th></tr></thead><tbody>${srows}</tbody></table>
-        <div class="note">Échantillon (lignes Off puis Full). Vérifie sur chaque ligne : Remisé &lt; Prix Vente de &gt;2 % → <b>Off</b> ; Remisé absent/≈ Prix Vente → <b>Full</b>. La somme Full + Off doit égaler le CA EShop hors marketplaces.</div></details>`;
+        <div class="note">Échantillon (lignes Off puis Full). Vérifie : Remisé renseigné et ≠ Prix Vente → <b>Off</b> ; Remisé absent (0) ou = Prix Vente → <b>Full</b>. La somme Full + Off doit égaler le CA EShop hors marketplaces.</div></details>`;
     }
     demarqueCard = `<div class="card"><h3>💰 Performance démarque vs Full Price — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}</h3>
       <div class="kgrid">${tiles}</div>${tranches}${famOff}${audit}
