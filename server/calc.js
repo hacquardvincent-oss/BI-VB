@@ -299,6 +299,30 @@ function calcOMS(rows, map) {
   return { caGlob, caEShop: caFR + caInt, caFR, caInt, caEnt, caSFS, caMkt, caOmni: caEnt + caSFS, total, caFP, caOP };
 }
 
+// ── Agrégation MENSUELLE du CA EShop (hors mkt + Outstore) → { "YYYY-MM": {ca, commandes, pieces, caOP} }
+// Sert au module Objectifs (historique + prévision par mois). Périmètre = même que le Bilan EShop.
+function monthlyEShopCA(rows, map) {
+  const pi = map.prix, ti = map.type, di = map.date, ni = map.num, qi = map.qte, li = map.lieu, pvi = map.pv, pvri = map.pv_remise;
+  if (di === undefined) return {};
+  const hasFPOP = pvi !== undefined && pvri !== undefined;
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return; // périmètre EShop = Outstore
+    const d = parseFrD(r[di]); if (!d) return;
+    const key = `${d.y}-${String(d.m).padStart(2, '0')}`;
+    const e = by[key] || (by[key] = { ca: 0, caOP: 0, commandes: new Set(), pieces: 0 });
+    const p = fN(r[pi]);
+    e.ca += p;
+    if (hasFPOP && !isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p)) e.caOP += p;
+    if (ni !== undefined && r[ni]) e.commandes.add(r[ni]);
+    e.pieces += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  const out = {};
+  Object.entries(by).forEach(([k, v]) => { out[k] = { ca: Math.round(v.ca * 100) / 100, caOP: Math.round(v.caOP * 100) / 100, commandes: v.commandes.size, pieces: v.pieces }; });
+  return out;
+}
+
 // ── CA par ZONE (FR / Inter) × Full/Off (hors mkt) — pivot GLOBAL commercial ─
 function calcZoneFullOff(rows, map) {
   const pi = map.prix, pai = map.pays, ti = map.type, pvi = map.pv, pvri = map.pv_remise;
@@ -1490,6 +1514,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  monthlyEShopCA,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,
