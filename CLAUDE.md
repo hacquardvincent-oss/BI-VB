@@ -167,6 +167,16 @@ essaie la version d'API suivante** (`v21,v20,v19,v18`, la 1ʳᵉ qui répond est
 (`cost_micros/1e6`), Impressions, Clics, Conversions, Valeur de conversion → jeu `ads`. `fetchImpressionShare` → `adsis`.
 Routes : `/status`, `/ping` (probe `SELECT campaign.id … LIMIT 1`), `/refresh`.
 
+### 3.4 Meta / Facebook-Instagram (`meta.js`)
+**Env** : `META_ACCESS_TOKEN` (token Marketing API, long-lived ou system user), `META_AD_ACCOUNT_ID` (`act_…` ou chiffres),
+`META_API_VERSION` (optionnel, ex. `v21.0`). Graph API : `GET /{ver}/act_{id}/insights` (`level=campaign`, `time_increment=1`,
+`fields=campaign_name,spend,impressions,clicks,actions,action_values`, `time_range`), **pagination via `paging.next`**, fallback
+de version sur « unknown version ». Achats : `pickPurchase(actions)` prend le 1ᵉʳ type ∈ `[purchase, omni_purchase,
+offsite_conversion.fb_pixel_purchase, …]` (anti double-compte). Sortie = `ADS_HDRS` → jeu **`metaads`** (N/N1), **réutilise
+`calc.calcAds`** (ROAS/COS/CPA). `rep.metaAds` (même forme que `rep.ads`) → carte `metaads` (thème AQ). Routes : `/status`,
+`/ping` (compte: name/currency + 1 insight 30 j), `/refresh`. Upload manuel possible (`metaads` dans `SOURCES`, ADS_ALIASES).
+⏳ **SPLIO (CRM)** : à venir, même pattern connecteur.
+
 ---
 
 ## 4. Ingestion & anti-PII (`ingest.js`)
