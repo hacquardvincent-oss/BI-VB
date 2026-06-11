@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI · Maquette Bilan — direction « Maison »</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  /* ── Direction « Maison » — clair, chaud, épuré ── */
+  --bg:#F6F3EE; --surface:#FFFFFF; --inset:#F4EFE7; --inset2:#EFE9DF;
+  --ink:#1C1A17; --ink2:#6B655C; --ink3:#A39C90; --line:#E8E1D5; --line-soft:#F0EBE1;
+  --accent:#A8854A; --accent-soft:rgba(168,133,74,.10); --accent-line:rgba(168,133,74,.28);
+  --pos:#5E7355; --pos-soft:rgba(94,115,85,.12);
+  --neg:#B0524A; --neg-soft:rgba(176,82,74,.10);
+  --slate:#6E7B8B; --mauve:#9B8AA3;
+  --sp:8px; --r:10px; --r-sm:8px;
+  --shadow:0 1px 2px rgba(28,26,23,.04), 0 8px 24px -16px rgba(28,26,23,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.disp{font-family:'Space Grotesk','Inter',sans-serif}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* Header */
+#hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:22px;padding:0 28px;height:60px;background:rgba(246,243,238,.85);backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid var(--line)}
+#logo{font-family:'Space Grotesk';font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase}
+#logo b{color:var(--accent);font-weight:600}
+nav{display:flex;gap:4px}
+nav a{font-size:13px;color:var(--ink2);padding:7px 13px;border-radius:99px;letter-spacing:.01em}
+nav a.on{background:var(--ink);color:#fff;font-weight:500}
+nav a:not(.on):hover{background:var(--inset)}
+.spacer{margin-left:auto}
+.who{font-size:13px;color:var(--ink2)}
+.av{width:30px;height:30px;border-radius:99px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:600;font-size:12px}
+
+.wrap{max-width:1180px;margin:0 auto;padding:26px 28px 80px;display:flex;flex-direction:column;gap:20px}
+
+/* Sub-bar période */
+.subbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.eyebrow{font-family:'Space Grotesk';font-size:12px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--ink3)}
+.chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 14px;font-weight:500}
+.chip .dot{width:6px;height:6px;border-radius:99px;background:var(--accent)}
+.toggle{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2)}
+.sw{width:34px;height:20px;border-radius:99px;background:var(--accent);position:relative}
+.sw::after{content:"";position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:99px;background:#fff}
+.btn{font-size:13px;font-weight:500;padding:8px 15px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.ghost{background:transparent}
+.btn:hover{border-color:var(--accent-line)}
+
+/* Cartes */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.card.hero{box-shadow:var(--shadow);border-color:var(--line);position:relative;overflow:hidden}
+.card.hero::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),transparent 60%)}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.card-title{font-family:'Space Grotesk';font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+.card-sub{font-size:12px;color:var(--ink3)}
+
+/* Hero KPI */
+.hero-lead{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid var(--line-soft)}
+.hero-lead .lbl{font-size:13px;color:var(--ink2);margin-bottom:6px}
+.hero-num{font-family:'Space Grotesk';font-weight:600;font-size:46px;line-height:1;letter-spacing:-.02em}
+.hero-lead .d{font-size:15px;font-weight:600;margin-bottom:8px}
+.d.pos{color:var(--pos)}.d.neg{color:var(--neg)}
+.hero-lead .ctx{margin-left:auto;font-size:13px;color:var(--ink2);max-width:320px;text-align:right;line-height:1.5}
+
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-sm);overflow:hidden}
+.kc{background:var(--surface);padding:15px 16px}
+.kc .l{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+.kc .v{font-family:'Space Grotesk';font-size:23px;font-weight:600;letter-spacing:-.01em}
+.kc .d{font-size:12px;font-weight:600;margin-top:4px}
+
+/* Donuts row */
+.donuts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-top:20px}
+.donut{display:flex;align-items:center;gap:13px}
+.donut canvas{width:62px!important;height:62px!important}
+.donut .dl{font-size:12px}
+.donut .dl b{font-family:'Space Grotesk';display:block;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.donut .dl span{color:var(--ink3)}
+
+/* Leviers */
+.sigs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sig{display:flex;gap:12px;align-items:flex-start;font-size:13px;background:var(--inset);border-radius:var(--r-sm);padding:13px 15px;line-height:1.45;border-left:2px solid var(--line)}
+.sig.pos{border-left-color:var(--pos)}.sig.neg{border-left-color:var(--neg)}.sig.info{border-left-color:var(--slate)}
+.sig .ic{font-size:15px;line-height:1.3}
+.sig .amt{font-family:'Space Grotesk';font-weight:600;white-space:nowrap}
+.sig .amt.pos{color:var(--pos)}.sig .amt.neg{color:var(--neg)}
+
+/* Plan d'action */
+.teams{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.team{background:var(--inset);border-radius:var(--r-sm);padding:15px}
+.team h4{font-family:'Space Grotesk';font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.team li{list-style:none;font-size:13px;color:var(--ink2);padding:5px 0 5px 16px;position:relative;line-height:1.4}
+.team li::before{content:"";position:absolute;left:0;top:11px;width:5px;height:5px;border-radius:99px;background:var(--accent-line)}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 10px;color:var(--ink3);font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+th:not(:first-child),td:not(:first-child){text-align:right}
+td{padding:10px;border-bottom:1px solid var(--line-soft);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.up{color:var(--pos);font-weight:600}.dn{color:var(--neg);font-weight:600}
+.flag{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:8px;vertical-align:middle}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.chart-box{height:230px;position:relative}
+
+.insight{margin-top:18px;font-size:13px;color:var(--ink);background:var(--accent-soft);border-radius:var(--r-sm);padding:13px 15px;line-height:1.55;border-left:2px solid var(--accent)}
+.insight b{font-weight:600}
+
+.specimen{font-size:12px;color:var(--ink3);text-align:center;padding:10px;line-height:1.6}
+
+@media(max-width:760px){
+  .wrap{padding:18px 16px 60px}
+  .grid2{grid-template-columns:1fr}
+  .sigs{grid-template-columns:1fr}
+  .hero-num{font-size:38px}
+  .hero-lead .ctx{margin-left:0;text-align:left}
+  nav{display:none}
+}
+</style>
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>·</b> Vanessa Bruno</div>
+  <nav>
+    <a class="on" href="#">Reporting</a>
+    <a href="#">Commercial</a>
+    <a href="#">Saison</a>
+    <a href="#">Objectifs</a>
+  </nav>
+  <div class="spacer"></div>
+  <span class="who">Direction e-commerce</span>
+  <div class="av">VB</div>
+</div>
+
+<div class="wrap">
+
+  <!-- Sous-barre période -->
+  <div class="subbar">
+    <span class="eyebrow">Bilan</span>
+    <span class="chip"><span class="dot"></span>1 — 30 avril 2026</span>
+    <span class="chip">vs avril 2025</span>
+    <span class="toggle"><span class="sw"></span>Comparer N-1</span>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn ghost">⬇︎ Export PDF</button>
+    <button class="btn">Recommandations IA</button>
+  </div>
+
+  <!-- HERO BILAN -->
+  <div class="card hero">
+    <div class="card-head">
+      <span class="card-title">Performance e-shop · périmètre EShop (hors marketplaces)</span>
+      <span class="card-sub">Mis à jour il y a 14 min</span>
+    </div>
+
+    <div class="hero-lead">
+      <div>
+        <div class="lbl">CA Global EShop</div>
+        <div class="hero-num tnum">1 248 600 €</div>
+      </div>
+      <div class="d pos">+12,4 % <span style="color:var(--ink3);font-weight:500">vs N-1</span></div>
+      <div class="ctx">Croissance portée par la <b>Maille</b> et l'<b>International</b> ; freinée par un repli e-mail et un pic d'annulations entrepôt.</div>
+    </div>
+
+    <div class="kgrid">
+      <div class="kc"><div class="l">Commandes</div><div class="v tnum">4 820</div><div class="d pos">+8,1 %</div></div>
+      <div class="kc"><div class="l">Taux de transformation</div><div class="v tnum">2,41 %</div><div class="d pos">+0,18 pt</div></div>
+      <div class="kc"><div class="l">Panier moyen</div><div class="v tnum">259 €</div><div class="d pos">+4,0 %</div></div>
+      <div class="kc"><div class="l">Taux d'annulation</div><div class="v tnum">3,1 %</div><div class="d pos">−0,6 pt</div></div>
+      <div class="kc"><div class="l">Sessions</div><div class="v tnum">201 300</div><div class="d pos">+5,2 %</div></div>
+      <div class="kc"><div class="l">COS (coût ÷ CA)</div><div class="v tnum">22 %</div><div class="d pos">−3 pt</div></div>
+    </div>
+
+    <div class="donuts">
+      <div class="donut"><canvas id="d1"></canvas><div class="dl"><b>31 %</b><span>International</span></div></div>
+      <div class="donut"><canvas id="d2"></canvas><div class="dl"><b>82 %</b><span>Entrepôt / omnicanal</span></div></div>
+      <div class="donut"><canvas id="d3"></canvas><div class="dl"><b>36 %</b><span>Démarque (off price)</span></div></div>
+      <div class="donut"><canvas id="d4"></canvas><div class="dl"><b>9 %</b><span>Part marketplaces</span></div></div>
+    </div>
+  </div>
+
+  <!-- LEVIERS -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">Leviers prioritaires</span><span class="card-sub">classés par impact € vs N-1</span></div>
+    <div class="sigs">
+      <div class="sig pos"><span class="ic">▲</span><div><b>Maille</b> — meilleure progression famille. <span class="amt pos">+38 200 €</span> vs N-1, tirée par les nouveaux modèles col montant.</div></div>
+      <div class="sig neg"><span class="ic">▼</span><div><b>CRM / E-mail</b> — canal en recul. <span class="amt neg">−21 400 €</span> : cadence passée de 3 à 4 jours, taux d'ouverture en baisse.</div></div>
+      <div class="sig neg"><span class="ic">▼</span><div><b>Annulations entrepôt</b> — ruptures sur best-sellers. <span class="amt neg">−12 800 €</span> de CA non honoré.</div></div>
+      <div class="sig neg"><span class="ic">▼</span><div><b>Sacs</b> à reconquérir — best-sellers N-1 sortis du top. <span class="amt neg">−9 600 €</span>.</div></div>
+      <div class="sig info"><span class="ic">◆</span><div><b>International</b> — opportunité : +18 % de sessions hors France mais TT inférieur de 0,4 pt → marge de conversion.</div></div>
+      <div class="sig pos"><span class="ic">▲</span><div><b>Paid · ROAS</b> — 3 campagnes au-dessus de 4×. <span class="amt pos">+14 500 €</span> de marge si rebascule budgétaire.</div></div>
+    </div>
+  </div>
+
+  <!-- PLAN D'ACTION -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">Plan d'action</span><span class="card-sub">par équipe</span></div>
+    <div class="teams">
+      <div class="team"><h4>Acquisition</h4><ul>
+        <li>Rebasculer le budget vers les campagnes ROAS &gt; 4×</li>
+        <li>Tester l'audience International (TT en retard)</li></ul></div>
+      <div class="team"><h4>Merch</h4><ul>
+        <li>Pousser la Maille en page d'accueil (best-seller entrant)</li>
+        <li>Reconquérir les Sacs sortis du top</li></ul></div>
+      <div class="team"><h4>CRM</h4><ul>
+        <li>Revenir à une cadence e-mail de 2 jours</li>
+        <li>Envoi à 10 h (pic d'engagement)</li></ul></div>
+      <div class="team"><h4>Ops</h4><ul>
+        <li>Traiter le pic d'annulations entrepôt</li>
+        <li>Réassort des best-sellers en rupture</li></ul></div>
+    </div>
+  </div>
+
+  <!-- GRAPHES -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><span class="card-title">Suivi du CA · 4 semaines</span></div>
+      <div class="chart-box"><canvas id="tl"></canvas></div>
+      <div class="insight">💡 Le <b>pic du 18 avril</b> coïncide avec l'envoi e-mail « Nouveautés Maille » ; le creux du week-end suivant suit l'arrêt des campagnes payantes.</div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">Familles · croissance / repli</span></div>
+      <div class="chart-box"><canvas id="fam"></canvas></div>
+      <div class="insight">💡 La <b>Maille</b> et les <b>Robes</b> portent la croissance ; <b>Sacs</b> et <b>Accessoires</b> reculent — à arbitrer côté merch.</div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">International · top pays (hors France)</span><span class="card-sub">CA · part · vs N-1</span></div>
+    <table>
+      <thead><tr><th>Pays</th><th>CA</th><th>Commandes</th><th>Panier moyen</th><th>vs N-1</th></tr></thead>
+      <tbody>
+        <tr><td><span class="flag" style="background:#cdb892"></span>Allemagne</td><td class="tnum">94 200 €</td><td class="tnum">312</td><td class="tnum">302 €</td><td class="up">+21 %</td></tr>
+        <tr><td><span class="flag" style="background:#b6543f"></span>Belgique</td><td class="tnum">71 800 €</td><td class="tnum">268</td><td class="tnum">268 €</td><td class="up">+9 %</td></tr>
+        <tr><td><span class="flag" style="background:#9b8aa3"></span>Suisse</td><td class="tnum">68 400 €</td><td class="tnum">190</td><td class="tnum">360 €</td><td class="up">+14 %</td></tr>
+        <tr><td><span class="flag" style="background:#6e7b8b"></span>Italie</td><td class="tnum">52 100 €</td><td class="tnum">214</td><td class="tnum">243 €</td><td class="dn">−6 %</td></tr>
+        <tr><td><span class="flag" style="background:#5e7355"></span>États-Unis</td><td class="tnum">47 600 €</td><td class="tnum">158</td><td class="tnum">301 €</td><td class="up">+33 %</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="specimen">
+    Typo : <span class="disp" style="font-size:14px;color:var(--ink)">Space Grotesk</span> (titres &amp; chiffres) + Inter (donnée) — modernes, swappables.
+    Palette : bone · encre · laiton · sauge · terracotta. Direction « Maison ».
+  </div>
+
+</div>
+
+<script>
+Chart.defaults.font.family = 'Inter';
+Chart.defaults.font.size = 11;
+Chart.defaults.color = '#A39C90';
+const C = { accent:'#A8854A', accentL:'#D8C39A', ink:'#1C1A17', pos:'#5E7355', neg:'#B0524A', slate:'#6E7B8B', mauve:'#9B8AA3', line:'rgba(28,26,23,.06)' };
+
+function donut(id, val, color){
+  new Chart(document.getElementById(id), {
+    type:'doughnut',
+    data:{ datasets:[{ data:[val,100-val], backgroundColor:[color,'#EEE7DB'], borderWidth:0 }] },
+    options:{ cutout:'74%', plugins:{legend:{display:false},tooltip:{enabled:false}}, animation:false }
+  });
+}
+donut('d1',31,C.slate); donut('d2',82,C.accent); donut('d3',36,C.mauve); donut('d4',9,C.neg);
+
+// Timeline
+const days = Array.from({length:28},(_,i)=>i+1);
+const caN = days.map((d,i)=>26000+9000*Math.sin(i/3)+ (i===17?28000:0)+ (i%7>4?-9000:4000)+Math.random()*3000);
+const caN1 = caN.map(v=>v*0.86-2000);
+const tt = days.map((d,i)=>2.1+0.6*Math.sin(i/4));
+new Chart(document.getElementById('tl'), {
+  data:{ labels:days, datasets:[
+    { type:'bar', label:'CA N', data:caN, backgroundColor:C.accent, borderRadius:3, barPercentage:.62, order:3 },
+    { type:'bar', label:'CA N-1', data:caN1, backgroundColor:'#E4D6BC', borderRadius:3, barPercentage:.62, order:4 },
+    { type:'line', label:'Taux transfo', data:tt, yAxisID:'y1', borderColor:C.pos, backgroundColor:'transparent', borderWidth:1.6, tension:.4, pointRadius:0, order:1 },
+  ]},
+  options:{ responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{ legend:{ labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, padding:14, font:{size:11} } } },
+    scales:{
+      x:{ grid:{display:false}, ticks:{ maxTicksLimit:8, color:'#BBB2A4' }, border:{color:C.line} },
+      y:{ grid:{color:C.line}, border:{display:false}, ticks:{ callback:v=>(v/1000).toFixed(0)+'k' } },
+      y1:{ position:'right', grid:{display:false}, border:{display:false}, ticks:{ callback:v=>v.toFixed(1)+'%', color:C.pos }, min:0, max:4 }
+    }
+  }
+});
+
+// Familles croissance/repli (barres horizontales empilées : base + cap coloré)
+const fams = [
+  {n:'Maille', a:148000, b:110000},
+  {n:'Robes', a:121000, b:104000},
+  {n:'Manteaux', a:96000, b:91000},
+  {n:'Accessoires', a:54000, b:63000},
+  {n:'Sacs', a:71000, b:84000},
+];
+new Chart(document.getElementById('fam'), {
+  type:'bar',
+  data:{ labels:fams.map(f=>f.n), datasets:[
+    { label:'base', data:fams.map(f=>Math.min(f.a,f.b)), backgroundColor:'#E4DBCB', stack:'s', borderRadius:0 },
+    { label:'évolution', data:fams.map(f=>Math.abs(f.a-f.b)), backgroundColor:fams.map(f=>f.a>=f.b?C.pos:C.neg), stack:'s', borderRadius:3 },
+  ]},
+  options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
+    plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+    scales:{
+      x:{ grid:{color:C.line}, border:{display:false}, ticks:{ callback:v=>(v/1000).toFixed(0)+'k' } },
+      y:{ grid:{display:false}, border:{display:false}, ticks:{ color:C.ink, font:{size:12,weight:'500'} } }
+    }
+  }
+});
+</script>
+</body>
+</html>
