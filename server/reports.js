@@ -93,6 +93,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // sinon (FR/Inter) on garde gasess filtré par pays (forcément seuillé, mais c'est le bon périmètre).
   const totSrcN = (dim === 'global' && gaTotN) ? gaTotN : sessSrcN;
   const totSrcN1 = (dim === 'global' && gaTotN1) ? gaTotN1 : sessSrcN1;
+  // Sessions par ZONE (France vs International) — depuis gasess brut (date×pays), pour le donut
+  // « Sessions FR/Inter ». ⚠️ niveau pays = seuillé GA4 (cf §12) → c'est un split indicatif.
+  const zoneSess = src => { const m = calc.gaSessionsByCountry(src); if (!m) return null; let fr = 0, inter = 0; Object.entries(m).forEach(([k, v]) => { if (k === 'france') fr += v; else inter += v; }); return { fr: Math.round(fr), inter: Math.round(inter) }; };
+  const sessionsByZone = { n: zoneSess(gaSessN), n1: zoneSess(gaSessN1) };
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
   const refMap = ref ? calc.buildRefMap(ref) : {};
@@ -712,6 +716,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     hourly,
     gaFunnel,
     ttPays,
+    sessionsByZone,
     landingPages,
     itemFunnel,
     topPages,
