@@ -425,6 +425,7 @@ function balanceKgrids(root) {
 }
 let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
 
 // Glisser-déposer des sections (réordonne + mémorise, re-render sans refetch).
 function wireDnD(rep, day) {
