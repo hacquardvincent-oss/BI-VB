@@ -83,14 +83,14 @@ function secGlobal(rep) {
     const caN = zN.caFP + zN.caOP, caN1 = zN1 ? (zN1.caFP + zN1.caOP) : null;
     if (caN <= 0 && (!caN1 || caN1 <= 0)) return '';
     return line(name, caN, caN1, 'zone', false)
-      + line('Démarqué (Off)', zN.caOP, zN1 ? zN1.caOP : null, 'sub', true)
+      + line('Démarqué (Off)', zN.caOP, zN1 ? zN1.caOP : null, 'sub', false)
       + line('Full price', zN.caFP, zN1 ? zN1.caFP : null, 'sub', false);
   };
   const body = zoneRows('FR', z.fr, z1 ? z1.fr : null) + zoneRows('International', z.inter, z1 ? z1.inter : null)
     + line('Total général', totN, z1 ? totN1 : null, 'total', false);
   return `<div class="card"><h3>🌍 GLOBAL — CA par zone × démarque (poids & vs N-1)</h3>
     <table class="pivot"><thead><tr><th>Zone</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>Poids N-1</th><th>vs N-1</th><th>Évol. €</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="note">💡 Lignes <b>FR / International / Total</b> mises en évidence ; sous-lignes <b>Démarqué</b> (inversé) / <b>Full price</b> indentées. On veut faire grandir le CA sans gonfler le poids du démarqué. Le « Poids » est calculé sur le CA total EShop de la période.</div></div>`;
+    <div class="note">💡 Lignes <b>FR / International / Total</b> mises en évidence ; sous-lignes <b>Démarqué / Full price</b> indentées. <b>vs N-1</b> en couleur absolue : <span class="up">vert = hausse du CA</span>, <span class="dn">rouge = baisse</span> (sur toutes les lignes). Le « Poids » est calculé sur le CA total EShop de la période.</div></div>`;
 }
 
 // Lancement : CA à l'heure du jour J (barres) + cumul vs cumul N-1 (courbes) — quasi temps réel.
