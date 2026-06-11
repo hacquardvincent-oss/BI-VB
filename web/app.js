@@ -183,9 +183,10 @@ const W_METRICS = {
   purchases: { label: 'Achats (GA)', fmt: 'int' },
   caFP: { label: 'CA Full Price (€)', fmt: 'eur' }, caOP: { label: 'CA Off Price (€)', fmt: 'eur' },
   caFR: { label: 'CA France (€)', fmt: 'eur' }, caInt: { label: 'CA International (€)', fmt: 'eur' },
+  caEnt: { label: 'CA Entrepôt (€)', fmt: 'eur' }, caSFS: { label: 'CA Ship-from-store (€)', fmt: 'eur' },
 };
 const W_DIMS = {
-  total: { label: 'Total période (1 chiffre)', metrics: ['ca', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'caFP', 'caOP', 'caFR', 'caInt'], forms: ['kpi'] },
+  total: { label: 'Total période (1 chiffre)', metrics: ['ca', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'caFP', 'caOP', 'caFR', 'caInt', 'caEnt', 'caSFS'], forms: ['kpi'] },
   famille: { label: 'Par famille', metrics: ['ca'], forms: ['bars', 'table', 'donut'] },
   pays: { label: 'Par pays', metrics: ['ca', 'commandes'], forms: ['bars', 'table', 'donut'] },
   produit: { label: 'Par produit (top 10)', metrics: ['ca', 'qte'], forms: ['table', 'bars'] },
@@ -210,7 +211,7 @@ function widgetData(w, rep) {
       case 'total': {
         const k = rep.kpiEShop && rep.kpiEShop.n, k1 = (rep.kpiEShop && rep.kpiEShop.n1) || {};
         const c = rep.ca && rep.ca.n, c1 = (rep.ca && rep.ca.n1) || {};
-        const map = { ca: [k && k.ca, k1.ca], commandes: [k && k.commandes, k1.commandes], pieces: [k && k.pieces, k1.pieces], pm: [k && k.pm, k1.pm], tt: [k && k.tt, k1.tt], sessions: [k && k.sessions, k1.sessions], caFP: [c && c.caFP, c1.caFP], caOP: [c && c.caOP, c1.caOP], caFR: [c && c.caFR, c1.caFR], caInt: [c && c.caInt, c1.caInt] };
+        const map = { ca: [k && k.ca, k1.ca], commandes: [k && k.commandes, k1.commandes], pieces: [k && k.pieces, k1.pieces], pm: [k && k.pm, k1.pm], tt: [k && k.tt, k1.tt], sessions: [k && k.sessions, k1.sessions], caFP: [c && c.caFP, c1.caFP], caOP: [c && c.caOP, c1.caOP], caFR: [c && c.caFR, c1.caFR], caInt: [c && c.caInt, c1.caInt], caEnt: [c && c.caEnt, c1.caEnt], caSFS: [c && c.caSFS, c1.caSFS] };
         const v = map[M] || [null, null];
         return out([{ label: (W_METRICS[M] || {}).label || M, n: v[0], n1: v[1] }]);
       }
@@ -302,14 +303,16 @@ function renderWidgetCharts() {
 }
 
 // Constructeur de widget (modal) : Donnée × Métrique × Forme × Top × N-1 → callback(widget).
-function openWidgetBuilder(cb) {
+// `existing` (optionnel) = widget à MODIFIER (pré-remplit le volet et conserve son id).
+function openWidgetBuilder(cb, existing) {
+  const ed = existing || null;
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:70;padding:20px';
   const dimOpts = Object.entries(W_DIMS).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
   ov.innerHTML = `<div style="background:var(--s);border:1px solid var(--br);border-radius:14px;padding:18px;width:430px;max-width:100%">
-    <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:10px"><b>🧱 Nouveau widget</b><span id="wbX" style="cursor:pointer;color:var(--t3)">✕</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:10px"><b>${ed ? '⚙️ Modifier le tableau' : '🧱 Nouveau tableau'}</b><span id="wbX" style="cursor:pointer;color:var(--t3)">✕</span></div>
     <label class="note" style="display:block;margin:8px 0 2px">Titre (optionnel)</label>
-    <input id="wbTitle" class="dt" style="width:100%" placeholder="ex. Part PAP vs Maroquinerie (CA)">
+    <input id="wbTitle" class="dt" style="width:100%" placeholder="ex. Part PAP vs Maroquinerie (CA)" value="${ed ? esc(ed.title || '') : ''}">
     <label class="note" style="display:block;margin:10px 0 2px">Donnée (dimension)</label>
     <select id="wbDim" class="dt" style="width:100%">${dimOpts}</select>
     <label class="note" style="display:block;margin:10px 0 2px">Métrique</label>
@@ -317,34 +320,38 @@ function openWidgetBuilder(cb) {
     <label class="note" style="display:block;margin:10px 0 2px">Forme</label>
     <select id="wbForm" class="dt" style="width:100%"></select>
     <div class="toolbar" style="margin-top:10px">
-      <label class="note" style="margin:0">Top</label>
-      <select id="wbTop" class="dt"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
-      <label class="note" style="margin:0 0 0 10px"><input type="checkbox" id="wbN1" checked> Comparer à N-1</label>
+      <label class="note" style="margin:0" title="Nombre de lignes affichées (1 à 50)">Top N</label>
+      <input id="wbTop" type="number" min="1" max="50" class="dt" style="width:72px" value="${ed ? (ed.top || 10) : 10}">
+      <label class="note" style="margin:0 0 0 10px"><input type="checkbox" id="wbN1" ${(!ed || ed.n1 !== false) ? 'checked' : ''}> Comparer à N-1</label>
     </div>
     <div class="toolbar" style="margin-top:14px;justify-content:flex-end">
       <button class="btn" id="wbCancel">Annuler</button>
-      <button class="btn primary" id="wbAdd">Ajouter le widget</button>
+      <button class="btn primary" id="wbAdd">${ed ? '✓ Enregistrer' : 'Ajouter le tableau'}</button>
     </div></div>`;
   document.body.appendChild(ov);
-  const fill = () => {
+  // Remplit les listes Métrique/Forme selon la dimension ; `pm`/`pf` = valeurs à présélectionner (édition).
+  const fill = (pm, pf) => {
     const d = W_DIMS[ov.querySelector('#wbDim').value];
     ov.querySelector('#wbMetric').innerHTML = d.metrics.map(m => `<option value="${m}">${esc(W_METRICS[m].label)}</option>`).join('');
     ov.querySelector('#wbForm').innerHTML = d.forms.map(f => `<option value="${f}">${esc(W_FORMS[f])}</option>`).join('');
+    if (pm && d.metrics.includes(pm)) ov.querySelector('#wbMetric').value = pm;
+    if (pf && d.forms.includes(pf)) ov.querySelector('#wbForm').value = pf;
   };
-  fill();
-  ov.querySelector('#wbDim').addEventListener('change', fill);
+  if (ed) ov.querySelector('#wbDim').value = ed.dim;
+  fill(ed && ed.metric, ed && ed.form);
+  ov.querySelector('#wbDim').addEventListener('change', () => fill());
   const close = () => ov.remove();
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   ov.querySelector('#wbX').onclick = close;
   ov.querySelector('#wbCancel').onclick = close;
   ov.querySelector('#wbAdd').onclick = () => {
     const w = {
-      id: 'w' + Date.now().toString(36),
+      id: ed ? ed.id : ('w' + Date.now().toString(36)),
       title: ov.querySelector('#wbTitle').value.trim(),
       dim: ov.querySelector('#wbDim').value,
       metric: ov.querySelector('#wbMetric').value,
       form: ov.querySelector('#wbForm').value,
-      top: parseInt(ov.querySelector('#wbTop').value) || 10,
+      top: Math.min(50, Math.max(1, parseInt(ov.querySelector('#wbTop').value) || 10)),
       n1: ov.querySelector('#wbN1').checked,
     };
     close(); cb(w);
@@ -507,6 +514,7 @@ function initModules() {
       const body = renderCustomWidget(w, LAST_REP, true) || `<div class="card"><h3>🧱 ${esc(w.title || 'Widget')}</h3><div class="note">Pas de donnée pour ce widget sur cette période.</div></div>`;
       cont.insertAdjacentHTML('afterbegin', editWrapHtml(w, true, body));
       renderWidgetCharts(); // dessine le graphe du widget fraîchement inséré
+      balanceKgrids(cont);
       updateEditCount();
       cont.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }));
@@ -1577,10 +1585,11 @@ function editWrapHtml(k, inView, bodyHtml) {
   const isW = typeof k === 'object' && k;
   const name = isW ? (k.title || `Widget ${(W_DIMS[k.dim] || {}).label || k.dim}`) : (CARD_LABELS[k] || k);
   const attrs = isW ? `data-widget="${encodeURIComponent(JSON.stringify(k))}"` : `data-key="${k}"`;
+  const cfg = isW ? `<button type="button" class="edit-cfg" title="Modifier ce tableau (donnée, métrique, forme, top…)">⚙️ Modifier</button>` : '';
   return `<div class="edit-wrap ${inView ? 'in' : 'out'}" draggable="true" ${attrs} data-in="${inView ? 1 : 0}">
     <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner le sens de lecture">⠿</span>
       <button type="button" class="edit-toggle">${inView ? '✓ Dans la vue' : '+ Ajouter à la vue'}</button>
-      <span class="edit-name">${isW ? '🧱 ' : ''}${esc(name)}</span></div>${bodyHtml}</div>`;
+      ${cfg}<span class="edit-name">${isW ? '🧱 ' : ''}${esc(name)}</span></div>${bodyHtml}</div>`;
 }
 function renderEditMode(rep, card) {
   const cur = getLayout(EDIT_VIEW);
@@ -1611,6 +1620,20 @@ function wireEditMode() {
     if (after) cont.insertBefore(dragEl, after); else cont.appendChild(dragEl);
   });
   cont.addEventListener('click', e => {
+    // ⚙️ Modifier un widget en place : rouvre le constructeur pré-rempli, remplace le tableau.
+    const cfgBtn = e.target.closest('.edit-cfg');
+    if (cfgBtn) {
+      const wrap = cfgBtn.closest('.edit-wrap'); if (!wrap || !wrap.dataset.widget) return;
+      let cur; try { cur = JSON.parse(decodeURIComponent(wrap.dataset.widget)); } catch { return; }
+      openWidgetBuilder(nw => {
+        const inView = wrap.dataset.in === '1';
+        wrap.outerHTML = editWrapHtml(nw, inView, renderCustomWidget(nw, LAST_REP, true));
+        renderWidgetCharts();
+        balanceKgrids(document.getElementById('editCards'));
+        updateEditCount();
+      }, cur);
+      return;
+    }
     const btn = e.target.closest('.edit-toggle'); if (!btn) return;
     const w = btn.closest('.edit-wrap'); const on = w.dataset.in === '1';
     w.dataset.in = on ? '0' : '1';
