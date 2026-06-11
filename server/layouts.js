@@ -38,7 +38,7 @@ router.get('/', requireAuth, (req, res) => res.json(LAYOUTS));
 
 // Widgets « from scratch » : mêmes whitelists que userviews.js.
 const W_DIMS = ['total', 'famille', 'pays', 'produit', 'saison', 'canal', 'canaltype', 'device', 'jour', 'tranche', 'campagne'];
-const W_METRICS = ['ca', 'qte', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'revenue', 'purchases', 'caFP', 'caOP', 'caFR', 'caInt'];
+const W_METRICS = ['ca', 'qte', 'commandes', 'pieces', 'pm', 'tt', 'sessions', 'revenue', 'purchases', 'caFP', 'caOP', 'caFR', 'caInt', 'caEnt', 'caSFS'];
 const W_FORMS = ['kpi', 'table', 'bars', 'donut', 'line'];
 function cleanCard(c) {
   if (typeof c === 'string') return KNOWN.has(c) ? c : null;

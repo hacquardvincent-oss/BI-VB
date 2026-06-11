@@ -136,6 +136,8 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .edit-wrap .edit-grip{color:var(--a);font-size:16px;cursor:grab}
 .edit-wrap .edit-name{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
 .edit-toggle{font-size:12px;font-weight:600;padding:4px 13px;border-radius:99px;border:1px solid var(--br);cursor:pointer;background:var(--s);color:var(--t2)}
+.edit-cfg{font-size:12px;font-weight:600;padding:4px 11px;border-radius:99px;border:1px solid var(--br);cursor:pointer;background:var(--s);color:var(--t2)}
+.edit-cfg:hover{border-color:var(--accent-line);color:var(--a)}
 .edit-wrap.in .edit-toggle{background:var(--pos-bg);color:var(--g);border-color:var(--g)}
 .edit-wrap.out .edit-toggle{background:var(--accent-soft);color:var(--a);border-color:var(--accent-line)}
 .edit-wrap .card{margin:0}
