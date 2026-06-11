@@ -187,6 +187,16 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     cos: { n: cosOf(adsCalcN.cost, kpiEShopN.ca), n1: adsCalcN1 && kpiEShopN1 ? cosOf(adsCalcN1.cost, kpiEShopN1.ca) : null },
     cac: { n: cacOf(adsCalcN.cost, kpiEShopN.commandes), n1: adsCalcN1 && kpiEShopN1 ? cacOf(adsCalcN1.cost, kpiEShopN1.commandes) : null },
   } : null;
+  // Meta Ads (Facebook/Instagram) — même calcul que Google Ads, jeu séparé « metaads ».
+  const metaN = await loadDataset('metaads', 'N'), metaN1 = await loadN1('metaads');
+  const metaCalcN = metaN ? calc.calcAds(metaN.rows, metaN.map) : null;
+  const metaCalcN1 = metaN1 ? calc.calcAds(metaN1.rows, metaN1.map) : null;
+  const metaAds = metaCalcN ? {
+    n: metaCalcN, n1: metaCalcN1,
+    roas: { n: roasOf(metaCalcN.cost, kpiEShopN.ca), n1: metaCalcN1 && kpiEShopN1 ? roasOf(metaCalcN1.cost, kpiEShopN1.ca) : null },
+    cos: { n: cosOf(metaCalcN.cost, kpiEShopN.ca), n1: metaCalcN1 && kpiEShopN1 ? cosOf(metaCalcN1.cost, kpiEShopN1.ca) : null },
+    cac: { n: cacOf(metaCalcN.cost, kpiEShopN.commandes), n1: metaCalcN1 && kpiEShopN1 ? cacOf(metaCalcN1.cost, kpiEShopN1.commandes) : null },
+  } : null;
 
   // ── Scorecards multi-fenêtres (Bilan période / Cumul mensuel / Cumul saison) ──
   // Sessions ajustées du consentement + COS via dépense Ads filtrée sur la fenêtre.
@@ -739,6 +749,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     ga: gaCalcN,
     gaN1: gaCalcN1,
     ads,
+    metaAds,
   };
 }
 

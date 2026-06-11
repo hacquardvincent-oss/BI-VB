@@ -39,7 +39,7 @@ const MODULES = {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
     intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
-    layout: ['ga', 'channels', 'canaltype', 'ads', 'campaigns'],
+    layout: ['ga', 'channels', 'canaltype', 'ads', 'metaads', 'campaigns'],
   },
   saisonprod: {
     icon: '👗', label: 'Offre & Merchandising', preset: 'all',
@@ -99,7 +99,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -116,7 +116,7 @@ const THEME_OF = {
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
   itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
-  ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', campaigns: 'AQ',
+  ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP',
@@ -137,14 +137,14 @@ const CARD_LABELS = {
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', stockalerts: 'Alertes stock',
-  ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)',
+  ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)',
   campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
@@ -1288,6 +1288,28 @@ function renderReport(rep) {
       <div class="note">${legend}</div></div>`;
   }
 
+  // Meta Ads (Facebook / Instagram) — dépense & ROAS + efficacité par campagne
+  let metaadsCard = '';
+  if (rep.metaAds && rep.metaAds.n) {
+    const A = rep.metaAds, a = A.n, a1 = A.n1 || {};
+    const roas = v => (v == null ? '—' : v.toFixed(2) + '×');
+    const cos = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
+    const kc = (l, v, d) => `<div class="kc"><div class="l">${l}</div><div class="v">${v}</div>${d ? `<div style="font-size:11px">${d}</div>` : ''}</div>`;
+    const tiles = [
+      kc('Dépense Meta', fEur(a.cost), a1.cost ? delta(a.cost, a1.cost) : ''),
+      kc('Valeur d\'achat (pixel Meta)', fEur(a.convValue), a1.convValue ? delta(a.convValue, a1.convValue) : ''),
+      kc('ROAS Meta (valeur ÷ dépense)', roas(a.roasGA), ''),
+      kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
+      kc('COS (dépense ÷ CA EShop)', cos(A.cos && A.cos.n), A.cos && A.cos.n1 != null ? 'N-1 ' + cos(A.cos.n1) : ''),
+      kc('Achats / Clics', `${fInt(a.conversions)} / ${fInt(a.clicks)}`, a.cpa != null ? 'CPA ' + fEur(a.cpa) : ''),
+    ].join('');
+    const rows = (a.byCampaign || []).slice(0, 15).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 40))}</td><td>${fEur(c.cost)}</td><td>${fInt(c.clicks)}</td><td>${c.ctr != null ? fPct(c.ctr) : '—'}</td><td>${c.cpc != null ? f2(c.cpc) : '—'}</td><td>${fInt(c.conversions)}</td><td>${fEur(c.convValue)}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td><td>${c.roasGA != null ? roas(c.roasGA) : '—'}</td></tr>`).join('');
+    metaadsCard = `<div class="card"><h3>📘 Meta Ads — Facebook / Instagram${A.n1 ? ' · N vs N-1' : ''}</h3>
+      <div class="kgrid">${tiles}</div>
+      <table style="margin-top:10px"><thead><tr><th>Campagne</th><th>Dépense</th><th>Clics</th><th>CTR</th><th>CPC</th><th>Achats</th><th>Valeur achat</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="note">Données pixel Meta (achats & valeur d'achat attribués par Meta). <b>ROAS Meta</b> = valeur d'achat pixel ÷ dépense ; <b>ROAS (CA EShop)</b> et <b>COS</b> rapportent la dépense au CA réel WSHOP (vision marge). Rafraîchis via « 🔄 Rafraîchir Meta (API) ».</div></div>`;
+  }
+
   // Cartes nommées + layout adapté à la cadence
   // Full price vs Off price — familles & top produits vs N-1 (analyse démarque saison)
   let fullOffCard = '';
@@ -1435,7 +1457,7 @@ function renderReport(rep) {
     retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
-    ads: adsCard,
+    ads: adsCard, metaads: metaadsCard,
   };
   const layout = getLayout(CURRENT_MODULE);
   const card = k => {
@@ -2319,6 +2341,39 @@ document.getElementById('adsping').addEventListener('click', async () => {
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
+// Meta (Facebook/Instagram) Marketing API
+async function metaStatus() {
+  try {
+    const r = await fetch('/api/meta/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) document.getElementById('metabox').classList.remove('hidden');
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('metarefresh').addEventListener('click', async () => {
+  const note = document.getElementById('metanote');
+  note.textContent = 'Récupération Meta sur la période sélectionnée…';
+  const q = new URLSearchParams(importPeriod()).toString();
+  const r = await fetch('/api/meta/refresh?' + q, { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur Meta'); return; }
+  const warn = (j.warnings && j.warnings.length) ? ` · ⚠ ${esc(j.warnings.join(' ; '))}` : '';
+  note.textContent = `✓ Meta importé : ${fInt(j.rowsN)} lignes N${j.rowsN1 != null ? ` · ${fInt(j.rowsN1)} lignes N-1` : ''} (${j.period.start} → ${j.period.end})${warn}`;
+  applyCurrentPeriod();
+  await loadStatus();
+  loadReport();
+});
+document.getElementById('metaping').addEventListener('click', async () => {
+  const note = document.getElementById('metanote');
+  note.textContent = 'Test de connexion Meta…';
+  try {
+    const r = await fetch('/api/meta/ping');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    note.textContent = `compte ${esc(j.account || '?')}${j.name ? ' « ' + esc(j.name) + ' »' : ''}${j.currency ? ' (' + esc(j.currency) + ')' : ''} · ${esc(j.apiVersion || '')} · auth ${esc(j.auth || '?')} · requête ${esc(j.query || '—')}${j.sampleRows != null ? ` (${j.sampleRows} lignes échantillon)` : ''}`;
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
+});
+
 // ── SFTP (Y2 / ERP) ──
 async function sftpStatus() {
   try {
@@ -2677,6 +2732,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await ga4Status();
   await wshopStatus();
   await googleAdsStatus();
+  await metaStatus();
   await sftpStatus();
   await recoStatus();
   updateApiHint();
