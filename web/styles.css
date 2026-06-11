@@ -38,7 +38,9 @@ a{color:var(--a);text-decoration:none}
 
 /* Cartes */
 .card{background:var(--s);border:1px solid var(--br);border-radius:12px;padding:20px}
-.card h3{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:14px}
+.card h3{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
+/* Filet d'accent laiton devant chaque titre de carte → repérage rapide (mais discret, sous les CTA) */
+.card h3::before{content:"";display:inline-block;width:3px;height:12px;border-radius:99px;background:var(--a);margin-right:9px;vertical-align:-2px}
 
 .grid{display:grid;gap:12px}
 .sources{grid-template-columns:repeat(auto-fit,minmax(175px,1fr))}
@@ -108,6 +110,7 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 
 /* Bandeaux de thème */
 .section-head{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--a);text-transform:uppercase;letter-spacing:.14em;padding:10px 2px 8px;border-bottom:1px solid var(--br);margin-top:6px;scroll-margin-top:16px}
+.section-head::before{content:"";display:inline-block;width:4px;height:13px;border-radius:99px;background:var(--a);margin-right:10px;vertical-align:-2px}
 #report .section-head:first-child{margin-top:0}
 .bilan{scroll-margin-top:16px}
 
