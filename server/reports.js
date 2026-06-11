@@ -546,6 +546,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n: calc.calcDiscountDepth(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.calcDiscountDepth(rowsN1, mapN1) : null,
   };
+  const fullOffAudit = calc.calcFullOffAudit(rowsN, omsN.map);
   const promo = {
     n: calc.calcPromoImpact(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.calcPromoImpact(rowsN1, mapN1) : null,
@@ -672,6 +673,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     familleDetail,
     familleParPays: calc.calcFamilleParPays(rowsN, omsN.map, refMap),
     demarqueDepth,
+    fullOffAudit,
     promo,
     offreCompare,
     offreCAByListing,

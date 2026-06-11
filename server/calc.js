@@ -796,6 +796,29 @@ function calcFullOffByProduct(rows, omsMap) {
   return by;
 }
 
+// ── Audit du calcul Full/Off (transparence : vérifier la règle ligne par ligne) ──
+// Renvoie la réconciliation (Full + Off = Total EShop hors mkt), les comptages, et un
+// échantillon de lignes (Prix Vente / Remisé / payé / démarque % / classe) — full ET off.
+function calcFullOffAudit(rows, map, sampleSize = 24) {
+  const pi = map.prix, pvi = map.pv, pvri = map.pv_remise, ti = map.type, di = map.des;
+  if (pvi === undefined || pvri === undefined) return null;
+  let caFull = 0, caOff = 0, nFull = 0, nOff = 0, nResidu = 0;
+  const offS = [], fullS = [];
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const p = fN(r[pi]), pv = fN(r[pvi]), pvr = fN(r[pvri]);
+    const full = isFullPriceLine(pv, pvr, p);
+    const row = { des: di !== undefined ? (r[di] || '').toString().slice(0, 32) : '', pv, pvr, paid: p, depth: full ? 0 : discountDepthOf(pv, pvr, p), classe: full ? 'Full' : 'Off' };
+    if (full) { caFull += p; nFull++; if (pvr > 0 && pv > 0 && (1 - pvr / pv) > 0 && (1 - pvr / pv) < DEMARQUE_MIN_DEPTH) nResidu++; if (fullS.length < sampleSize / 2) fullS.push(row); }
+    else { caOff += p; nOff++; if (offS.length < sampleSize / 2) offS.push(row); }
+  });
+  return {
+    caFull: Math.round(caFull * 100) / 100, caOff: Math.round(caOff * 100) / 100, caTotal: Math.round((caFull + caOff) * 100) / 100,
+    nFull, nOff, nResidu, seuilPct: DEMARQUE_MIN_DEPTH * 100,
+    sample: [...offS, ...fullS],
+  };
+}
+
 // ── Démarque : CA par TRANCHE de démarque (hors mkt) ────────────────────────
 // Profondeur = 1 − (Prix payé / Prix catalogue) sur les lignes démarquées (cf. discountDepthOf).
 // → lire « où se fait le CA démarqué » (-20 / -30 / -40 / -50 %+) et comparer à N-1.
@@ -1458,7 +1481,7 @@ module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
-  calcDiscountDepth, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
+  calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,

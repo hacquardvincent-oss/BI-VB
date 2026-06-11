@@ -738,8 +738,19 @@ function renderReport(rep) {
   let gaCard = '';
   if (rep.ga) {
     const g = rep.ga, g1 = rep.gaN1;
+    // ⚠️ Réconciliation sessions : la ventilation `ga` (date×canal×device×pays) SUR-COMPTE les
+    // sessions vs le total plateforme. Le Bilan utilise `gasess` (date×pays, fiable). On ANCRE donc
+    // le total Acquisition sur le même chiffre que le Bilan (kpiEShop.sessions) et on met la
+    // ventilation par canal À L'ÉCHELLE (les proportions GA sont fiables, pas l'absolu).
+    const cleanN = (rep.kpiEShop && rep.kpiEShop.n && rep.kpiEShop.n.sessions != null) ? rep.kpiEShop.n.sessions : g.totalSessions;
+    const cleanN1 = (rep.kpiEShop && rep.kpiEShop.n1 && rep.kpiEShop.n1.sessions != null) ? rep.kpiEShop.n1.sessions : (g1 ? g1.totalSessions : null);
+    const scaleN = (cleanN > 0 && g.totalSessions > 0) ? cleanN / g.totalSessions : 1;
+    const scaleN1 = (cleanN1 > 0 && g1 && g1.totalSessions > 0) ? cleanN1 / g1.totalSessions : 1;
+    const sN = x => Math.round((x || 0) * scaleN), sN1 = x => Math.round((x || 0) * scaleN1);
+    const totSessN = cleanN != null ? cleanN : g.totalSessions;
+    const reconciled = Math.abs((g.totalSessions || 0) - (totSessN || 0)) > 1;
     const strip = [
-      ['Sessions', fInt(g.totalSessions), g.totalSessions, g1 && g1.totalSessions],
+      ['Sessions', fInt(totSessN), totSessN, cleanN1],
       ['Utilisateurs', fInt(g.totalUsers), g.totalUsers, g1 && g1.totalUsers],
       ['Nvx users', fInt(g.totalNewUsers), g.totalNewUsers, g1 && g1.totalNewUsers],
       ['Engagement', fPct(g.engRateTotal), g.engRateTotal, g1 && g1.engRateTotal],
@@ -747,12 +758,12 @@ function renderReport(rep) {
     ].map(([l, v, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${v} ${n1 ? delta(n, n1) : ''}</div></div>`).join('');
     const b1 = {}; ((g1 && g1.byCanal) || []).forEach(x => { b1[x.canal] = x; });
     const canaux = [...g.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 12)
-      .map(x => { const p = b1[x.canal] || {}; return `<tr><td>${esc(x.canal)}</td><td>${fInt(x.sessions)}</td><td>${p.sessions ? delta(x.sessions, p.sessions) : '—'}</td><td>${fPct(x.engRate)}</td><td>${fEur(x.revenue)}</td><td>${p.revenue ? delta(x.revenue, p.revenue) : '—'}</td></tr>`; }).join('');
-    const totRow = g1 ? `<tr style="font-weight:700"><td>TOTAL</td><td>${fInt(g.totalSessions)}</td><td>${delta(g.totalSessions, g1.totalSessions)}</td><td>${fPct(g.engRateTotal)}</td><td>${fEur(g.totalRevenue)}</td><td>${delta(g.totalRevenue, g1.totalRevenue)}</td></tr>`
-      : `<tr style="font-weight:700"><td>TOTAL</td><td>${fInt(g.totalSessions)}</td><td>—</td><td>${fPct(g.engRateTotal)}</td><td>${fEur(g.totalRevenue)}</td><td>—</td></tr>`;
+      .map(x => { const p = b1[x.canal] || {}; return `<tr><td>${esc(x.canal)}</td><td>${fInt(sN(x.sessions))}</td><td>${p.sessions ? delta(sN(x.sessions), sN1(p.sessions)) : '—'}</td><td>${fPct(x.engRate)}</td><td>${fEur(x.revenue)}</td><td>${p.revenue ? delta(x.revenue, p.revenue) : '—'}</td></tr>`; }).join('');
+    const totRow = `<tr style="font-weight:700"><td>TOTAL</td><td>${fInt(totSessN)}</td><td>${cleanN1 ? delta(totSessN, cleanN1) : '—'}</td><td>${fPct(g.engRateTotal)}</td><td>${fEur(g.totalRevenue)}</td><td>${g1 ? delta(g.totalRevenue, g1.totalRevenue) : '—'}</td></tr>`;
     gaCard = `<div class="card"><h3>Trafic (Google Analytics) — N vs N-1</h3>
       <div class="kgrid" style="margin-bottom:10px">${strip}</div>
-      <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ</th><th>Engagement</th><th>Revenu</th><th>Δ</th></tr></thead><tbody>${canaux}${totRow}</tbody></table></div>`;
+      <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ</th><th>Engagement</th><th>Revenu</th><th>Δ</th></tr></thead><tbody>${canaux}${totRow}</tbody></table>
+      ${reconciled ? `<div class="note">ℹ️ Sessions <b>alignées sur le total plateforme</b> (jeu <code>gasess</code> date×pays, = celui du Bilan). La ventilation par canal (rapport GA multi-dimensions) sur-compterait sinon (${fInt(g.totalSessions)} brut) → les sessions par canal sont mises à l'échelle des proportions GA.</div>` : ''}</div>`;
   }
 
   const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
@@ -1326,8 +1337,25 @@ function renderReport(rep) {
       if (fr) famOff = `<h3 style="margin-top:12px">Familles qui performent en démarque</h3>
         <table><thead><tr><th>Famille</th><th>CA Off</th><th>% Off</th><th>CA Full</th><th>Δ CA vs N-1</th></tr></thead><tbody>${fr}</tbody></table>`;
     }
+    // 🔍 Audit du calcul : réconciliation + échantillon de lignes (vérifier la règle)
+    let audit = '';
+    const au = rep.fullOffAudit;
+    if (au) {
+      const recOk = Math.abs((au.caFull + au.caOff) - au.caTotal) < 1;
+      const srows = (au.sample || []).map(s => `<tr><td title="${esc(s.des)}">${esc((s.des || '').slice(0, 28))}</td><td>${fEur(s.pv)}</td><td>${s.pvr > 0 ? fEur(s.pvr) : '<span class="na">0</span>'}</td><td>${fEur(s.paid)}</td><td>${s.depth > 0 ? fPct(s.depth) : '—'}</td><td class="${s.classe === 'Off' ? 'up' : ''}" style="${s.classe === 'Off' ? 'color:var(--a)' : 'color:var(--b)'}">${s.classe}</td></tr>`).join('');
+      audit = `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;font-size:13px">🔍 Audit du calcul Full/Off (vérifier la règle)</summary>
+        <div class="note" style="margin-top:8px">Règle appliquée : <b>Off price</b> ⇔ « Prix Vente Remisé » &lt; « Prix Vente » de <b>≥ ${au.seuilPct} %</b> (tolérance anti-résidus de saisie). Sinon <b>Full price</b>.</div>
+        <div class="kgrid" style="margin-top:6px">
+          <div class="kc"><div class="l">CA Full + CA Off</div><div class="v">${fEur(au.caFull + au.caOff)}</div></div>
+          <div class="kc"><div class="l">= CA total EShop (hors mkt)</div><div class="v">${fEur(au.caTotal)} ${recOk ? '<span class="up">✓</span>' : '<span class="dn">≠</span>'}</div></div>
+          <div class="kc"><div class="l">Lignes Full / Off</div><div class="v">${fInt(au.nFull)} / ${fInt(au.nOff)}</div></div>
+          <div class="kc"><div class="l">Dont résidus &lt; ${au.seuilPct}% → Full</div><div class="v">${fInt(au.nResidu)}</div></div>
+        </div>
+        <table style="margin-top:8px"><thead><tr><th>Produit (échantillon)</th><th>Prix Vente</th><th>Prix Remisé</th><th>Payé</th><th>Démarque</th><th>Classe</th></tr></thead><tbody>${srows}</tbody></table>
+        <div class="note">Échantillon (lignes Off puis Full). Vérifie sur chaque ligne : Remisé &lt; Prix Vente de &gt;2 % → <b>Off</b> ; Remisé absent/≈ Prix Vente → <b>Full</b>. La somme Full + Off doit égaler le CA EShop hors marketplaces.</div></details>`;
+    }
     demarqueCard = `<div class="card"><h3>💰 Performance démarque vs Full Price — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}</h3>
-      <div class="kgrid">${tiles}</div>${tranches}${famOff}
+      <div class="kgrid">${tiles}</div>${tranches}${famOff}${audit}
       <div class="note">⚠️ <b>Règle démarque</b> : une ligne est <b>Off price</b> uniquement si « Prix Vente Remisé » est inférieur au « Prix Vente » de plus de 2 % (la démarque se lit sur ces deux champs, JAMAIS sur le prix payé — un code promo n'est pas une démarque). <b>Taux de démarque</b> = CA Off ÷ CA EShop (couleur inversée). Tranches = profondeur (1 − Remisé/Prix Vente). Croiser avec le « Comparatif d'offre » et les « Codes promo » ci-dessous.</div></div>`;
   }
 
