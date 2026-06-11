@@ -10,15 +10,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  /* ── Direction « Maison » — clair, chaud, épuré ── */
-  --bg:#F6F3EE; --surface:#FFFFFF; --inset:#F4EFE7; --inset2:#EFE9DF;
-  --ink:#1C1A17; --ink2:#6B655C; --ink3:#A39C90; --line:#E8E1D5; --line-soft:#F0EBE1;
-  --accent:#A8854A; --accent-soft:rgba(168,133,74,.10); --accent-line:rgba(168,133,74,.28);
-  --pos:#5E7355; --pos-soft:rgba(94,115,85,.12);
-  --neg:#B0524A; --neg-soft:rgba(176,82,74,.10);
+  /* ── Direction « Maison » — clair, net, épuré ── */
+  --bg:#F5F6F8; --surface:#FFFFFF; --inset:#F4F6F8; --inset2:#EDF0F3;
+  --ink:#191B1F; --ink2:#646973; --ink3:#9CA1AB; --line:#E7E9EE; --line-soft:#F1F3F6;
+  --accent:#A8854A; --accent-soft:rgba(168,133,74,.10); --accent-line:rgba(168,133,74,.30);
+  /* Deltas — pastels lisibles (pilule colorée) */
+  --pos:#1B9E6A; --pos-bg:#E6F6EE;
+  --neg:#E2574D; --neg-bg:#FCECEA;
   --slate:#6E7B8B; --mauve:#9B8AA3;
   --sp:8px; --r:10px; --r-sm:8px;
-  --shadow:0 1px 2px rgba(28,26,23,.04), 0 8px 24px -16px rgba(28,26,23,.18);
+  --shadow:0 1px 2px rgba(20,22,28,.04), 0 8px 24px -16px rgba(20,22,28,.20);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -26,7 +27,7 @@ body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var
 .tnum{font-variant-numeric:tabular-nums}
 
 /* Header */
-#hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:22px;padding:0 28px;height:60px;background:rgba(246,243,238,.85);backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid var(--line)}
+#hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:22px;padding:0 28px;height:60px;background:rgba(245,246,248,.82);backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid var(--line)}
 #logo{font-family:'Space Grotesk';font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase}
 #logo b{color:var(--accent);font-weight:600}
 nav{display:flex;gap:4px}
@@ -63,8 +64,12 @@ nav a:not(.on):hover{background:var(--inset)}
 .hero-lead{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid var(--line-soft)}
 .hero-lead .lbl{font-size:13px;color:var(--ink2);margin-bottom:6px}
 .hero-num{font-family:'Space Grotesk';font-weight:600;font-size:46px;line-height:1;letter-spacing:-.02em}
-.hero-lead .d{font-size:15px;font-weight:600;margin-bottom:8px}
-.d.pos{color:var(--pos)}.d.neg{color:var(--neg)}
+/* Pilule delta — pastel, visuelle */
+.d{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;font-variant-numeric:tabular-nums}
+.d.pos{color:var(--pos);background:var(--pos-bg)}
+.d.neg{color:var(--neg);background:var(--neg-bg)}
+.hero-lead .d{font-size:14px;margin-bottom:9px;padding:5px 12px}
+.hero-lead .d span{background:none;padding:0}
 .hero-lead .ctx{margin-left:auto;font-size:13px;color:var(--ink2);max-width:320px;text-align:right;line-height:1.5}
 
 .kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-sm);overflow:hidden}
@@ -102,7 +107,8 @@ th{text-align:left;padding:9px 10px;color:var(--ink3);font-weight:600;font-size:
 th:not(:first-child),td:not(:first-child){text-align:right}
 td{padding:10px;border-bottom:1px solid var(--line-soft);font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:none}
-.up{color:var(--pos);font-weight:600}.dn{color:var(--neg);font-weight:600}
+.up,.dn{display:inline-flex;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;font-variant-numeric:tabular-nums}
+.up{color:var(--pos);background:var(--pos-bg)}.dn{color:var(--neg);background:var(--neg-bg)}
 .flag{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:8px;vertical-align:middle}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
@@ -255,12 +261,12 @@ tr:last-child td{border-bottom:none}
 Chart.defaults.font.family = 'Inter';
 Chart.defaults.font.size = 11;
 Chart.defaults.color = '#A39C90';
-const C = { accent:'#A8854A', accentL:'#D8C39A', ink:'#1C1A17', pos:'#5E7355', neg:'#B0524A', slate:'#6E7B8B', mauve:'#9B8AA3', line:'rgba(28,26,23,.06)' };
+const C = { accent:'#A8854A', accentL:'#D8C39A', ink:'#191B1F', pos:'#1B9E6A', neg:'#E2574D', slate:'#6E7B8B', mauve:'#9B8AA3', line:'rgba(20,22,28,.06)' };
 
 function donut(id, val, color){
   new Chart(document.getElementById(id), {
     type:'doughnut',
-    data:{ datasets:[{ data:[val,100-val], backgroundColor:[color,'#EEE7DB'], borderWidth:0 }] },
+    data:{ datasets:[{ data:[val,100-val], backgroundColor:[color,'#ECEEF1'], borderWidth:0 }] },
     options:{ cutout:'74%', plugins:{legend:{display:false},tooltip:{enabled:false}}, animation:false }
   });
 }
@@ -274,7 +280,7 @@ const tt = days.map((d,i)=>2.1+0.6*Math.sin(i/4));
 new Chart(document.getElementById('tl'), {
   data:{ labels:days, datasets:[
     { type:'bar', label:'CA N', data:caN, backgroundColor:C.accent, borderRadius:3, barPercentage:.62, order:3 },
-    { type:'bar', label:'CA N-1', data:caN1, backgroundColor:'#E4D6BC', borderRadius:3, barPercentage:.62, order:4 },
+    { type:'bar', label:'CA N-1', data:caN1, backgroundColor:'#DDE1E6', borderRadius:3, barPercentage:.62, order:4 },
     { type:'line', label:'Taux transfo', data:tt, yAxisID:'y1', borderColor:C.pos, backgroundColor:'transparent', borderWidth:1.6, tension:.4, pointRadius:0, order:1 },
   ]},
   options:{ responsive:true, maintainAspectRatio:false, animation:false,
@@ -299,7 +305,7 @@ const fams = [
 new Chart(document.getElementById('fam'), {
   type:'bar',
   data:{ labels:fams.map(f=>f.n), datasets:[
-    { label:'base', data:fams.map(f=>Math.min(f.a,f.b)), backgroundColor:'#E4DBCB', stack:'s', borderRadius:0 },
+    { label:'base', data:fams.map(f=>Math.min(f.a,f.b)), backgroundColor:'#DDE1E6', stack:'s', borderRadius:0 },
     { label:'évolution', data:fams.map(f=>Math.abs(f.a-f.b)), backgroundColor:fams.map(f=>f.a>=f.b?C.pos:C.neg), stack:'s', borderRadius:3 },
   ]},
   options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
