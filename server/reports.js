@@ -83,10 +83,16 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
   const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadN1('gasess');
+  const gaTotN = await loadDataset('gatot', 'N'), gaTotN1 = await loadN1('gatot');
   const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadN1('gacampdaily');
   const gaEmailHourN = await loadDataset('gaemailhour', 'N'), gaEmailHourN1 = await loadN1('gaemailhour');
+  // Sessions par PAYS (gasess) : sert aux splits FR/Inter, au TT par pays et aux courbes jour.
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;
   const sessSrcN1 = calc.filterGADim(gaSessN1, dim) || gaN1f;
+  // KPI sessions GLOBAL : `gatot` (date seule, NON seuillé = total plateforme GA) quand dim=global ;
+  // sinon (FR/Inter) on garde gasess filtré par pays (forcément seuillé, mais c'est le bon périmètre).
+  const totSrcN = (dim === 'global' && gaTotN) ? gaTotN : sessSrcN;
+  const totSrcN1 = (dim === 'global' && gaTotN1) ? gaTotN1 : sessSrcN1;
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
   const refMap = ref ? calc.buildRefMap(ref) : {};
@@ -105,7 +111,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // = sessions GA ÷ taux. Saisie manuelle (0-100 ou 0-1). Recale le taux de transfo.
   const consentRate = v => { const n = parseFloat((v || '').toString().replace(',', '.')); if (!n || n <= 0) return null; return n > 1 ? n / 100 : n; };
   const rateN = consentRate(consentN), rateN1 = consentRate(consentN1);
-  const sessionsRawN = calc.getSessionsForPeriod(sessSrcN, from, to, isAll);
+  const sessionsRawN = calc.getSessionsForPeriod(totSrcN, from, to, isAll);
   const sessionsN = (sessionsRawN != null && rateN) ? Math.round(sessionsRawN / rateN) : sessionsRawN;
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
@@ -129,7 +135,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   if (rowsN1 && refSetN1) rowsN1 = calc.filterToRefs(rowsN1, mapN1, refSetN1);
   let sessionsRawN1 = null;
   if (rowsN1 && rowsN1.length) {
-    sessionsRawN1 = calc.getSessionsForPeriod(sessSrcN1, cf, ct, isAll);
+    sessionsRawN1 = calc.getSessionsForPeriod(totSrcN1, cf, ct, isAll);
     const sessionsN1 = (sessionsRawN1 != null && rateN1) ? Math.round(sessionsRawN1 / rateN1) : sessionsRawN1;
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);

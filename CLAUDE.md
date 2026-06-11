@@ -67,7 +67,8 @@ Clé store = `${source}-${period}`, `period ∈ {N, N1}`. Forme dataset : `{hdrs
 | `offre` | upload équipe commerciale | Listing produits N/N-1 : réf, famille, prix initial/soldé (ou % démarque), origine (initial/outlet) → comparatif d'offre. |
 | `adsis` | Google Ads API | Impression share (search IS, lost budget/rank). |
 | `ga` | GA4 API | **date×canal×device×pays** (sur-compte les sessions — cf §12). |
-| `gasess` | GA4 API | **date×pays** (faible cardinalité) → **KPI sessions + TT/jour fiables**. |
+| `gasess` | GA4 API | **date×pays** → splits FR/Inter, TT par pays, courbes jour. ⚠️ la dim `country` déclenche le **seuillage GA4** (petits pays masqués) → SOUS-compte le total. |
+| `gatot` | GA4 API | **date seule** (sans `country`) → **KPI sessions GLOBAL du Bilan** = total plateforme GA, non seuillé (cf §12). |
 | `gacampaigns`/`gacampnr`/`gacampcat`/`gacampaignland` | GA4 | campagne×pays / new-vs-returning / campagne×catégorie / campagne×landing. |
 | `gacampdaily` | GA4 | date×campagne → courbes campagnes (timeline2). |
 | `gaemailhour` | GA4 | heure×canal → heure d'envoi email (`emailPeakHour`). |
@@ -378,7 +379,8 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 |---|---|---|
 | **Taux d'annulation 76 % puis 68 vs 7 puis 20 vs 7** | (1) `commandé−expédié` comptait les commandes EN ATTENTE. (2) `quantityOffered` ≠ « à expédier » mais « offert/cadeau » (≈0). (3) lecture de `orderStatus` (8 états, sans Shipped/Incomplete) au lieu de **`orderCustomerStatus`** (22 états). (4) toutes les variantes Cancelled comptées (client/fraude incluses). (5) `ShippedIncomplete` (statut live, splits) bien plus large côté WSHOP que côté OMS. | Statut = **`orderCustomerStatus`** ; **denylist demande** (`customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment`) ; **`ShippedIncomplete` comptée à part** ; **taux = Cancelled seul** (choix métier). Colonne `Statut commande` stockée + carte `byStatut` pour auditer. **WSHOP = live ≠ photo OMS figée** : ne JAMAIS viser le match au pixel. |
 | **0 annulation après le fix** | `/ping` n'affichait pas les nouveaux champs ; et l'API n'expose pas les libellés FR mais l'enum EN (`Cancelled`/`ShippedIncomplete`). | Sondes API filtrées par statut + affichage front du bloc diagnostic. |
-| **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte (données non seuillées). | Jeu **`gasess`** (date×pays) pour le KPI **et** le TT (`dailySeries(sessByDay)`). |
+| **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte (données non seuillées). | Jeu **`gasess`** (date×pays) pour le KPI **et** le TT (`dailySeries(sessByDay)`). Carte Acquisition : total **ancré sur le Bilan** + ventilation canal mise à l'échelle. |
+| **Sessions Bilan (35 487) < GA brut (42 728)** | `gasess` interroge GA4 avec la dim `country` → **seuillage de confidentialité GA4** masque les petits pays → la somme par pays SOUS-compte le total plateforme (~−17 %). | Jeu **`gatot`** (date SEULE, sans `country`) = total plateforme non seuillé → KPI sessions global du Bilan quand `dim=global` ; `gasess` reste pour FR/Inter (périmètre pays, forcément seuillé). **Exige un re-import GA4.** |
 | **TT / ajout panier vides** | TT calculé sur les sessions ventilées. | `dailySeries` accepte `sessByDay` issu de `gasess`. |
 | **CA marketplace famille négatif** | Lignes Y2 `Total TTC ≤ 0` (retours/avoirs) comptées. | Exclure `ttc ≤ 0` (`calcMarketplace`, `ccAccumulate`) ; `ttc < 0` = signal remboursement. |
 | **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
