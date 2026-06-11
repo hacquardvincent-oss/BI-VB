@@ -309,6 +309,7 @@ function balanceKgrids(root) {
 }
 let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
 
 async function loadReport() {
   const box = document.getElementById('report');

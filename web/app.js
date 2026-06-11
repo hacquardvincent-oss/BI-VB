@@ -683,6 +683,7 @@ async function loadReport() {
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
   else { wireBilan(); buildReportNav(); }
   balanceKgrids(box);
+  requestAnimationFrame(() => balanceKgrids(box)); // recalcul après mise en page réelle (largeurs fiables)
   updateViewControls();
 }
 
@@ -701,6 +702,8 @@ function balanceKgrids(root) {
 }
 let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
+// Recalcul une fois les polices web chargées (les largeurs de tuiles changent) → évite tout orphelin résiduel.
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
 
 // Bannière de couverture : la période sélectionnée ne recoupe pas l'OMS importé (→ 0 vente).
 // Cause n°1 des « chiffres qui ne chargent plus » : la plage d'analyse est hors de la fenêtre importée.
@@ -1551,20 +1554,29 @@ function buildReportNav() {
   }
   const report = document.getElementById('report');
   const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
-  if (heads.length < 2) { nav.innerHTML = ''; nav.classList.remove('open'); return; }
-  const items = heads.map(h => {
+  // Éditeur intégré au volet : créer un nouveau tableau de bord / éditer la vue courante.
+  const canEdit = isMyView(CURRENT_MODULE) || IS_ADMIN;
+  const actions = `<div class="rn-actions">
+      <button class="rn-act" id="rnNew" title="Créer un nouveau tableau de bord et y glisser les tableaux pertinents">➕ Nouveau tableau de bord</button>
+      ${canEdit ? '<button class="rn-act" id="rnEdit" title="Éditer cette vue : ajouter / retirer / réordonner les tableaux">✏️ Éditer cette vue</button>' : ''}
+    </div>`;
+  const hasList = heads.length >= 2;
+  const items = hasList ? heads.map(h => {
     const id = h.id;
     const label = id === 'sec-bilan' ? '🎯 Bilan' : (h.textContent || id).trim();
     return `<a href="#${id}" data-anchor="${id}">${esc(label)}</a>`;
-  }).join('');
-  nav.innerHTML = `<div class="rn-head">Sommaire<span id="rnClose" title="Fermer">✕</span></div><div class="rn-list">${items}</div>`;
+  }).join('') : '';
+  nav.innerHTML = `<div class="rn-head">${hasList ? 'Sommaire' : 'Tableaux de bord'}<span id="rnClose" title="Fermer">✕</span></div>${actions}${hasList ? `<div class="rn-list">${items}</div>` : ''}`;
+  const closeBtn = nav.querySelector('#rnClose'); if (closeBtn) closeBtn.onclick = () => nav.classList.remove('open');
+  const nb = nav.querySelector('#rnNew'); if (nb) nb.onclick = () => createDashboard();
+  const eb = nav.querySelector('#rnEdit'); if (eb) eb.onclick = () => enterEditMode(CURRENT_MODULE);
+  if (!hasList) { if (window._navObs) window._navObs.disconnect(); return; }
   nav.querySelectorAll('a[data-anchor]').forEach(a => a.addEventListener('click', e => {
     e.preventDefault();
     const el = document.getElementById(a.dataset.anchor);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (window.innerWidth < 1400) nav.classList.remove('open');
   }));
-  const closeBtn = nav.querySelector('#rnClose'); if (closeBtn) closeBtn.onclick = () => nav.classList.remove('open');
   // Scroll-spy : surligne la section visible
   if (window._navObs) window._navObs.disconnect();
   window._navObs = new IntersectionObserver(entries => {

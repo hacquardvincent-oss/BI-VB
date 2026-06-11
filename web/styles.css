@@ -29,18 +29,19 @@ a{color:var(--a);text-decoration:none}
 /* Boutons */
 .btn{font-size:13px;font-weight:500;padding:7px 15px;border-radius:99px;border:1px solid var(--br);background:var(--s);color:var(--t);cursor:pointer}
 .btn:hover{border-color:var(--accent-line)}
-.btn.primary{background:var(--a);color:#fff;border-color:var(--a)}
-.btn.primary:hover{filter:brightness(1.05)}
-.btn.blue{background:var(--t);color:#fff;border-color:var(--t)}
-.btn.blue:hover{filter:brightness(1.15)}
+/* CTA d'action : volontairement DISCRETS (sous les titres) — gris/laiton pastel, pas de fond saturé. */
+.btn.primary{background:var(--accent-soft);color:var(--a);border-color:var(--accent-line);font-weight:600}
+.btn.primary:hover{background:rgba(168,133,74,.16)}
+.btn.blue{background:#E9ECF1;color:var(--t);border-color:#DCE0E7;font-weight:600}
+.btn.blue:hover{background:#E0E4EC;border-color:#CFD4DD}
 
 .wrap{padding:24px;display:flex;flex-direction:column;gap:18px;max-width:1180px;margin:0 auto}
 
 /* Cartes */
 .card{background:var(--s);border:1px solid var(--br);border-radius:12px;padding:20px}
-.card h3{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
-/* Filet d'accent laiton devant chaque titre de carte → repérage rapide (mais discret, sous les CTA) */
-.card h3::before{content:"";display:inline-block;width:3px;height:12px;border-radius:99px;background:var(--a);margin-right:9px;vertical-align:-2px}
+/* Titres : l'ANCRE visuelle de l'écran (plus visibles que les CTA) — encre + filet laiton. */
+.card h3{font-family:var(--disp);font-size:12.5px;font-weight:600;color:var(--t);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
+.card h3::before{content:"";display:inline-block;width:3px;height:13px;border-radius:99px;background:var(--a);margin-right:9px;vertical-align:-2px}
 
 .grid{display:grid;gap:12px}
 .sources{grid-template-columns:repeat(auto-fit,minmax(175px,1fr))}
@@ -69,7 +70,8 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .pb{font-size:13px;padding:6px 13px;border-radius:99px;border:1px solid transparent;background:transparent;color:var(--t2);cursor:pointer}
 .pb:hover{background:var(--s2)}
-.pb.on{background:var(--t);color:#fff;border-color:var(--t);font-weight:500}
+.pb.on{background:var(--inset2);color:var(--t);border-color:var(--br);font-weight:600}
+#hdr .pb.on{background:var(--t);color:#fff;border-color:var(--t)} /* nav d'en-tête = repère « vous êtes ici », garde le contraste */
 .dt{background:var(--s);border:1px solid var(--br);color:var(--t);border-radius:8px;padding:6px 9px;font-size:13px;color-scheme:light}
 .dt:focus{outline:none;border-color:var(--accent-line)}
 
@@ -109,8 +111,8 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .sig.up{border-left-color:var(--g)}.sig.dn{border-left-color:var(--r)}.sig.info{border-left-color:var(--b)}
 .sig>span{font-size:15px;line-height:1.25}
 
-/* Bandeaux de thème */
-.section-head{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--a);text-transform:uppercase;letter-spacing:.14em;padding:10px 2px 8px;border-bottom:1px solid var(--br);margin-top:6px;scroll-margin-top:16px}
+/* Bandeaux de thème = bandes laiton pastel → repère structurel n°1 de la page */
+.section-head{font-family:var(--disp);font-size:12px;font-weight:600;color:var(--a);text-transform:uppercase;letter-spacing:.14em;padding:9px 14px;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:9px;margin-top:8px;scroll-margin-top:16px}
 .section-head::before{content:"";display:inline-block;width:4px;height:13px;border-radius:99px;background:var(--a);margin-right:10px;vertical-align:-2px}
 #report .section-head:first-child{margin-top:0}
 .bilan{scroll-margin-top:16px}
@@ -120,6 +122,9 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 #reportNav.open{display:block}
 #reportNav .rn-head{font-family:var(--disp);font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 #reportNav .rn-head span{cursor:pointer;color:var(--t3)}#reportNav .rn-head span:hover{color:var(--a)}
+#reportNav .rn-actions{display:flex;flex-direction:column;gap:5px;margin-bottom:9px;padding-bottom:9px;border-bottom:1px solid var(--line-soft)}
+#reportNav .rn-act{font-size:12px;font-weight:600;text-align:left;padding:7px 10px;border-radius:8px;border:1px solid var(--br);background:var(--s2);color:var(--t);cursor:pointer}
+#reportNav .rn-act:hover{border-color:var(--accent-line);color:var(--a);background:var(--accent-soft)}
 #reportNav .rn-list{display:flex;flex-direction:column;gap:2px}
 #reportNav a{display:block;font-size:12px;color:var(--t2);padding:6px 9px;border-radius:7px;border-left:2px solid transparent;line-height:1.3}
 #reportNav a:hover{background:var(--s2);color:var(--t)}

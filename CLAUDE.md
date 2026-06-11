@@ -355,8 +355,13 @@ Bouton **⚡ delta WSHOP** intégré = quasi temps réel les jours de lancement.
 `--r #E2574D` (**rouge** baisse/retours), `--t #191B1F` (encre). Typo : **Space Grotesk** (titres/KPI, var `--disp`) +
 **Inter** (donnée, tabulaire) via `@import` Google Fonts. **Deltas = pilules pastel** (`.up`/`.dn` → fond `--pos-bg`/`--neg-bg` ;
 padding pilule **uniquement sur `span`** pour ne pas casser le padding des `<td>` ; `:not(.sig)` protège les leviers).
-Maquette de référence : `web/mockup-bilan.html` (page autonome, non liée à la nav). ⏳ **À faire** : export PDF (embarquer
-les TTF Space Grotesk + Inter dans pdfkit → règle aussi la limite WinAnsi `→`/`Δ`) + polish mobile.
+Maquette de référence : `web/mockup-bilan.html` (page autonome, non liée à la nav). **Hiérarchie titres > CTA** : le
+**laiton est réservé aux titres** (`.card h3` en encre + filet laiton ; `.section-head` = bandes laiton pastel `accent-soft`),
+et les **CTA d'action sont discrets** (`.btn.blue` gris pastel `#E9ECF1` ; `.btn.primary` laiton pastel `accent-soft` ;
+`.pb.on` gris `inset2`, sauf `#hdr .pb.on` qui reste encre = repère « vous êtes ici »). **Grilles KPI** : `balanceKgrids()`
+(app/commerciale/saison) évite toute ligne à 1 KPI orphelin (recalc au resize + `document.fonts.ready` + rAF). **Volet latéral
+éditeur** : `#reportNav` porte « ➕ Nouveau tableau de bord » (`createDashboard`) + « ✏️ Éditer cette vue » (`enterEditMode`).
+⏳ **À faire** : export PDF (embarquer les TTF Space Grotesk + Inter dans pdfkit → règle aussi la limite WinAnsi `→`/`Δ`) + polish mobile.
 
 ### Graphiques (Chart.js) — comment ils sont construits
 Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. `Chart.defaults.font.family='Inter'` posé sur chaque page.
