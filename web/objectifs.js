@@ -7,7 +7,7 @@ if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color =
 // (historique mensuel depuis les jeux OMS) + /api/objectives/months (persistance).
 // ============================================================================
 
-const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : Math.round(v * 100) + '%');
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));

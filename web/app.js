@@ -360,7 +360,7 @@ async function resetLayout(m) {
   await fetch('/api/layouts/' + encodeURIComponent(m), { method: 'DELETE' });
 }
 
-const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 function delta(n, n1) {
@@ -375,7 +375,7 @@ function deltaInv(n, n1) {
   return `<span class="${p >= 0 ? 'dn' : 'up'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
+const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€');
 const pc = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : (n - n1) / n1 * 100;
 const sgn = p => (p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(0) + '%');
 const PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#E2574D', '#9B8AA3', '#C0879B', '#5FA88C', '#D4B36A'];
@@ -767,7 +767,7 @@ function renderReport(rep) {
       ${reconciled ? `<div class="note">ℹ️ Sessions <b>alignées sur le total plateforme</b> (jeu <code>gasess</code> date×pays, = celui du Bilan). La ventilation par canal (rapport GA multi-dimensions) sur-compterait sinon (${fInt(g.totalSessions)} brut) → les sessions par canal sont mises à l'échelle des proportions GA.</div>` : ''}</div>`;
   }
 
-  const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
+  const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€');
 
   // Funnel + CA/session
   const f = rep.funnel ? rep.funnel.n : null, f1 = (rep.funnel && rep.funnel.n1) || {};
@@ -1812,7 +1812,7 @@ function renderScorecard(title, pack, showDetails) {
       mp = block('🛍️ Marketplace', 'binDonutMP', mr, 130, true); // une seule ligne : camembert + KPIs
     }
     // International / Omnicanal / Démarque alignés (grille responsive), Marketplace sur sa propre ligne.
-    details = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:10px">${intl}${omni}${dem}</div>${mp ? `<div style="margin-top:12px">${mp}</div>` : ''}`;
+    details = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start;margin-top:10px">${intl}${omni}${dem}</div>${mp ? `<div style="margin-top:12px">${mp}</div>` : ''}`;
   }
   return `<div class="section-head" style="margin-top:12px">${title}</div><div class="kgrid">${tiles}</div>${details}`;
 }
@@ -2579,7 +2579,7 @@ function showCAAudit(res) {
 }
 function renderCAAudit(res) {
   const a = res.audit || {}; const cands = a.candidates || [];
-  const eur = x => (Math.round((Number(x) || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const eur = x => (Math.round((Number(x) || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
   // Cible TTC à retrouver (saisie dans le champ) : on surligne le candidat le plus proche.
   const target = Number((document.getElementById('wshopcatarget') || {}).value) || 0;
   let best = -1, bestGap = Infinity;

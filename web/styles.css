@@ -73,11 +73,12 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .dt{background:var(--s);border:1px solid var(--br);color:var(--t);border-radius:8px;padding:6px 9px;font-size:13px;color-scheme:light}
 .dt:focus{outline:none;border-color:var(--accent-line)}
 
-/* KPI tiles */
-.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:10px;overflow:hidden}
-.kc{background:var(--s);padding:13px 15px}
+/* KPI tiles — tuiles bordées + gaps transparents (pas de cellule vide grise, pas de rognage) */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+.kc{background:var(--s);border:1px solid var(--br);border-radius:10px;padding:13px 15px;min-width:0}
 .kc .l{font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
-.kc .v{font-family:var(--disp);font-size:21px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+/* valeur + pilule delta : flex qui passe la pilule à la ligne plutôt que de la rogner */
+.kc .v{font-family:var(--disp);font-size:21px;font-weight:600;letter-spacing:-.01em;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:7px;row-gap:2px}
 .note{font-size:12px;color:var(--t3);margin-top:8px;line-height:1.5}
 .cols2{grid-template-columns:1fr 1fr}
 

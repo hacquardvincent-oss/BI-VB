@@ -11,7 +11,7 @@ let COMPARE = true; // comparer vs N-1 (CTA)
 let LAST = null; // dernier rep de l'opération
 
 // ── Formatters (miroir de app.js) ──
-const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
+const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 const pc = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : (n - n1) / n1 * 100;
