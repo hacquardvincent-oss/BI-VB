@@ -291,7 +291,24 @@ function render(rep) {
     const caret = r.querySelector('.fam-caret'); if (caret) caret.textContent = open ? '▾' : '▸';
     if (open && !det.dataset.filled) { det.querySelector('td').innerHTML = familleDetailHTML(r.dataset.fam); det.dataset.filled = '1'; }
   }));
+  balanceKgrids(box);
 }
+
+// Adapte le nb de colonnes des grilles KPI à la largeur ET évite une dernière ligne avec 1 seul KPI orphelin.
+function balanceKgrids(root) {
+  const GAP = 10, MIN = 145;
+  (root || document).querySelectorAll('.kgrid').forEach(g => {
+    const n = g.children.length;
+    if (n < 2) { g.style.gridTemplateColumns = ''; return; }
+    const w = g.clientWidth;
+    if (!w) return;
+    let cols = Math.max(1, Math.min(n, Math.floor((w + GAP) / (MIN + GAP))));
+    while (cols > 1 && n % cols === 1) cols--;
+    g.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  });
+}
+let _balanceT;
+window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 
 async function loadReport() {
   const box = document.getElementById('report');

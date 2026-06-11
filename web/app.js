@@ -674,8 +674,25 @@ async function loadReport() {
   renderWidgetCharts(); // graphes des widgets « from scratch » (mode normal + édition)
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
   else { wireBilan(); buildReportNav(); }
+  balanceKgrids(box);
   updateViewControls();
 }
+
+// Adapte le nb de colonnes des grilles KPI à la largeur ET évite une dernière ligne avec 1 seul KPI orphelin.
+function balanceKgrids(root) {
+  const GAP = 10, MIN = 145;
+  (root || document).querySelectorAll('.kgrid').forEach(g => {
+    const n = g.children.length;
+    if (n < 2) { g.style.gridTemplateColumns = ''; return; }
+    const w = g.clientWidth;
+    if (!w) return;
+    let cols = Math.max(1, Math.min(n, Math.floor((w + GAP) / (MIN + GAP))));
+    while (cols > 1 && n % cols === 1) cols--; // pas de ligne à 1 seul KPI
+    g.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  });
+}
+let _balanceT;
+window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 
 // Bannière de couverture : la période sélectionnée ne recoupe pas l'OMS importé (→ 0 vente).
 // Cause n°1 des « chiffres qui ne chargent plus » : la plage d'analyse est hors de la fenêtre importée.

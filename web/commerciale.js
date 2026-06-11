@@ -406,8 +406,25 @@ function renderAll(rep, day) {
   if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#6E7B8B', '#A8854A'], borderColor: '#FFFFFF', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } });
   const bi = document.getElementById('bannerImport'); if (bi) bi.addEventListener('click', fullImport);
   if (EDIT) wireDnD(rep, day);
+  balanceKgrids(box);
   if (document.getElementById('launchBox')) loadLaunch(day || LAST_DAY);
 }
+
+// Adapte le nb de colonnes des grilles KPI à la largeur ET évite une dernière ligne avec 1 seul KPI orphelin.
+function balanceKgrids(root) {
+  const GAP = 10, MIN = 145;
+  (root || document).querySelectorAll('.kgrid').forEach(g => {
+    const n = g.children.length;
+    if (n < 2) { g.style.gridTemplateColumns = ''; return; }
+    const w = g.clientWidth;
+    if (!w) return;
+    let cols = Math.max(1, Math.min(n, Math.floor((w + GAP) / (MIN + GAP))));
+    while (cols > 1 && n % cols === 1) cols--;
+    g.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  });
+}
+let _balanceT;
+window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 
 // Glisser-déposer des sections (réordonne + mémorise, re-render sans refetch).
 function wireDnD(rep, day) {
