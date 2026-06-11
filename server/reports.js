@@ -44,7 +44,11 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax }) {
+  // hourMax="HH:MM" → CUMUL À L'HEURE : tronque N ET N-1 aux ventes ≤ cette heure (comparaison
+  // honnête quand on analyse AUJOURD'HUI : N partiel vs N-1 cumulé jusqu'à la même heure). Sinon
+  // (jour terminé) full day. Validé "HH:MM" zéro-padné.
+  const tMax = /^\d{2}:\d{2}$/.test(hourMax || '') ? hourMax : null;
   // compare='0' → analyse N SEULE (pas de comparaison N-1) : aucun jeu N-1 chargé, aucun repli
   // N-1 depuis l'OMS N. Permet d'analyser une période sans avoir importé l'année précédente.
   const noN1 = compare === '0' || compare === 0 || compare === false;
@@ -111,6 +115,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   let rowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
   rowsN = calc.filterOutstore(rowsN, omsN.map); // périmètre EShop = Outstore (exclut l'Instore)
   if (refSetN) rowsN = calc.filterToRefs(rowsN, omsN.map, refSetN);
+  if (tMax) rowsN = calc.filterTimeMax(rowsN, omsN.map, tMax); // cumul à l'heure (aujourd'hui)
   // Taux d'acceptation cookies (RGPD) : GA ne voit que les consentants → sessions réelles
   // = sessions GA ÷ taux. Saisie manuelle (0-100 ou 0-1). Recale le taux de transfo.
   const consentRate = v => { const n = parseFloat((v || '').toString().replace(',', '.')); if (!n || n <= 0) return null; return n > 1 ? n / 100 : n; };
@@ -137,6 +142,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   if (rowsN1) rowsN1 = calc.filterDim(rowsN1, mapN1, dim);
   if (rowsN1) rowsN1 = calc.filterOutstore(rowsN1, mapN1); // périmètre EShop = Outstore
   if (rowsN1 && refSetN1) rowsN1 = calc.filterToRefs(rowsN1, mapN1, refSetN1);
+  if (rowsN1 && tMax) rowsN1 = calc.filterTimeMax(rowsN1, mapN1, tMax); // cumul à l'heure (N-1 ≤ même heure)
   let sessionsRawN1 = null;
   if (rowsN1 && rowsN1.length) {
     sessionsRawN1 = calc.getSessionsForPeriod(totSrcN1, cf, ct, isAll);
@@ -659,7 +665,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   return {
     empty: false,
     meta: {
-      preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable,
+      preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable, hourMax: tMax,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
       hasImpl: !!implN, hasImplN1: !!implN1, hasAds: !!adsN, scope: scopeColl ? 'collection' : 'all',
@@ -738,9 +744,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
