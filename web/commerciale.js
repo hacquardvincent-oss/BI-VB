@@ -45,12 +45,13 @@ function secBilan(rep) {
     tile('Taux de transfo', k.tt != null ? fPct(k.tt) : '—', k.tt, k1.tt),
     tile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
   ].join('');
-  return `<div class="card bilan"><h3>🎯 Bilan 360 — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">N seule</span>'}</h3>
+  const cum = rep.meta && rep.meta.hourMax ? ` · <span style="color:var(--a);font-size:13px">⏱️ cumul à ${esc(rep.meta.hourMax)} (N &amp; N-1)</span>` : '';
+  return `<div class="card bilan"><h3>🎯 Bilan 360 — ${esc(rep.meta.from)} → ${esc(rep.meta.to)}${rep.meta.hasN1 ? '' : ' · <span class="na">N seule</span>'}${cum}</h3>
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
       <div style="flex:1;min-width:300px"><div class="kgrid">${tiles}</div></div>
       <div style="width:160px"><div style="height:140px"><canvas id="opDonut"></canvas></div><div class="note" style="text-align:center">Poids Off / Full</div></div>
     </div>
-    <div class="note">⚠️ Le <b>poids Off / Full price</b> se lit sur le camembert. L'objectif d'une opération saine : développer le CA <b>sans effondrer la part full price</b>. Si le poids off explose mais que le CA global ne progresse pas, l'opération cannibalise le plein tarif.</div></div>`;
+    <div class="note">⚠️ Le <b>poids Off / Full price</b> se lit sur le camembert. L'objectif d'une opération saine : développer le CA <b>sans effondrer la part full price</b>. Si le poids off explose mais que le CA global ne progresse pas, l'opération cannibalise le plein tarif.${cum ? ` <b>⏱️ Aujourd'hui : CA / commandes / démarque comparés en cumul à ${esc(rep.meta.hourMax)} (N et N-1).</b> Les sessions GA restent en journée (non sécables à l'heure côté GA) → le taux de transfo du jour est indicatif.` : ''}</div></div>`;
 }
 
 // GLOBAL : pivot FR / Inter × Démarqué / Full price (CA, poids, vs N-1, évolution).
@@ -432,15 +433,20 @@ async function analyze() {
   try { localStorage.setItem('vbOp', JSON.stringify({ from, to, cfrom, cto })); } catch (e) { /* ignore */ }
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement de l\'opération…</div>';
+  // CUMUL À L'HEURE : si l'opération est UNE journée == AUJOURD'HUI, on tronque toute l'analyse
+  // (N et N-1) aux ventes ≤ l'heure courante → comparaison honnête (sinon N partiel vs N-1 full day).
+  // Jour terminé → full day (pas de hourMax).
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const hourMax = (from === to && to === todayISO) ? new Date().toTimeString().slice(0, 5) : null;
   let rep;
   try {
-    const r = await fetch(`/api/report?${q({ from, to, cfrom, cto, dim: DIM, compare: COMPARE ? null : '0' })}`);
+    const r = await fetch(`/api/report?${q({ from, to, cfrom, cto, dim: DIM, compare: COMPARE ? null : '0', hourMax })}`);
     rep = await r.json();
   } catch (e) { box.innerHTML = `<div class="card note">⚠ ${esc(e.message || 'Erreur réseau')}</div>`; return; }
   if (rep.empty) { box.innerHTML = `<div class="card"><div class="note">${esc(rep.message || 'Aucune donnée — clique « ⬇️ Import complet (opération + N-1) » pour charger l\'OMS WSHOP de la période.')}</div></div>`; return; }
   LAST = rep; LAST_DAY = from;
   fillCountrySelect(rep);
-  document.getElementById('metaNote').innerHTML = `<b>${esc(rep.meta.from)} → ${esc(rep.meta.to)}</b>${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ' · <span class="na">N seule</span>'}`;
+  document.getElementById('metaNote').innerHTML = `<b>${esc(rep.meta.from)} → ${esc(rep.meta.to)}</b>${rep.meta.hasN1 ? ` vs N-1 (${esc(rep.meta.cf)} → ${esc(rep.meta.ct)})` : ' · <span class="na">N seule</span>'}${rep.meta.hourMax ? ` · <span style="color:var(--a)">⏱️ cumul à ${esc(rep.meta.hourMax)} (N &amp; N-1)</span>` : ''}`;
   renderAll(rep, from);
 }
 

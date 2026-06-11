@@ -267,6 +267,13 @@ function filterRows(rows, map, fromISO, toISO_, isAll) {
   return rows.filter(r => inRng(parseFrD(r[di]), fo, to));
 }
 
+// Tronque aux ventes dont l'heure ≤ tMax ("HH:MM") → cumul à l'heure (comparaison honnête
+// N vs N-1 quand on analyse aujourd'hui). Lignes sans heure : conservées (rares ; WSHOP la fournit).
+function filterTimeMax(rows, map, tMax) {
+  const hi = map.heure; if (hi === undefined || !tMax) return rows;
+  return rows.filter(r => { const t = (r[hi] || '').toString().trim().slice(0, 5); return !t || t <= tMax; });
+}
+
 // ── KPIs CA OMS (CA Global / EShop / FR / Inter / Entrepôt / SFS / Mkt / FP-OP)
 function calcOMS(rows, map) {
   const pi = map.prix, pai = map.pays, mi = map.mag, ti = map.type;
@@ -1484,7 +1491,7 @@ module.exports = {
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
-  filterRows, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,
