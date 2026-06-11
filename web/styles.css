@@ -87,3 +87,12 @@ td{padding:7px 9px;border-bottom:1px solid rgba(46,51,80,.4);font-variant-numeri
 .csec .dragbar{display:none}
 .csec.editing .dragbar{display:block;font-size:10px;font-weight:700;color:var(--a);text-transform:uppercase;letter-spacing:.5px;padding:4px 8px 6px}
 .csec.editing .card{margin:0}
+
+/* Pivot GLOBAL (commerciale) — hiérarchie zone/sous-ligne/total bien lisible */
+table.pivot td{padding:5px 10px}
+table.pivot tr.pv-zone td{font-weight:700;background:var(--s2);border-top:2px solid var(--br)}
+table.pivot tr.pv-zone td:first-child{color:var(--t);font-size:13px;letter-spacing:.3px}
+table.pivot tr.pv-sub td{color:var(--t2);font-size:12px}
+table.pivot tr.pv-sub td:first-child{padding-left:20px}
+table.pivot tr.pv-sub .pv-ind{color:var(--t3)}
+table.pivot tr.pv-total td{font-weight:800;background:rgba(245,166,35,.12);border-top:2px solid var(--a);color:var(--t)}

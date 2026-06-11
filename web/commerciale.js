@@ -36,12 +36,9 @@ const tile = (label, disp, n, n1, inv) => `<div class="kc"><div class="l">${labe
 function secBilan(rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
   const c = rep.ca.n, c1 = rep.ca.n1 || {};
-  const txOff = c.caEShop > 0 && c.caOP != null ? c.caOP / c.caEShop : null;
-  const txOff1 = (c1.caEShop > 0 && c1.caOP != null) ? c1.caOP / c1.caEShop : null;
   const tiles = [
     tile('CA Global EShop', fEur(k.ca), k.ca, k1.ca),
     tile('CA Off Price (démarqué)', fEur(c.caOP), c.caOP, c1.caOP),
-    tile('Poids Off Price', txOff != null ? fPct(txOff) : '—', txOff, txOff1, true),
     tile('CA Full Price', fEur(c.caFP), c.caFP, c1.caFP),
     tile('Commandes', fInt(k.commandes), k.commandes, k1.commandes),
     tile('Sessions (trafic)', fInt(k.sessions), k.sessions, k1.sessions),
@@ -53,7 +50,7 @@ function secBilan(rep) {
       <div style="flex:1;min-width:300px"><div class="kgrid">${tiles}</div></div>
       <div style="width:160px"><div style="height:140px"><canvas id="opDonut"></canvas></div><div class="note" style="text-align:center">Poids Off / Full</div></div>
     </div>
-    <div class="note">⚠️ <b>Poids Off Price</b> en couleur inversée (une hausse = plus de démarque). L'objectif d'une opération saine : développer le CA <b>sans effondrer la part full price</b>. Si le poids off explose mais que le CA global ne progresse pas, l'opération cannibalise le plein tarif.</div></div>`;
+    <div class="note">⚠️ Le <b>poids Off / Full price</b> se lit sur le camembert. L'objectif d'une opération saine : développer le CA <b>sans effondrer la part full price</b>. Si le poids off explose mais que le CA global ne progresse pas, l'opération cannibalise le plein tarif.</div></div>`;
 }
 
 // GLOBAL : pivot FR / Inter × Démarqué / Full price (CA, poids, vs N-1, évolution).
@@ -64,17 +61,19 @@ function secGlobal(rep) {
   const totN = (z.fr.caFP + z.fr.caOP + z.inter.caFP + z.inter.caOP) || 0;
   const totN1 = z1 ? (z1.fr.caFP + z1.fr.caOP + z1.inter.caFP + z1.inter.caOP) : 0;
   if (totN <= 0) return '';
-  // Ligne : libellé, CA N, CA N-1, indenté (sous-ligne off/full), invert (démarque = inversé)
-  const line = (label, caN, caN1, indent, inv) => {
+  // Pourcentages arrondis à l'entier (pas de décimales) pour alléger la lecture.
+  const pct0 = v => (v == null ? '—' : Math.round(v * 100) + '%');
+  // type : 'zone' (titre FR/Inter), 'sub' (off/full indenté), 'total' (grand total)
+  const line = (label, caN, caN1, type, inv) => {
     const poids = totN > 0 ? caN / totN : 0;
     const poids1 = totN1 > 0 && caN1 != null ? caN1 / totN1 : null;
-    const dif = caN1 != null ? caN - caN1 : null;
-    return `<tr class="${indent ? 'sub' : 'grp'}">
-      <td style="${indent ? 'padding-left:22px;color:var(--t2)' : 'font-weight:700'}">${esc(label)}</td>
+    const dif = caN1 != null ? Math.round(caN - caN1) : null;
+    return `<tr class="pv-${type}">
+      <td>${type === 'sub' ? '<span class="pv-ind">›</span> ' : ''}${esc(label)}</td>
       <td>${fEur(caN)}</td>
-      <td>${fPct(poids)}</td>
+      <td>${pct0(poids)}</td>
       <td>${caN1 != null ? fEur(caN1) : '—'}</td>
-      <td>${poids1 != null ? fPct(poids1) : '—'}</td>
+      <td>${pct0(poids1)}</td>
       <td>${caN1 != null ? (inv ? deltaInv(caN, caN1) : delta(caN, caN1)) : '—'}</td>
       <td class="${dif == null ? 'na' : (dif >= 0 ? 'up' : 'dn')}">${dif == null ? '—' : (dif >= 0 ? '+' : '') + fEur(dif)}</td>
     </tr>`;
@@ -82,15 +81,15 @@ function secGlobal(rep) {
   const zoneRows = (name, zN, zN1) => {
     const caN = zN.caFP + zN.caOP, caN1 = zN1 ? (zN1.caFP + zN1.caOP) : null;
     if (caN <= 0 && (!caN1 || caN1 <= 0)) return '';
-    return line(name, caN, caN1, false, false)
-      + line('Démarqué (Off)', zN.caOP, zN1 ? zN1.caOP : null, true, true)
-      + line('Full price', zN.caFP, zN1 ? zN1.caFP : null, true, false);
+    return line(name, caN, caN1, 'zone', false)
+      + line('Démarqué (Off)', zN.caOP, zN1 ? zN1.caOP : null, 'sub', true)
+      + line('Full price', zN.caFP, zN1 ? zN1.caFP : null, 'sub', false);
   };
   const body = zoneRows('FR', z.fr, z1 ? z1.fr : null) + zoneRows('International', z.inter, z1 ? z1.inter : null)
-    + line('Total général', totN, z1 ? totN1 : null, false, false);
+    + line('Total général', totN, z1 ? totN1 : null, 'total', false);
   return `<div class="card"><h3>🌍 GLOBAL — CA par zone × démarque (poids & vs N-1)</h3>
     <table class="pivot"><thead><tr><th>Zone</th><th>CA N</th><th>Poids</th><th>CA N-1</th><th>Poids N-1</th><th>vs N-1</th><th>Évol. €</th></tr></thead><tbody>${body}</tbody></table>
-    <div class="note">💡 Lecture pilotage : la ligne <b>Démarqué</b> est en couleur inversée (une hausse de démarque = signal à surveiller). On veut faire grandir le CA <b>sans gonfler le poids du démarqué</b>. Le « Poids » est calculé sur le CA total EShop de la période.</div></div>`;
+    <div class="note">💡 Lignes <b>FR / International / Total</b> mises en évidence ; sous-lignes <b>Démarqué</b> (inversé) / <b>Full price</b> indentées. On veut faire grandir le CA sans gonfler le poids du démarqué. Le « Poids » est calculé sur le CA total EShop de la période.</div></div>`;
 }
 
 // Lancement : CA à l'heure du jour J (barres) + cumul vs cumul N-1 (courbes) — quasi temps réel.
@@ -108,11 +107,15 @@ function secLancement(repL, day) {
   const refH = isToday ? nowH : (lastH != null ? lastH : 23);
   const caJ1Equiv = sum(hN1.filter(x => parseInt(x.hour) <= refH));
   const offShare = caJ > 0 ? sumOff(hN) / caJ : null;
+  const eh = repL.actionPlan && repL.actionPlan.emailHour;
+  const ehN = eh && eh.n && eh.n.peakHour != null ? eh.n.peakHour : null;
+  const ehN1 = eh && eh.n1 && eh.n1.peakHour != null ? eh.n1.peakHour : null;
   const tiles = [
     `<div class="kc"><div class="l">CA cumulé à ${refH}h${isToday ? ' (maintenant)' : ''}</div><div class="v">${fEur(caJ)} ${delta(caJ, caJ1Equiv)}</div><div class="note" style="margin:2px 0 0">vs N-1 à ${refH}h : ${fEur(caJ1Equiv)}</div></div>`,
     `<div class="kc"><div class="l">CA N-1 même jour (total)</div><div class="v">${fEur(caJ1)}</div></div>`,
     `<div class="kc"><div class="l">Part démarquée du jour</div><div class="v">${offShare != null ? fPct(offShare) : '—'}</div></div>`,
     `<div class="kc"><div class="l">Commandes du jour</div><div class="v">${fInt(cmdJ)}</div></div>`,
+    `<div class="kc"><div class="l">✉️ Heure d'envoi NL</div><div class="v">${ehN != null ? ehN + 'h' : '—'}${ehN1 != null ? ` <span class="na" style="font-size:13px">N-1 ${ehN1}h</span>` : ''}</div></div>`,
   ].join('');
   return `<div class="card"><h3>🚀 Lancement — CA à l'heure · <input type="date" id="launchDay" class="dt" value="${esc(day)}"></h3>
     <div class="kgrid">${tiles}</div>
@@ -136,6 +139,13 @@ function chartLancement(repL) {
   ];
   if (sessLineN) ds.push({ type: 'line', label: 'Sessions N', yAxisID: 'y1', data: sessLineN, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
   if (sessLineN1) ds.push({ type: 'line', label: 'Sessions N-1', yAxisID: 'y1', data: sessLineN1, borderColor: '#22c55e', borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2 });
+  // Marqueurs « heure d'envoi NL » (N plein / N-1 contour) sur l'axe sessions.
+  const eh = repL.actionPlan && repL.actionPlan.emailHour;
+  const ehN = eh && eh.n && eh.n.peakHour != null ? eh.n.peakHour : null;
+  const ehN1 = eh && eh.n1 && eh.n1.peakHour != null ? eh.n1.peakHour : null;
+  const maxSess = Math.max(1, ...(sessLineN || [0]), ...(sessLineN1 || [0]));
+  if (ehN != null) ds.push({ type: 'line', label: '✉️ Envoi NL N', yAxisID: 'y1', data: hours.map(h => h === ehN ? maxSess : null), borderColor: '#a78bfa', backgroundColor: '#a78bfa', pointRadius: 7, pointStyle: 'rectRot', showLine: false });
+  if (ehN1 != null) ds.push({ type: 'line', label: '✉️ Envoi NL N-1', yAxisID: 'y1', data: hours.map(h => h === ehN1 ? maxSess : null), borderColor: '#a78bfa', backgroundColor: 'transparent', pointRadius: 7, pointStyle: 'rectRot', borderWidth: 2, showLine: false });
   mk('launchChart', {
     data: { labels: hours.map(h => h + 'h'), datasets: ds },
     options: {
@@ -159,9 +169,16 @@ function secTranches(rep) {
     const o = b1[b.label] || {};
     return `<tr><td>${esc(b.label)}</td><td>${fEur(b.ca)}</td><td>${o.ca != null ? fEur(o.ca) : '—'}</td><td>${o.ca != null ? delta(b.ca, o.ca) : '—'}</td><td>${fInt(b.qte)}</td><td>${fPct(b.ca / dd.caOff)}</td></tr>`;
   }).join('');
+  const qteTot = dd.buckets.reduce((s, b) => s + (b.qte || 0), 0);
+  const totN1 = dd1 ? dd1.caOff : null;
+  const foot = `<tfoot><tr class="tot"><td><b>Total démarqué</b></td><td><b>${fEur(dd.caOff)}</b></td><td>${totN1 != null ? fEur(totN1) : '—'}</td><td>${totN1 != null ? delta(dd.caOff, totN1) : '—'}</td><td>${fInt(qteTot)}</td><td>100%</td></tr></tfoot>`;
   const top = (dd.topProduits || []).slice(0, 8).map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 38))}</td><td>${fEur(p.ca)}</td><td>${fInt(p.qte)}</td><td>${fPct(p.depth)}</td></tr>`).join('');
+  // Contrôle de cohérence : la somme démarquée doit égaler le CA Off Price du Bilan.
+  const caOP = rep.ca && rep.ca.n ? rep.ca.n.caOP : null;
+  const okOP = caOP != null && Math.abs(caOP - dd.caOff) < 1;
+  const ctrl = caOP != null ? `<div class="note">🔎 <b>Contrôle</b> : total démarqué <b>${fEur(dd.caOff)}</b> ${okOP ? '<span class="up">✓ = CA Off Price du Bilan</span>' : `<span class="dn">≠ CA Off Price (${fEur(caOP)})</span>`}.</div>` : '';
   return `<div class="card"><h3>🏷️ Profondeur de démarque — CA par tranche (N vs N-1)</h3>
-    <table><thead><tr><th>Tranche</th><th>CA N</th><th>CA N-1</th><th>Δ</th><th>Qté</th><th>% du CA démarqué</th></tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th>Tranche</th><th>CA N</th><th>CA N-1</th><th>Δ</th><th>Qté</th><th>% du CA démarqué</th></tr></thead><tbody>${rows}</tbody>${foot}</table>${ctrl}
     ${top ? `<h3 style="margin-top:12px">Top produits de l'opération (démarqués)</h3><table><thead><tr><th>#</th><th>Produit</th><th>CA Off</th><th>Qté</th><th>Démarque moy.</th></tr></thead><tbody>${top}</tbody></table>` : ''}
     <div class="note">💡 Pilote le <b>rendement de tranche</b> : si la tranche profonde (≥ 50 %) pèse beaucoup sans faire plus de volume que la -30/-40, la marge se détruit sans gain. Comparer au nombre de réfs offertes par tranche (comparatif d'offre ci-dessous).</div></div>`;
 }
