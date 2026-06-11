@@ -34,7 +34,9 @@ function isEnvAdmin(username, password) {
 
 // Vérifie les identifiants → renvoie { username, role } ou null
 async function checkCreds(username, password) {
-  if (isEnvAdmin(username, password)) return { username, role: 'admin' };
+  // Si une ligne DB existe pour ce compte, elle fait FOI (permet de changer le mot de passe
+  // d'un compte, y compris l'admin bootstrap une fois sa ligne créée). Le compte env reste un
+  // secours (break-glass) : si la ligne DB échoue, on retente l'identifiant d'environnement.
   if (db.enabled && username) {
     const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [username]);
     const u = rows[0];
@@ -42,6 +44,7 @@ async function checkCreds(username, password) {
       return { username: u.username, role: u.role };
     }
   }
+  if (isEnvAdmin(username, password)) return { username, role: 'admin' };
   return null;
 }
 
@@ -60,6 +63,30 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => { req.session = null; res.json({ ok: true }); });
+
+// Changer SON PROPRE mot de passe (tout compte connecté). Vérifie le mot de passe actuel, puis
+// upsert en base : pour l'admin bootstrap (pas encore en base), crée sa ligne (l'identifiant
+// d'environnement reste un secours). Nécessite une base pour persister.
+router.post('/change-password', requireAuth, async (req, res) => {
+  try {
+    if (!db.enabled) return res.status(400).json({ error: 'Base de données requise pour enregistrer le mot de passe (DATABASE_URL).' });
+    const { currentPassword, newPassword } = req.body || {};
+    if (!newPassword || String(newPassword).length < 6) return res.status(400).json({ error: 'Nouveau mot de passe : 6 caractères minimum.' });
+    const username = req.session.username;
+    const ok = await checkCreds(username, currentPassword);
+    if (!ok) return res.status(403).json({ error: 'Mot de passe actuel incorrect.' });
+    const { hash, salt } = hashPassword(newPassword);
+    const role = req.session.role === 'admin' ? 'admin' : 'user';
+    await db.query(
+      `INSERT INTO users (username, pass_hash, pass_salt, role, active, allowed_views) VALUES ($1, $2, $3, $4, true, NULL)
+       ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, pass_salt = EXCLUDED.pass_salt`,
+      [username, hash, salt, role],
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get('/me', async (req, res) => {
   if (!req.session || !req.session.uid) return res.status(401).json({ error: 'Non connecté' });
