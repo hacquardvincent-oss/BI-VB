@@ -26,6 +26,17 @@
     <div class="note" style="margin-bottom:10px">Crée des accès pour ton équipe et restreins chaque profil aux vues qu'il a le droit de consulter (RBAC). Un compte <b>admin</b> voit tout et peut gérer les comptes.</div>
 
     <div class="card" style="background:var(--s2)">
+      <h3 style="color:var(--a)">🔑 Mon mot de passe</h3>
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+        <input id="mpCur" type="password" placeholder="mot de passe actuel" class="dt" style="min-width:170px">
+        <input id="mpNew" type="password" placeholder="nouveau mot de passe" class="dt" style="min-width:170px">
+        <input id="mpConf" type="password" placeholder="confirmer" class="dt" style="min-width:150px">
+        <button class="btn primary" id="mpSave">Changer mon mot de passe</button>
+      </div>
+      <div class="note" id="mpNote" style="margin-top:8px">Le nouveau mot de passe est enregistré en base (6 caractères min). Pour le compte admin, l'identifiant d'environnement reste un accès de secours.</div>
+    </div>
+
+    <div class="card" style="background:var(--s2)">
       <h3 style="color:var(--a)">➕ Créer / mettre à jour un accès</h3>
       <div class="toolbar" style="flex-wrap:wrap;gap:8px">
         <input id="acUser" placeholder="identifiant" class="dt" style="min-width:160px">

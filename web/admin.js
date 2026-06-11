@@ -35,13 +35,21 @@ async function loadUsers() {
     return `<tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
       <td>${u.active ? '<span class="pill">actif</span>' : '<span class="pill miss">inactif</span>'}</td>
       <td style="font-size:11px;color:var(--t2)">${viewsTxt}</td>
-      <td>${u.role === 'admin' ? '' : `<button class="btn" data-act="rights" data-u="${esc(u.username)}">Droits</button> `}<button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button> <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>${editor}`;
+      <td>${u.role === 'admin' ? '' : `<button class="btn" data-act="rights" data-u="${esc(u.username)}">Droits</button> `}<button class="btn" data-act="pass" data-u="${esc(u.username)}">🔑 Mot de passe</button> <button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button> <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>${editor}`;
   }).join('');
   list.innerHTML = `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Vues autorisées</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   const rightsRow = u => [...list.querySelectorAll('tr[data-rights]')].find(tr => tr.dataset.rights === u);
   list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', async () => {
     const u = b.dataset.u;
     if (b.dataset.act === 'del') { if (!confirm(`Supprimer le compte « ${u} » ?`)) return; await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'DELETE' }); loadUsers(); }
+    else if (b.dataset.act === 'pass') {
+      const np = prompt(`Nouveau mot de passe pour « ${u} » (6 caractères min) :`);
+      if (np == null) return;
+      if (np.length < 6) { document.getElementById('acNote').textContent = '⚠ Mot de passe trop court (6 min).'; return; }
+      const r = await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: np }) });
+      const j = await r.json().catch(() => ({}));
+      document.getElementById('acNote').textContent = r.ok ? `✓ Mot de passe de « ${u} » mis à jour.` : '⚠ ' + (j.error || 'Erreur');
+    }
     else if (b.dataset.act === 'toggle') { await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: b.dataset.v === '1' }) }); loadUsers(); }
     else if (b.dataset.act === 'rights') {
       const row = rightsRow(u); if (!row) return;
@@ -91,5 +99,20 @@ async function addUser() {
   document.getElementById('adminBody').classList.remove('hidden');
   renderViewChecks(document.getElementById('acViews'), null);
   document.getElementById('acAdd').addEventListener('click', addUser);
+  document.getElementById('mpSave').addEventListener('click', changeMyPassword);
   loadUsers();
 })();
+
+// Changer son propre mot de passe (compte connecté, admin ou user).
+async function changeMyPassword() {
+  const note = document.getElementById('mpNote');
+  const cur = document.getElementById('mpCur').value, nw = document.getElementById('mpNew').value, cf = document.getElementById('mpConf').value;
+  if (!cur || !nw) { note.textContent = '⚠ Renseigne le mot de passe actuel et le nouveau.'; return; }
+  if (nw.length < 6) { note.textContent = '⚠ Nouveau mot de passe : 6 caractères minimum.'; return; }
+  if (nw !== cf) { note.textContent = '⚠ La confirmation ne correspond pas.'; return; }
+  const r = await fetch('/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
+  note.textContent = '✓ Mot de passe changé. Il sera demandé à ta prochaine connexion.';
+  document.getElementById('mpCur').value = ''; document.getElementById('mpNew').value = ''; document.getElementById('mpConf').value = '';
+}
