@@ -284,17 +284,17 @@ function renderWidgetCharts() {
     const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
     let cfg;
     if (w.form === 'donut') {
-      cfg = { type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } } };
+      cfg = { type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } };
     } else if (w.form === 'line') {
       cfg = { type: 'line', data: { labels, datasets: [
-        { label: 'N', data: vals, borderColor: '#f5a623', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-        ...(useN1 ? [{ label: 'N-1', data: vals1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
-      ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: useN1, labels: { color: '#94a3b8', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } } } } };
+        { label: 'N', data: vals, borderColor: '#A8854A', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(useN1 ? [{ label: 'N-1', data: vals1, borderColor: '#9CA1AB', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+      ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: useN1, labels: { color: '#9CA1AB', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(20,22,28,.06)' } }, y: { ticks: { color: '#9CA1AB', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } } } } };
     } else { // bars (horizontales, N + N-1 claire)
       cfg = { type: 'bar', data: { labels, datasets: [
-        { label: 'N', data: vals, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-        ...(useN1 ? [{ label: 'N-1', data: vals1, backgroundColor: 'rgba(148,163,184,.3)', borderColor: '#94a3b8', borderWidth: 1 }] : []),
-      ] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: useN1, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } } } };
+        { label: 'N', data: vals, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
+        ...(useN1 ? [{ label: 'N-1', data: vals1, backgroundColor: 'rgba(200,205,212,.3)', borderColor: '#9CA1AB', borderWidth: 1 }] : []),
+      ] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: useN1, labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { ticks: { color: '#AEB3BC', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, y: { ticks: { color: '#9CA1AB', font: { size: 10 } }, grid: { display: false } } } } };
     }
     W_CHARTS[cid] = new Chart(el.getContext('2d'), cfg);
   });
@@ -378,7 +378,8 @@ const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>'
 const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €');
 const pc = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : (n - n1) / n1 * 100;
 const sgn = p => (p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(0) + '%');
-const PALETTE = ['#f5a623', '#4a9eff', '#22c55e', '#ef4444', '#a78bfa', '#f472b6', '#34d399', '#fbbf24'];
+const PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#E2574D', '#9B8AA3', '#C0879B', '#5FA88C', '#D4B36A'];
+if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color = '#9CA1AB'; Chart.defaults.font.size = 11; }
 
 const SOURCES = [
   { key: 'oms', name: '🛒 EShop (OMS) — secours si pas d\'API WSHOP', periods: ['N', 'N1'] },
@@ -689,7 +690,7 @@ function coverageBanner(rep) {
     out.push(`ℹ️ <b>Pas de N-1 sur ${esc(m.cf)} → ${esc(m.ct)}</b> : l'OMS N-1 importé couvre ${esc(fmtR(m.omsN1DataMin, m.omsN1DataMax))}. Ajuste les dates N-1 ou réimporte le N-1 sur cette fenêtre.`);
   }
   if (!out.length) return '';
-  return `<div class="card" style="border-color:#f5a623"><div class="note" style="color:#f5a623;margin:0">${out.join('<br>')}</div></div>`;
+  return `<div class="card" style="border-color:#A8854A"><div class="note" style="color:#A8854A;margin:0">${out.join('<br>')}</div></div>`;
 }
 
 function renderReport(rep) {
@@ -1255,7 +1256,7 @@ function renderReport(rep) {
     if (cc.length) {
       const rows = cc.map(c => {
         const flag = (topSet.has(c.campaign) ? '🟢 ' : (flopSet.has(c.campaign) ? '🔴 ' : '')) + (c.saturated ? '🪫 ' : '');
-        const bg = topSet.has(c.campaign) ? 'background:rgba(80,200,120,.12)' : (flopSet.has(c.campaign) ? 'background:rgba(239,68,68,.12)' : '');
+        const bg = topSet.has(c.campaign) ? 'background:rgba(80,200,120,.12)' : (flopSet.has(c.campaign) ? 'background:rgba(226,87,77,.12)' : '');
         const isCell = A.hasIS ? `<td>${c.impressionShare != null ? pct0(c.impressionShare) : '—'}${c.lostBudget != null && c.lostBudget > 0.05 ? ` <span class="dn" title="IS perdu faute de budget">↓${pct0(c.lostBudget)}</span>` : ''}</td>` : '';
         const nrCell = A.hasNewReturning ? `<td class="${c.newShare != null && c.newShare < 0.3 ? 'dn' : ''}" title="part du CA issue de nouveaux clients">${c.newShare != null ? pct0(c.newShare) : '—'}</td>` : '';
         return `<tr style="${bg}"><td title="${esc(c.campaign)}">${flag}${esc(c.campaign)}</td><td>${fEur(c.spend)}</td><td>${c.spendN1 ? delta(c.spend, c.spendN1) : '—'}</td><td title="part dépense / part CA">${pct0(c.shareSpend)} / ${pct0(c.shareCA)}</td><td>${fInt(c.sessions)}</td><td>${c.convRate != null ? fPct(c.convRate) : '—'}</td><td>${fEur(c.caGA)}</td><td>${c.roas != null ? roas(c.roas) : '—'}</td><td class="${c.aboveTarget ? 'dn' : 'up'}">${c.caGA > 0 ? cos(c.cos) : '∞'}</td><td>${c.cpa != null ? fEur(c.cpa) : '—'}</td>${isCell}${nrCell}</tr>`;
@@ -2047,10 +2048,10 @@ function ana(key, rep) {
 function renderCharts(rep) {
   if (typeof Chart === 'undefined') return;
   const mk = (id, cfg) => { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); };
-  const donutOpts = { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 }, padding: 8, usePointStyle: true } } } };
+  const donutOpts = { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 }, padding: 8, usePointStyle: true } } } };
   const barOpts = {
     indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-    scales: { x: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } }, y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } } },
+    scales: { x: { ticks: { color: '#AEB3BC', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } }, y: { ticks: { color: '#9CA1AB', font: { size: 10 } }, grid: { display: false } } },
   };
   const cut = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
   // Barres « croissance / décroissance » : base bleue = min(N, N-1), cap au bout = |Δ| coloré
@@ -2061,18 +2062,18 @@ function renderCharts(rep) {
     const base = items.map(x => (x.n1 == null) ? Math.round(x.n) : Math.round(Math.min(x.n, x.n1)));
     const cap = items.map(x => (x.n1 == null) ? 0 : Math.round(Math.abs(x.n - x.n1)));
     const grew = items.map(x => (x.n1 == null) ? null : (x.n >= x.n1));
-    const datasets = [{ label: 'CA', data: base, backgroundColor: 'rgba(74,158,255,.6)', borderColor: '#4a9eff', borderWidth: 1, stack: 'gs' }];
+    const datasets = [{ label: 'CA', data: base, backgroundColor: 'rgba(110,123,139,.6)', borderColor: '#6E7B8B', borderWidth: 1, stack: 'gs' }];
     if (hasN1) datasets.push({
       label: 'Δ vs N-1 (vert = hausse, rouge = repli)', data: cap, stack: 'gs',
-      backgroundColor: grew.map(g => g == null ? 'rgba(148,163,184,.3)' : (g ? 'rgba(34,197,94,.8)' : 'rgba(239,68,68,.8)')),
-      borderColor: grew.map(g => g == null ? '#94a3b8' : (g ? '#22c55e' : '#ef4444')), borderWidth: 1,
+      backgroundColor: grew.map(g => g == null ? 'rgba(200,205,212,.3)' : (g ? 'rgba(27,158,106,.8)' : 'rgba(226,87,77,.8)')),
+      borderColor: grew.map(g => g == null ? '#9CA1AB' : (g ? '#1B9E6A' : '#E2574D')), borderWidth: 1,
     });
     mk(id, {
       type: 'bar', data: { labels, datasets },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: hasN1, labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } },
+          legend: { display: hasN1, labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } },
           tooltip: { callbacks: { label: c => {
             const x = items[c.dataIndex]; if (!x) return '';
             if (c.datasetIndex === 0) return ` CA N : ${fEur(x.n)}`;
@@ -2082,14 +2083,14 @@ function renderCharts(rep) {
           } } },
         },
         scales: {
-          x: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-          y: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+          x: { stacked: true, ticks: { color: '#AEB3BC', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
+          y: { stacked: true, ticks: { color: '#9CA1AB', font: { size: 10 } }, grid: { display: false } },
         },
       },
     });
   };
   // Camemberts des découpes CA du Bilan (International / Omnicanal / Démarque / Marketplace)
-  const segDonut = (id, segs) => { const s = segs.filter(x => (x[1] || 0) > 0); if (s.length) mk(id, { type: 'doughnut', data: { labels: s.map(x => x[0]), datasets: [{ data: s.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts }); };
+  const segDonut = (id, segs) => { const s = segs.filter(x => (x[1] || 0) > 0); if (s.length) mk(id, { type: 'doughnut', data: { labels: s.map(x => x[0]), datasets: [{ data: s.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts }); };
   const bca = rep.ca && rep.ca.n, bmk = rep.marketplace && rep.marketplace.n;
   if (bca) {
     segDonut('binDonutIntl', [['France', bca.caFR], ['International', bca.caInt]]);
@@ -2102,27 +2103,27 @@ function renderCharts(rep) {
 
   if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
     const s = [...rep.ga.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
-    mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+    mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   if (rep.gaN1 && rep.gaN1.byCanal && rep.gaN1.byCanal.length) {
     const s = [...rep.gaN1.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
-    mk('chDonutN1', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+    mk('chDonutN1', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   // Donut répartition CA (France / International / Marketplace)
   if (rep.ca && rep.ca.n) {
     const c = rep.ca.n, mkt = (rep.marketplace && rep.marketplace.n && rep.marketplace.n.total) || 0;
     const seg = [['EShop France', c.caFR || 0], ['EShop International', c.caInt || 0], ['Marketplace', mkt]].filter(x => x[1] > 0);
-    if (seg.length) mk('caDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+    if (seg.length) mk('caDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   // Funnel e-commerce (barres décroissantes Sessions→Panier→Checkout→Achat)
   if (rep.gaFunnel && rep.gaFunnel.n && rep.gaFunnel.n.steps) {
     const st = rep.gaFunnel.n.steps;
-    mk('funnelChart', { type: 'bar', data: { labels: st.map(x => x.label), datasets: [{ data: st.map(x => Math.round(x.value)), backgroundColor: ['#4a9eff', '#a78bfa', '#f5a623', '#22c55e'], borderWidth: 0, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw.toLocaleString('fr-FR') } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
+    mk('funnelChart', { type: 'bar', data: { labels: st.map(x => x.label), datasets: [{ data: st.map(x => Math.round(x.value)), backgroundColor: ['#6E7B8B', '#9B8AA3', '#A8854A', '#1B9E6A'], borderWidth: 0, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw.toLocaleString('fr-FR') } } }, scales: { x: { ticks: { color: '#9CA1AB', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#AEB3BC', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } } } } });
   }
   // Donut device (sessions)
   if (rep.device && rep.device.n && rep.device.n.length) {
     const d = rep.device.n;
-    mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+    mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   // Barres CA par pays (top 10, hors France) — croissance/décroissance vs N-1
   if (rep.pays && rep.pays.length) {
@@ -2133,30 +2134,30 @@ function renderCharts(rep) {
   if (rep.marketplace && rep.marketplace.n) {
     const m = rep.marketplace.n;
     const seg = [['Galeries Lafayette', m.glTotal], ['Printemps', m.printemps], ['Place des Tendances', m.pdt], ['Lulli', m.lulli]].filter(x => x[1] > 0);
-    if (seg.length) mk('mktDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#1a1d27', borderWidth: 2 }] }, options: donutOpts });
+    if (seg.length) mk('mktDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   // Saison : modèles par famille E26 vs E25 (barres groupées)
   if (rep.seasonCompare && rep.seasonCompare.familles && rep.seasonCompare.familles.length) {
     const f = rep.seasonCompare.familles.slice(0, 8);
-    mk('saisonChart', { type: 'bar', data: { labels: f.map(x => cut(x.famille, 18)), datasets: [{ label: 'E26', data: f.map(x => x.modN), backgroundColor: 'rgba(245,166,35,.7)', borderColor: '#f5a623', borderWidth: 1, borderRadius: 3 }, { label: 'E25', data: f.map(x => x.modN1), backgroundColor: 'rgba(148,163,184,.5)', borderColor: '#94a3b8', borderWidth: 1, borderRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
+    mk('saisonChart', { type: 'bar', data: { labels: f.map(x => cut(x.famille, 18)), datasets: [{ label: 'E26', data: f.map(x => x.modN), backgroundColor: 'rgba(168,133,74,.7)', borderColor: '#A8854A', borderWidth: 1, borderRadius: 3 }, { label: 'E25', data: f.map(x => x.modN1), backgroundColor: 'rgba(200,205,212,.5)', borderColor: '#9CA1AB', borderWidth: 1, borderRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#9CA1AB', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#AEB3BC', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } } });
   }
   // Retours : top raisons (barres)
   if (rep.returns && rep.returns.n && rep.returns.n.reasons && rep.returns.n.reasons.length) {
     const r = rep.returns.n.reasons.slice(0, 8);
-    mk('retoursChart', { type: 'bar', data: { labels: r.map(x => cut(x.reason, 22)), datasets: [{ data: r.map(x => Math.round(x.montant)), backgroundColor: 'rgba(239,68,68,.55)', borderColor: '#ef4444', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+    mk('retoursChart', { type: 'bar', data: { labels: r.map(x => cut(x.reason, 22)), datasets: [{ data: r.map(x => Math.round(x.montant)), backgroundColor: 'rgba(226,87,77,.55)', borderColor: '#E2574D', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
   }
   // Cross-canal : famille × canal (barres empilées)
   if (rep.crossChannel && rep.crossChannel.familles && rep.crossChannel.channels) {
     const cc = rep.crossChannel, fam = cc.familles.slice(0, 8);
     const ds = cc.channels.map((chn, i) => ({ label: chn, data: fam.map(f => Math.round(f.byChannel[chn] || 0)), backgroundColor: PALETTE[i % PALETTE.length], borderWidth: 0 }));
-    mk('crossStack', { type: 'bar', data: { labels: fam.map(f => cut(f.famille, 16)), datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#64748b', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } } } } });
+    mk('crossStack', { type: 'bar', data: { labels: fam.map(f => cut(f.famille, 16)), datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } } }, scales: { x: { stacked: true, ticks: { color: '#9CA1AB', font: { size: 9 } }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#AEB3BC', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } } } } });
   }
   if (rep.famille && rep.famille.length) {
     growShrink('famChart', rep.famille.slice(0, 8).map(x => ({ label: x.fam, n: x.n, n1: x.n1 })));
   }
   if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
     const p = rep.produits.topN.slice(0, 8);
-    mk('prodChart', { type: 'bar', data: { labels: p.map(x => cut(x.des, 22)), datasets: [{ data: p.map(x => Math.round(x.ca)), backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
+    mk('prodChart', { type: 'bar', data: { labels: p.map(x => cut(x.des, 22)), datasets: [{ data: p.map(x => Math.round(x.ca)), backgroundColor: 'rgba(168,133,74,.55)', borderColor: '#A8854A', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
   }
 }
 
@@ -2201,23 +2202,23 @@ function renderTimelineChart(rep) {
   _charts.tlChart = new Chart(el.getContext('2d'), {
     data: {
       labels, datasets: [
-        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-        ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 }] : []),
-        { type: 'line', label: 'TT % N', yAxisID: 'y1', data: tt, borderColor: '#22c55e', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-        ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#22c55e', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
-        { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-        ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#a78bfa', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
-        { type: 'line', label: '✉️ Email N', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#ef4444', pointBorderWidth: 2, borderColor: '#ef4444' },
-        ...(hasEmailN1 ? [{ type: 'line', label: '✉️ Email N-1', yAxisID: 'y', data: emailN1Pts, showLine: false, pointStyle: 'cross', pointRadius: 8, pointBorderColor: 'rgba(239,68,68,.55)', pointBorderWidth: 2, borderColor: 'rgba(239,68,68,.55)' }] : []),
+        { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
+        ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 }] : []),
+        { type: 'line', label: 'TT % N', yAxisID: 'y1', data: tt, borderColor: '#1B9E6A', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#1B9E6A', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#9B8AA3', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+        ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#9B8AA3', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        { type: 'line', label: '✉️ Email N', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#E2574D', pointBorderWidth: 2, borderColor: '#E2574D' },
+        ...(hasEmailN1 ? [{ type: 'line', label: '✉️ Email N-1', yAxisID: 'y', data: emailN1Pts, showLine: false, pointStyle: 'cross', pointRadius: 8, pointBorderColor: 'rgba(226,87,77,.55)', pointBorderWidth: 2, borderColor: 'rgba(226,87,77,.55)' }] : []),
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+      plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } } },
       scales: {
-        x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
+        x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
       },
     },
   });
@@ -2231,10 +2232,10 @@ function renderTimeline2Chart(rep) {
   const ca = tl.map(d => Math.round(d.ca || 0));
   const caN1 = tl.map(d => d.caN1 != null ? Math.round(d.caN1) : null);
   const hasN1 = caN1.some(v => v != null);
-  const CAMP_COLORS = ['#4a9eff', '#22c55e', '#a78bfa'];
+  const CAMP_COLORS = ['#6E7B8B', '#1B9E6A', '#9B8AA3'];
   const datasets = [
-    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(245,166,35,.55)', borderColor: '#f5a623', borderWidth: 1 },
-    ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 }] : []),
+    { type: 'bar', label: 'CA/jour N', yAxisID: 'y', data: ca, backgroundColor: 'rgba(168,133,74,.55)', borderColor: '#A8854A', borderWidth: 1 },
+    ...(hasN1 ? [{ type: 'bar', label: 'CA/jour N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 }] : []),
   ];
   (t2.campN || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
   (t2.campN1 || []).forEach((c, i) => datasets.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'y1', data: c.data, borderColor: CAMP_COLORS[i % CAMP_COLORS.length], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
@@ -2243,11 +2244,11 @@ function renderTimeline2Chart(rep) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } } },
+      plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } } },
       scales: {
-        x: { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(46,51,80,.4)' } },
-        y1: { position: 'right', title: { display: true, text: 'Sessions', color: '#64748b', font: { size: 9 } }, ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { drawOnChartArea: false } },
+        x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y1: { position: 'right', title: { display: true, text: 'Sessions', color: '#AEB3BC', font: { size: 9 } }, ticks: { color: '#9CA1AB', font: { size: 9 } }, grid: { drawOnChartArea: false } },
       },
     },
   });
@@ -2275,36 +2276,36 @@ function renderDailyChart(rep) {
     addN = sN.map(x => x.addRate != null ? +(x.addRate * 100).toFixed(2) : null);
     addN1 = sN.map((x, i) => (sN1[i] && sN1[i].addRate != null) ? +(sN1[i].addRate * 100).toFixed(2) : null);
   }
-  const xax = { ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(46,51,80,.4)' } };
+  const xax = { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(20,22,28,.06)' } };
   const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
   const mk = (id, datasets, scales, pct) => {
     const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy();
     _charts[id] = new Chart(el.getContext('2d'), {
       data: { labels, datasets }, options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } }, tooltip: pct ? { callbacks: { label: c => ` ${c.dataset.label} ${c.raw}%` } } : {} },
+        plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } }, tooltip: pct ? { callbacks: { label: c => ` ${c.dataset.label} ${c.raw}%` } } : {} },
         scales,
       },
     });
   };
   // CA N vs N-1 (bâtons N et N-1)
   mk('dailyChart', [
-    { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(245,166,35,.6)', borderColor: '#f5a623', borderWidth: 1 },
-    { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(245,166,35,.22)', borderColor: 'rgba(245,166,35,.55)', borderWidth: 1 },
-  ], { x: xax, y: { position: 'left', ticks: { color: '#f5a623', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } } });
+    { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
+    { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
+  ], { x: xax, y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } } });
   // Trafic (sessions) + taux d'ajout panier — 1 couleur / indicateur : plein = N, pointillé = N-1
   if (sessN) mk('trafChart', [
-    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#4a9eff', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#4a9eff', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
-    { type: 'line', label: 'Ajout panier % N', yAxisID: 'y1', data: addN, borderColor: '#a78bfa', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'Ajout panier % N-1', yAxisID: 'y1', data: addN1, borderColor: '#a78bfa', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
-  ], { x: xax, y: { position: 'left', ticks: { color: '#4a9eff', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(46,51,80,.4)' } }, y1: { position: 'right', ticks: { color: '#a78bfa', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
+    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#6E7B8B', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#6E7B8B', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
+    { type: 'line', label: 'Ajout panier % N', yAxisID: 'y1', data: addN, borderColor: '#9B8AA3', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'Ajout panier % N-1', yAxisID: 'y1', data: addN1, borderColor: '#9B8AA3', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
+  ], { x: xax, y: { position: 'left', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
   else if (_charts.trafChart) { _charts.trafChart.destroy(); }
   // TT N vs N-1
   if (ttN) mk('ttChart', [
-    { type: 'line', label: 'TT N', data: ttN, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true },
-    { type: 'line', label: 'TT N-1', data: ttN1, borderColor: '#94a3b8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-  ], { x: xax, y: { ticks: { color: '#22c55e', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(46,51,80,.4)' } } }, true);
+    { type: 'line', label: 'TT N', data: ttN, borderColor: '#1B9E6A', backgroundColor: 'rgba(27,158,106,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true },
+    { type: 'line', label: 'TT N-1', data: ttN1, borderColor: '#9CA1AB', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+  ], { x: xax, y: { ticks: { color: '#1B9E6A', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(20,22,28,.06)' } } }, true);
   else if (_charts.ttChart) { _charts.ttChart.destroy(); }
 }
 
@@ -2450,9 +2451,9 @@ function renderReco(d) {
   const r = d.reco;
   const block = (title, arr, color) => `<h3 style="margin-top:14px">${title}</h3>` + ((arr || []).map(x => `<div class="insight" style="border-left-color:${color}"><b>${esc(x.titre || '')}</b> — ${esc(x.action || '')}<div class="note" style="margin-top:4px">📊 ${esc(x.donnee || '')}${x.impact ? ' &nbsp;·&nbsp; 🎯 ' + esc(x.impact) : ''}</div></div>`).join('') || '<div class="note">—</div>');
   box.innerHTML = `<div class="insight">💡 <b>Synthèse.</b> ${esc(r.synthese || '')}</div>`
-    + block('☀️ Court terme (≤ 1 mois)', r.court, '#f5a623')
-    + block('📈 Moyen terme (1–3 mois)', r.moyen, '#4a9eff')
-    + block('🧭 Long terme (3–12 mois)', r.long, '#22c55e');
+    + block('☀️ Court terme (≤ 1 mois)', r.court, '#A8854A')
+    + block('📈 Moyen terme (1–3 mois)', r.moyen, '#6E7B8B')
+    + block('🧭 Long terme (3–12 mois)', r.long, '#1B9E6A');
 }
 document.getElementById('recoBtn').addEventListener('click', async () => {
   const note = document.getElementById('recoNote'), btn = document.getElementById('recoBtn');
@@ -2592,7 +2593,7 @@ function renderCAAudit(res) {
     + ((res.period || {}).to && res.period.to !== res.period.from ? ` → ${esc(res.period.to)}` : '')
     + ` · ${fInt(res.count || 0)} commandes, ${fInt(a.lines || 0)} lignes`
     + ` · remboursements ${eur(a.refunds)}</div>`
-    + `<div style="margin-top:6px;font-size:12px">Cible TTC : <input type="number" id="wshopcatarget" value="${target || 24372}" style="width:90px;background:var(--s2);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:3px 6px"> € <button class="btn" id="wshopcahl" style="padding:3px 8px">Surligner</button></div>`
+    + `<div style="margin-top:6px;font-size:12px">Cible TTC : <input type="number" id="wshopcatarget" value="${target || 24372}" style="width:90px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:6px;padding:3px 6px"> € <button class="btn" id="wshopcahl" style="padding:3px 8px">Surligner</button></div>`
     + `<table style="margin-top:6px;font-size:12px;border-collapse:collapse"><tbody>`
     + cands.map(row).join('')
     + `</tbody></table>`

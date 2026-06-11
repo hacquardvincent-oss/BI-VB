@@ -347,10 +347,22 @@ N-1 pointillé** [`rep.hourly.sessN/sessN1` via `sessionsByHour(gaemailhour)`]) 
 → `POST /api/ingest/offre-listing` : 1 fichier scindé par colonne **Saison** [E26→N, E25→N-1] → `offre-N`/`offre-N1`).
 Bouton **⚡ delta WSHOP** intégré = quasi temps réel les jours de lancement. Reporting = analyses génériques.
 
+### Design system « Maison » (refonte 06/2026) — thème clair épuré
+**Reskin complet** : `styles.css` est passé d'un dashboard sombre à un thème **clair « Maison »** (validé maquette). Les
+**noms de variables historiques sont CONSERVÉS** (`--a,--b,--g,--r,--bg,--s,--s2,--br,--t,--t2,--t3` ; le JS y réfère via
+`var(--x)`) mais **remappés** : `--bg #F5F6F8` (page), `--s #FFFFFF` (carte), `--s2 #F4F6F8` (inset), `--br #E7E9EE` (filet),
+`--a #A8854A` (**accent laiton**, ex-CA/ambre), `--b #6E7B8B` (ardoise/sessions), `--g #1B9E6A` (**vert** hausse/TT),
+`--r #E2574D` (**rouge** baisse/retours), `--t #191B1F` (encre). Typo : **Space Grotesk** (titres/KPI, var `--disp`) +
+**Inter** (donnée, tabulaire) via `@import` Google Fonts. **Deltas = pilules pastel** (`.up`/`.dn` → fond `--pos-bg`/`--neg-bg` ;
+padding pilule **uniquement sur `span`** pour ne pas casser le padding des `<td>` ; `:not(.sig)` protège les leviers).
+Maquette de référence : `web/mockup-bilan.html` (page autonome, non liée à la nav). ⏳ **À faire** : export PDF (embarquer
+les TTF Space Grotesk + Inter dans pdfkit → règle aussi la limite WinAnsi `→`/`Δ`) + polish mobile.
+
 ### Graphiques (Chart.js) — comment ils sont construits
-Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. Couleurs : `--a #f5a623` (CA/ambre), `--b #4a9eff`
-(sessions/bleu), `--g #22c55e` (vert=hausse/TT), `--r #ef4444` (rouge=baisse/retours), `#a78bfa` (violet=ajout panier).
-`PALETTE` (8). **Convention courbes : trait plein = N, pointillé = N-1.**
+Registre global `_charts`, `mk(id,cfg)` détruit avant recréer. `Chart.defaults.font.family='Inter'` posé sur chaque page.
+Couleurs Maison : `--a #A8854A` (CA/laiton), `--b #6E7B8B` (sessions/ardoise), `--g #1B9E6A` (vert=hausse/TT),
+`--r #E2574D` (rouge=baisse/retours), `#9B8AA3` (mauve=ajout panier) ; grille `rgba(20,22,28,.06)`, séparateurs donut blancs.
+`PALETTE` (8, mutée). **Convention courbes : trait plein = N, pointillé = N-1.**
 - **`growShrink(id,items)`** (famChart, paysChart) — **barres horizontales empilées « croissance/décroissance »** :
   base bleue = `min(N,N1)`, cap = `|N−N1|` **vert si N≥N1 (grandit) / rouge si rétrécit** → la barre atteint `max(N,N1)`.
 - **`#tlChart`** (timeline 4 sem., mixte) : barres CA/jour N (ambre foncé) + N-1 (ambre clair) sur axe `y` ; courbes TT% et
