@@ -24,9 +24,12 @@ function cfg() {
   return {
     token: process.env.META_ACCESS_TOKEN || '',
     account: acc ? (acc.startsWith('act_') ? acc : `act_${acc.replace(/[^\d]/g, '')}`) : '',
+    igUser: (process.env.META_IG_USER_ID || '').toString().replace(/[^\d]/g, ''),   // organique Instagram
+    pageId: (process.env.META_PAGE_ID || '').toString().replace(/[^\d]/g, ''),      // organique Page Facebook
   };
 }
 function isConfigured() { const c = cfg(); return !!(c.token && c.account); }
+function hasOrganic() { const c = cfg(); return !!(c.token && (c.igUser || c.pageId)); }
 
 const shiftYear = (iso, d) => { if (!iso) return ''; const p = iso.split('-'); return `${+p[0] + d}-${p[1]}-${p[2]}`; };
 const isoD = d => d.toISOString().slice(0, 10);
@@ -102,6 +105,60 @@ function toDataset(rows, startISO, endISO) {
   };
 }
 
+// ── Ventilations Ads (placement / âge-genre / pays) — insights AGRÉGÉS par dimension ──
+async function fetchBreakdown(startISO, endISO, breakdowns, keyFn) {
+  const c = cfg();
+  let page = await graphGet(`${c.account}/insights`, {
+    level: 'account', breakdowns,
+    fields: 'spend,impressions,clicks,actions,action_values',
+    time_range: JSON.stringify({ since: startISO, until: endISO }),
+    limit: '500',
+  });
+  const by = {}; let guard = 0;
+  const consume = data => (data || []).forEach(d => {
+    const k = keyFn(d) || '(n.c.)';
+    const e = by[k] || (by[k] = { key: k, spend: 0, purchases: 0, value: 0, impressions: 0, clicks: 0 });
+    e.spend += Number(d.spend) || 0; e.impressions += Number(d.impressions) || 0; e.clicks += Number(d.clicks) || 0;
+    e.purchases += pickPurchase(d.actions); e.value += pickPurchase(d.action_values);
+  });
+  while (page && Array.isArray(page.data)) { consume(page.data); const next = page.paging && page.paging.next; if (!next || guard++ > 30) break; const r = await fetch(next); page = await r.json().catch(() => null); if (!page || !r.ok) break; }
+  return Object.values(by).map(e => ({ ...e, roas: e.spend > 0 ? e.value / e.spend : null })).sort((a, b) => b.spend - a.spend);
+}
+
+// ── Organique : insights agrégés Instagram (compte) + Page Facebook sur la période ──
+async function fetchInsightSum(objectId, metrics, startISO, endISO) {
+  // /{id}/insights?metric=...&period=day&since&until → on somme les valeurs jour par métrique.
+  const since = Math.floor(new Date(startISO + 'T00:00:00Z').getTime() / 1000);
+  const until = Math.floor(new Date(endISO + 'T23:59:59Z').getTime() / 1000);
+  const j = await graphGet(`${objectId}/insights`, { metric: metrics.join(','), period: 'day', since, until });
+  const out = {};
+  (j.data || []).forEach(m => {
+    const vals = (m.values || []).reduce((s, v) => s + (Number(v.value) || 0), 0);
+    out[m.name] = vals;
+  });
+  return out;
+}
+async function fetchOrganic(startISO, endISO) {
+  const c = cfg(); const social = { ig: null, page: null };
+  if (c.igUser) {
+    try {
+      const ins = await fetchInsightSum(c.igUser, ['reach', 'impressions', 'profile_views'], startISO, endISO);
+      let followers = null;
+      try { const p = await graphGet(c.igUser, { fields: 'followers_count,username' }); followers = p.followers_count != null ? Number(p.followers_count) : null; social.igUsername = p.username; } catch (e) { /* best-effort */ }
+      social.ig = { reach: ins.reach || 0, impressions: ins.impressions || 0, profileViews: ins.profile_views || 0, followers };
+    } catch (e) { social.igError = e.message; }
+  }
+  if (c.pageId) {
+    try {
+      const ins = await fetchInsightSum(c.pageId, ['page_impressions', 'page_engaged_users', 'page_post_engagements'], startISO, endISO);
+      let fans = null;
+      try { const p = await graphGet(c.pageId, { fields: 'fan_count,name' }); fans = p.fan_count != null ? Number(p.fan_count) : null; social.pageName = p.name; } catch (e) { /* best-effort */ }
+      social.page = { impressions: ins.page_impressions || 0, engagedUsers: ins.page_engaged_users || 0, postEngagements: ins.page_post_engagements || 0, fans };
+    } catch (e) { social.pageError = e.message; }
+  }
+  return social;
+}
+
 // Rafraîchit metaads-N (et metaads-N1) depuis l'API.
 async function refresh(opts = {}) {
   if (!isConfigured()) throw new Error('Meta non configuré (META_ACCESS_TOKEN / META_AD_ACCOUNT_ID manquants)');
@@ -123,11 +180,24 @@ async function refresh(opts = {}) {
     try { const r1 = await fetchCampaigns(n1.start, n1.end); store.setDataset('metaads', 'N1', toDataset(r1, n1.start, n1.end)); rowsN1 = r1.length; }
     catch (e) { warnings.push(`Meta N-1 : ${e.message}`); }
   }
-  return { period: { start: nStart, end: nEnd }, rowsN: rowsN.length, rowsN1, warnings, apiVersion: goodVersion };
+  // Ventilations Ads (N) : placement, démographie, pays — best-effort (n'interrompent pas l'import).
+  const bd = {};
+  const safeBd = async (key, breakdowns, keyFn) => { try { bd[key] = await fetchBreakdown(nStart, nEnd, breakdowns, keyFn); } catch (e) { warnings.push(`${key} : ${e.message}`); } };
+  await safeBd('placement', 'publisher_platform,platform_position', d => `${d.publisher_platform || '?'} · ${d.platform_position || '?'}`);
+  await safeBd('demo', 'age,gender', d => `${d.age || '?'} · ${d.gender || '?'}`);
+  await safeBd('country', 'country', d => d.country || '?');
+  store.setDataset('metabd', 'N', { breakdowns: bd, row_count: 0, uploaded_by: 'Meta API', uploaded_at: new Date().toISOString() });
+  // Organique (Instagram + Page) si configuré.
+  let social = null;
+  if (hasOrganic()) {
+    try { social = await fetchOrganic(nStart, nEnd); store.setDataset('metasocial', 'N', { social, row_count: 0, uploaded_by: 'Meta API', uploaded_at: new Date().toISOString() }); }
+    catch (e) { warnings.push(`organique : ${e.message}`); }
+  }
+  return { period: { start: nStart, end: nEnd }, rowsN: rowsN.length, rowsN1, breakdowns: Object.keys(bd), organic: !!social, warnings, apiVersion: goodVersion };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfigured(), account: cfg().account || null }));
+router.get('/status', requireAuth, (req, res) => { const c = cfg(); res.json({ configured: isConfigured(), account: c.account || null, organic: hasOrganic(), ig: !!c.igUser, page: !!c.pageId }); });
 
 // Diagnostic : appelle l'endpoint du compte (nom + devise) puis 1 ligne d'insight (30 j).
 router.get('/ping', requireAuth, async (req, res) => {
@@ -143,6 +213,13 @@ router.get('/ping', requireAuth, async (req, res) => {
     const rows = await fetchCampaigns(isoD(from), isoD(to));
     out.query = 'ok'; out.queryMs = Date.now() - t; out.sampleRows = rows.length;
   } catch (e) { out.query = 'KO — ' + e.message; }
+  // Organique (best-effort) : confirme l'accès IG/Page si configuré.
+  if (hasOrganic()) {
+    try {
+      const to = new Date(), from = new Date(); from.setDate(from.getDate() - 7);
+      out.organic = await fetchOrganic(isoD(from), isoD(to));
+    } catch (e) { out.organic = { error: e.message }; }
+  } else { out.organic = 'non configuré (META_IG_USER_ID / META_PAGE_ID)'; }
   res.json(out);
 });
 
