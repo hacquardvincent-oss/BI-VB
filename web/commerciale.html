@@ -18,10 +18,12 @@
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="setupToggle" title="Afficher / masquer le paramétrage">⚙️ Paramètres</button>
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap">
+<div class="wrap layout-2col">
+  <aside id="setupCol">
   <!-- INTRO -->
   <div class="card">
     <h3>💰 Analyse commerciale — pilotage d'une opération</h3>
@@ -76,9 +78,12 @@
     </div>
   </div>
 
+  </aside>
+  <main id="mainCol">
   <div id="report" style="display:flex;flex-direction:column;gap:14px">
     <div class="card"><div class="note">Choisis la période de l'opération puis clique « Analyser l'opération ».</div></div>
   </div>
+  </main>
 </div>
 
 <script src="/commerciale.js"></script>

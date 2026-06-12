@@ -426,6 +426,8 @@ function balanceKgrids(root) {
 let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
+try { if (localStorage.getItem('setupCollapsed') === '1') document.body.classList.add('setup-collapsed'); } catch (e) {}
+{ const _b = document.getElementById('setupToggle'); if (_b) _b.addEventListener('click', () => { const on = document.body.classList.toggle('setup-collapsed'); try { localStorage.setItem('setupCollapsed', on ? '1' : '0'); } catch (e) {} }); }
 
 // Glisser-déposer des sections (réordonne + mémorise, re-render sans refetch).
 function wireDnD(rep, day) {
