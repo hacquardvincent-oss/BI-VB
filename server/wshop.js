@@ -184,20 +184,10 @@ function orderToRows(order) {
     // étant alors dans `compareAtPrice` → on prend le PLUS HAUT des deux comme catalogue plein.
     // « Prix Vente Remisé » = prix après démarque : champ dédié de l'API si présent, sinon, si le prix
     // payé est sous le catalogue, on prend `unitPrice` (la démarque est dans le payé).
-    const v = it.variant || {}, prod = it.product || {};
+    const v = it.variant || {};
     const cmpAt = Number(it.compareAtPrice || 0) || 0;
     const ouPrice = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
-    let pvUnit = Math.max(cmpAt, ouPrice) || 0;
-    // FALLBACK INTERNATIONAL : si le catalogue standard (originalUnitPrice / compareAtPrice) n'excède
-    // PAS le prix payé, la démarque est invisible (cas observé sur les commandes hors France → Off = 0).
-    // On cherche alors un prix d'origine ailleurs (liste, variante, produit). N'est utilisé QUE comme
-    // repli (ne touche pas le calcul France déjà validé au TCD : là, pvUnit > unit est déjà vrai).
-    if (!(pvUnit > unit) && unit > 0 && (pays || '').toLowerCase() !== 'france') {
-      const alt = [it.listPrice, it.basePrice, it.regularPrice, it.msrp, it.fullPrice, it.priceWithoutDiscount,
-        it.originalPrice, it.catalogPrice, it.retailPrice, v.price, v.originalPrice, v.compareAtPrice, v.listPrice,
-        prod.price, prod.originalPrice, prod.compareAtPrice].map(x => Number(x) || 0).filter(x => x > unit);
-      if (alt.length) pvUnit = Math.max(pvUnit, ...alt);
-    }
+    const pvUnit = Math.max(cmpAt, ouPrice) || 0;
     let pvrUnit = Number(it.originalDiscountedUnitPrice || it.discountedUnitPrice || it.salePrice || it.markdownPrice || 0) || 0;
     if (!(pvrUnit > 0) && pvUnit > 0 && unit > 0 && unit < pvUnit) pvrUnit = unit;
     const color = (it.color || it.colour || it.colorLabel || it.couleur || it.colorName || v.color || v.colour || v.colorLabel || v.label || '').toString().trim();
@@ -612,9 +602,13 @@ router.get('/ping', requireAuth, async (req, res) => {
       // Diagnostic « DÉMARQUE PAR ZONE » : la démarque off-price International tombe à 0 quand l'API
       // ne renvoie pas de prix catalogue exploitable pour les commandes hors France. On compare donc
       // l'encodage des prix FRANCE vs INTERNATIONAL pour repérer le champ catalogue/remisé manquant.
+      // Dump COMPLET d'un item (tous les champs scalaires SAUF PII) → repère le champ « remisé »
+      // international même s'il porte un nom inattendu (non capté par le filtre prix ci-dessus).
+      const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
+      const pickAll = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { const v = obj[k]; if (!PII.test(k) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 40))) r[k] = v; }); return r; };
       const zoneStat = () => {
-        const z = { france: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null },
-          inter: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null } };
+        const z = { france: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, pays: null },
+          inter: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, pays: null } };
         arr.forEach(o => {
           const code = ((o.shippingAddress && o.shippingAddress.countryCode) || '').toUpperCase();
           const g = code === 'FR' ? z.france : z.inter;
@@ -625,7 +619,7 @@ router.get('/ping', requireAuth, async (req, res) => {
             if (catalogue > 0) g.catRenseigne++;
             if (catalogue > 0 && u > 0 && u < catalogue * 0.98) g.markdownDetectable++;
             if (disc > 0) g.discRenseigne++;
-            if (!g.exemple && u > 0) g.exemple = pick(it);
+            if (!g.exemple && u > 0) { g.exemple = pick(it); g.exempleComplet = pickAll(it); g.pays = countryName(code); }
           });
         });
         return z;
