@@ -63,6 +63,8 @@ async function init() {
   )`);
   // RBAC par vue : liste des vues autorisées (NULL = toutes). Ajout idempotent.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_views jsonb`);
+  // Droit d'édition : true = peut créer/modifier des vues ; false = lecture seule. Ajout idempotent (défaut true).
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit boolean NOT NULL DEFAULT true`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }

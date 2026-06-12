@@ -19,7 +19,10 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
   `db.js` crée `datasets(source,period,data jsonb)`, `objectives`, `users`; `store.hydrate()` recharge au boot;
   écritures write-through (upsert). **Sans DB → données perdues au redeploy** (toujours conseiller `DATABASE_URL`).
 - **Auth** (`auth.js`) : scrypt + `timingSafeEqual`. Admin bootstrap par env `ADMIN_USERNAME`/`ADMIN_PASSWORD`
-  (marche sans DB). Comptes équipe en DB (`users`, rôle admin/user, `allowed_views` jsonb = **RBAC par vue**).
+  (marche sans DB). Comptes équipe en DB (`users`, rôle admin/user, `allowed_views` jsonb = **RBAC par vue**,
+  `can_edit` bool = **droit Lecture/Modification** : `requireEdit` garde `/api/myviews` (créer/éditer ses vues) ;
+  les vues partagées `/api/layouts` restent **admin**. Front : `CAN_EDIT`/`canEditView()`/`canCreateView()` masquent ➕/✏️/⚙️.
+  ⚠️ MDP **haché scrypt = non lisible** ; l'admin **réinitialise** (jamais « voir le MDP actuel ») + œil 👁 sur la saisie).
   `cookie-session` 7 j (`SESSION_SECRET`). Middlewares `requireAuth`/`requireAdmin`/`requireDb`.
   **`checkCreds`** : la ligne DB fait FOI si présente (permet de **changer le mot de passe** d'un compte) ;
   l'identifiant env reste un **secours**. **Identifiant insensible à la casse + trim** (`lower(username)`, stocké trimé)
