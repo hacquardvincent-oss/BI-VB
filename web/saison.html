@@ -35,8 +35,15 @@
     <div class="toolbar">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">N (E26)</span>
       <input type="date" id="dNfrom" class="dt" value="2025-12-01"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt" value="2026-06-07">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1 (E25)</span>
-      <input type="date" id="dCfrom" class="dt" value="2024-12-01"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt" value="2025-06-07">
+    </div>
+    <div id="n1Wrap">
+      <div id="n1Auto" class="note" style="margin:7px 0 0">↪ Comparé à N-1 (E25) : <b id="n1Label">−364 j (auto)</b> · <a href="#" id="n1Edit">modifier</a></div>
+      <div id="n1Manual" class="hidden">
+        <label class="setlabel" style="margin-top:7px">N-1 (E25) — saison équivalente <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours" style="padding:1px 7px;font-size:10px">≈ −364 j</button></label>
+        <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+          <input type="date" id="dCfrom" class="dt" value="2024-12-01"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt" value="2025-06-07">
+        </div>
+      </div>
     </div>
     <div class="toolbar" style="margin-top:8px">
       <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
