@@ -29,7 +29,10 @@ function deltaInv(n, n1) {
 const shiftDays = (iso, d) => { const p = iso.split('-').map(Number); const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2])); dt.setUTCDate(dt.getUTCDate() + d); return dt.toISOString().slice(0, 10); };
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); }
-const tile = (label, disp, n, n1, inv) => `<div class="kc"><div class="l">${label}</div><div class="v">${disp} ${(n != null && n1 != null) ? (inv ? deltaInv(n, n1) : delta(n, n1)) : ''}</div></div>`;
+const tile = (label, disp, n, n1, inv) => {
+  const d = (n != null && n1 != null) ? (inv ? deltaInv(n, n1) : delta(n, n1)) : '';
+  return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>${d ? `<div style="margin-top:6px">${d}</div>` : ''}</div>`;
+};
 
 // ── Sections de rendu ──────────────────────────────────────────────────────
 
@@ -426,8 +429,6 @@ function balanceKgrids(root) {
 let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
-try { if (localStorage.getItem('setupCollapsed') === '1') document.body.classList.add('setup-collapsed'); } catch (e) {}
-{ const _b = document.getElementById('setupToggle'); if (_b) _b.addEventListener('click', () => { const on = document.body.classList.toggle('setup-collapsed'); try { localStorage.setItem('setupCollapsed', on ? '1' : '0'); } catch (e) {} }); }
 
 // Glisser-déposer des sections (réordonne + mémorise, re-render sans refetch).
 function wireDnD(rep, day) {
