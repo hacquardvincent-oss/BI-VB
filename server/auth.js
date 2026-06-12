@@ -50,11 +50,36 @@ async function checkCreds(username, password) {
   return null;
 }
 
-router.post('/login', async (req, res) => {
+// ── Rate-limit login anti-bruteforce (mémoire) : 8 échecs / 10 min par IP → blocage 10 min ──
+const LOGIN_FAILS = new Map(); // ip → { count, first, blockedUntil }
+const WINDOW = 10 * 60 * 1000, MAX_FAILS = 8;
+function loginRateLimit(req, res, next) {
+  const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim() || 'unknown';
+  req._loginIp = ip;
+  const e = LOGIN_FAILS.get(ip);
+  if (e && e.blockedUntil && e.blockedUntil > Date.now()) {
+    const min = Math.ceil((e.blockedUntil - Date.now()) / 60000);
+    return res.status(429).json({ error: `Trop de tentatives. Réessaie dans ${min} min.` });
+  }
+  next();
+}
+function noteLogin(ip, ok) {
+  if (!ip) return;
+  if (ok) { LOGIN_FAILS.delete(ip); return; }
+  const now = Date.now();
+  const e = LOGIN_FAILS.get(ip) || { count: 0, first: now };
+  if (now - e.first > WINDOW) { e.count = 0; e.first = now; e.blockedUntil = 0; }
+  e.count++;
+  if (e.count >= MAX_FAILS) e.blockedUntil = now + WINDOW;
+  LOGIN_FAILS.set(ip, e);
+}
+
+router.post('/login', loginRateLimit, async (req, res) => {
   try {
     const { username, password } = req.body || {};
     const u = await checkCreds(username, password);
-    if (!u) return res.status(401).json({ error: 'Identifiants invalides' });
+    if (!u) { noteLogin(req._loginIp, false); return res.status(401).json({ error: 'Identifiants invalides' }); }
+    noteLogin(req._loginIp, true);
     req.session.uid = u.username;
     req.session.username = u.username;
     req.session.role = u.role;
