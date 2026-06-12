@@ -26,7 +26,7 @@ function verifyPassword(password, hash, salt) {
 function isEnvAdmin(username, password) {
   const U = process.env.ADMIN_USERNAME || 'Vincent';
   const P = process.env.ADMIN_PASSWORD || '';
-  if (!P || username !== U) return false;
+  if (!P || String(username || '').trim().toLowerCase() !== U.trim().toLowerCase()) return false;
   const a = Buffer.from(String(password || ''));
   const b = Buffer.from(P);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -37,14 +37,16 @@ async function checkCreds(username, password) {
   // Si une ligne DB existe pour ce compte, elle fait FOI (permet de changer le mot de passe
   // d'un compte, y compris l'admin bootstrap une fois sa ligne créée). Le compte env reste un
   // secours (break-glass) : si la ligne DB échoue, on retente l'identifiant d'environnement.
-  if (db.enabled && username) {
-    const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+  const uname = String(username || '').trim();
+  if (db.enabled && uname) {
+    // Identifiant insensible à la casse et aux espaces (cause n°1 des « mauvais identifiants » sur un MDP correct).
+    const { rows } = await db.query('SELECT * FROM users WHERE lower(username) = lower($1)', [uname]);
     const u = rows[0];
     if (u && u.active && verifyPassword(password, u.pass_hash, u.pass_salt)) {
       return { username: u.username, role: u.role };
     }
   }
-  if (isEnvAdmin(username, password)) return { username, role: 'admin' };
+  if (isEnvAdmin(uname, password)) return { username: uname, role: 'admin' };
   return null;
 }
 
@@ -126,7 +128,8 @@ router.get('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
 
 router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
-    const { username, password, role, allowedViews } = req.body || {};
+    const username = String((req.body || {}).username || '').trim(); // stocke sans espaces parasites
+    const { password, role, allowedViews } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
     const r = (role === 'admin') ? 'admin' : 'user';
     const views = normViews(allowedViews);

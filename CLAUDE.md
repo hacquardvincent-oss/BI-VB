@@ -22,7 +22,8 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
   (marche sans DB). Comptes équipe en DB (`users`, rôle admin/user, `allowed_views` jsonb = **RBAC par vue**).
   `cookie-session` 7 j (`SESSION_SECRET`). Middlewares `requireAuth`/`requireAdmin`/`requireDb`.
   **`checkCreds`** : la ligne DB fait FOI si présente (permet de **changer le mot de passe** d'un compte) ;
-  l'identifiant env reste un **secours**. `POST /auth/change-password` (son propre MdP, upsert DB ; pour l'admin
+  l'identifiant env reste un **secours**. **Identifiant insensible à la casse + trim** (`lower(username)`, stocké trimé)
+  → corrige le « mauvais identifiants » sur un MDP correct (ex. « Marine » vs « marine »). `POST /auth/change-password` (son propre MdP, upsert DB ; pour l'admin
   bootstrap → crée sa ligne) ; admin `PATCH /auth/users/:u {password}` (réinitialise un compte). UI : page Admin.
 - **Montage des routes** (`index.js`) : `/healthz`; `/auth`; `/api/ingest`; `/api/report` (**reports.js ET pdf.js**);
   `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/reco`; `/api/objectives`; statique `web/` (no-cache html/js/css).
