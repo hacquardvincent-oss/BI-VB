@@ -18,64 +18,61 @@
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
-  <button class="btn" id="setupToggle" title="Afficher / masquer le paramétrage">⚙️ Paramètres</button>
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
 <div class="wrap layout-2col">
   <aside id="setupCol">
-  <!-- INTRO -->
-  <div class="card">
-    <h3>💰 Analyse commerciale — pilotage d'une opération</h3>
-    <div class="note">Zoom sur <b>une offre commerciale</b> (avant-première, soldes, vente privée…) : est-ce qu'elle fonctionne, et quelles actions déclencher ? Vue 360 du CA EShop avec le <b>poids off/full price en permanence</b>, <b>CA à l'heure les jours de lancement</b> (quasi temps réel via la synchro delta), tranches de démarque, familles off vs full, emails/campagnes dédiés, comparatif de largeur d'offre N vs N-1 et alertes d'exécution.</div>
-  </div>
-
   <!-- 1 · OPÉRATION -->
   <div class="card">
-    <h3>1 · Opération commerciale</h3>
-    <div class="toolbar">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Comparer N-1</span>
+    <h3>1 · Opération</h3>
+    <div class="toolbar" style="gap:5px">
+      <span class="setlabel" style="margin:0;align-self:center">Comparer N-1</span>
       <button class="pb on" id="cmpToggle" data-on="1" title="Activer / désactiver la comparaison vs N-1">✓ Oui</button>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px">Du</span>
-      <input type="date" id="dFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dTo" class="dt">
-      <span id="n1Wrap"><span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Période de comparaison N-1 — libre (les opérations peuvent être décalées d'une semaine vs N-1)">N-1</span>
-      <input type="date" id="dCFrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCTo" class="dt">
-      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine)">≈ −364 j</button></span>
     </div>
-    <div class="toolbar" style="margin-top:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
+    <label class="setlabel">Période de l'opération</label>
+    <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+      <input type="date" id="dFrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dTo" class="dt" style="flex:1;min-width:0">
+    </div>
+    <div id="n1Wrap">
+      <label class="setlabel">Comparaison N-1 <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours" style="padding:1px 7px;font-size:10px">≈ −364 j</button></label>
+      <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+        <input type="date" id="dCFrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dCTo" class="dt" style="flex:1;min-width:0">
+      </div>
+    </div>
+    <label class="setlabel">Dimension</label>
+    <div class="toolbar" style="gap:5px">
       <button class="pb on" data-dim="global">FR + Inter</button>
       <button class="pb" data-dim="fr">France</button>
       <button class="pb" data-dim="inter">International</button>
-      <select id="countrySel" class="dt" title="Filtrer sur un pays précis" style="min-width:130px"><option value="">🌍 Tous pays</option></select>
-      <div class="spacer" style="flex:1"></div>
-      <button class="pb" id="editLayout" title="Réorganiser les tableaux par glisser-déposer">⠿ Éditer la disposition</button>
-      <button class="btn blue" id="analyze">Analyser l'opération</button>
+      <select id="countrySel" class="dt" title="Filtrer sur un pays précis" style="flex:1;min-width:110px"><option value="">🌍 Tous pays</option></select>
     </div>
-    <div class="note">Le comparable N-1 se cale automatiquement à <b>−364 jours</b> (mêmes jours de semaine). Pour le <b>comparatif d'offre</b>, dépose les listings produits N / N-1 dans <a href="/app.html">Reporting → Import manuel</a> (source « 🏷️ Offre »).</div>
-    <div class="note" id="metaNote"></div>
+    <div class="toolbar" style="margin-top:10px;gap:6px">
+      <button class="btn blue" id="analyze" style="flex:1">Analyser l'opération</button>
+      <button class="pb" id="editLayout" title="Réorganiser les tableaux par glisser-déposer">⠿</button>
+    </div>
+    <div class="note" id="metaNote" style="margin-top:8px"></div>
   </div>
 
   <!-- 2 · TEMPS RÉEL -->
   <div class="card">
     <h3>2 · Données & temps réel</h3>
-    <div class="toolbar">
-      <button class="btn blue" id="syncDelta">⚡ Actualiser les données (delta WSHOP)</button>
-      <button class="pb" id="fullImport" title="Réimporte l'OMS complet sur la fenêtre de l'opération + N-1 (nécessaire le 1er jour ou si N-1 manque)">⬇️ Import complet (opération + N-1)</button>
-      <span class="note" id="syncNote" style="margin:0">Récupère les commandes nouvelles/modifiées en quelques secondes → recharge l'analyse. À utiliser en boucle les jours de lancement pour un pilotage quasi temps réel.</span>
+    <div class="toolbar" style="gap:6px;flex-wrap:wrap">
+      <button class="btn blue" id="syncDelta" title="Récupère les commandes nouvelles/modifiées en quelques secondes → recharge l'analyse (à utiliser en boucle les jours de lancement)">⚡ Actualiser (delta WSHOP)</button>
+      <button class="pb" id="fullImport" title="Réimporte l'OMS complet sur la fenêtre de l'opération + N-1 (1er jour ou si N-1 manque)">⬇️ Import complet</button>
+      <button class="pb" id="ga4Refresh" title="Recharge GA4 (sessions, canaux, campagnes) sur la fenêtre N et N-1">🔄 GA4</button>
+      <button class="pb" id="wshopPing" title="Teste WSHOP et montre l'encodage de la démarque sur les lignes soldées">🏷️ Diagnostic démarque</button>
     </div>
-    <div class="toolbar" style="margin-top:8px">
-      <button class="pb" id="ga4Refresh" title="Recharge les données Google Analytics (sessions, canaux, campagnes) sur la fenêtre de l'opération + N-1">🔄 Actualiser GA4 (trafic & canaux)</button>
-      <button class="pb" id="wshopPing" title="Teste WSHOP et montre comment l'API encode la démarque (Prix Vente Remisé) sur les lignes soldées">🏷️ Diagnostic démarque (WSHOP)</button>
-      <span class="note" id="ga4Note" style="margin:0">Met à jour les sessions, canaux de communication et campagnes GA4 sur la période (et N-1) → alimente le Bilan, les canaux et l'acquisition.</span>
-    </div>
+    <span class="note" id="syncNote" style="display:block;margin-top:6px"></span><span class="note" id="ga4Note" style="margin:0"></span>
     <div id="pingBox"></div>
-    <div class="toolbar" style="margin-top:10px;align-items:center">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">📋 Listing d'offre</span>
-      <input type="file" id="offreFile" accept=".xlsx,.xls,.csv" class="dt" style="max-width:320px">
-      <button class="pb" id="offreUpload">Importer le listing N / N-1</button>
-      <span class="note" id="offreNote" style="margin:0">Dépose le fichier d'offre (colonnes : Saison E26/E25, Code, Regroupement famille, Listing, PV FR + démarque). Il est scindé automatiquement en N (saison la plus récente) et N-1 → alimente le comparatif d'offre ci-dessous.</span>
-    </div>
+    <details class="fold" style="margin-top:8px">
+      <summary>📋 Importer un listing d'offre</summary>
+      <div class="toolbar" style="margin-top:8px;gap:6px;align-items:center">
+        <input type="file" id="offreFile" accept=".xlsx,.xls,.csv" class="dt" style="flex:1;min-width:0">
+        <button class="pb" id="offreUpload">Importer N / N-1</button>
+      </div>
+      <span class="note" id="offreNote" style="display:block;margin-top:4px">Colonnes : Saison E26/E25, Code, Regroupement famille, Listing, PV FR + démarque. Scindé auto en N / N-1.</span>
+    </details>
   </div>
 
   </aside>
