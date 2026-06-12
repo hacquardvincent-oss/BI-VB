@@ -1325,6 +1325,7 @@ function renderReport(rep) {
     const tilesArr = [
       kc('Dépense Google Ads', fEur(a.cost), a1.cost ? delta(a.cost, a1.cost) : ''),
       kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
+      kc('ROAS net (net de retours)', roas(A.roasNet && A.roasNet.n), A.roasNet && A.roasNet.n1 != null ? 'N-1 ' + roas(A.roasNet.n1) : 'CA − retours ÷ dépense'),
       kc('COS (dépense ÷ CA EShop)', cos(A.cos && A.cos.n), A.cos && A.cos.n1 != null ? 'N-1 ' + cos(A.cos.n1) : ''),
       kc('Coût / commande', A.cac && A.cac.n != null ? fEur(A.cac.n) : '—', A.cac && A.cac.n1 != null ? 'N-1 ' + fEur(A.cac.n1) : ''),
       kc('Clics', fInt(a.clicks), a1.clicks ? delta(a.clicks, a1.clicks) : ''),
@@ -1386,6 +1387,7 @@ function renderReport(rep) {
       kc('Valeur d\'achat (pixel Meta)', fEur(a.convValue), a1.convValue ? delta(a.convValue, a1.convValue) : ''),
       kc('ROAS Meta (valeur ÷ dépense)', roas(a.roasGA), ''),
       kc('ROAS (CA EShop ÷ dépense)', roas(A.roas && A.roas.n), A.roas && A.roas.n1 != null ? 'N-1 ' + roas(A.roas.n1) : ''),
+      kc('ROAS net (net de retours)', roas(A.roasNet && A.roasNet.n), A.roasNet && A.roasNet.n1 != null ? 'N-1 ' + roas(A.roasNet.n1) : 'CA − retours ÷ dépense'),
       kc('COS (dépense ÷ CA EShop)', cos(A.cos && A.cos.n), A.cos && A.cos.n1 != null ? 'N-1 ' + cos(A.cos.n1) : ''),
       kc('Achats / Clics', `${fInt(a.conversions)} / ${fInt(a.clicks)}`, a.cpa != null ? 'CPA ' + fEur(a.cpa) : ''),
     ].join('');
@@ -1621,8 +1623,8 @@ function buildReportNav() {
   if (!nav) {
     nav = document.createElement('nav'); nav.id = 'reportNav';
     document.body.appendChild(nav);
-    if (window.innerWidth >= 1100) nav.classList.add('open'); // sommaire sticky en permanence sur desktop
   }
+  if (window.innerWidth >= 1100) nav.classList.add('open'); // sticky en permanence : réaffiché à CHAQUE rendu (ex. après édition)
   const report = document.getElementById('report');
   const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
   const canEdit = isMyView(CURRENT_MODULE) || IS_ADMIN;
