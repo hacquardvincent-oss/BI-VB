@@ -78,11 +78,15 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 /* KPI tiles — tuiles bordées + gaps transparents (pas de cellule vide grise, pas de rognage) */
 .kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}
 .kc{background:var(--s);border:1px solid var(--br);border-radius:10px;padding:13px 15px;min-width:0}
-.kc .l{font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+/* libellé sur hauteur fixe (2 lignes) → valeur + delta alignés même si le titre passe à la ligne */
+.kc .l{font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;line-height:1.2;min-height:24px}
 /* valeur + pilule delta : flex qui passe la pilule à la ligne plutôt que de la rogner */
 .kc .v{font-family:var(--disp);font-size:21px;font-weight:600;letter-spacing:-.01em;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:7px;row-gap:2px}
 .note{font-size:12px;color:var(--t3);margin-top:8px;line-height:1.5}
 .cols2{grid-template-columns:1fr 1fr}
+/* Mini-panels (Pilotage 360) : colonnes à largeur fixe → chiffres alignés entre panneaux */
+.mini table{table-layout:fixed;width:100%}
+.mini th:first-child,.mini td:first-child{width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Login */
 #login{max-width:360px;margin:14vh auto;display:flex;flex-direction:column;gap:12px}
