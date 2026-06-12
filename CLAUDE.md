@@ -240,6 +240,12 @@ REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES`. `ensureRefExtIdx` garant
 EXACTEMENT à ΔCA). Entrées = `kpiEShop{n,n1}` (besoin sessions+commandes+CA des 2 périodes). → `rep.variance` → carte `variance`
 (« Pourquoi le CA bouge vs N-1 ? », thème P). 1ʳᵉ brique de la couche analytique déterministe du moat vertical.
 
+### Test de significativité — `propZTest(x1,n1,x2,n2)` (déterministe, ADR-008)
+z-test de **deux proportions** (x=succès, n=essais) → `{z, sig}` (`sig` = |z|≥1,96, 95 %). `rep.significance` = `{tt, annulation}`
+(transfo = commandes/sessions ; annulation = commandesImpactées/commandes). Front : les écarts de TAUX **non significatifs**
+sont **dégrisés** dans le scorecard (`bilanTile` → badge « ns ») et **exclus des leviers** (`bilanSignals`) → on ne crie pas
+au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
+
 ### Annulations — `calcCancellations` / `calcCancellationsDetail` (hors mkt, cf §12)
 - **Taux d'annulation = `commandesImpactees ÷ commandes`** (à la **commande**, pas à la pièce). `tauxPieces`, `tauxCA` aussi.
 - **Annulation** = lignes `Quantité non livré > 0` au statut **Cancelled\*** (ou statut absent). `unit = prix/cmd` (prorata).

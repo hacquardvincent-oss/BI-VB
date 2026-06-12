@@ -1836,13 +1836,15 @@ function updateViewControls() {
 
 // ── Bilan en tête : scorecard N vs N-1 + signaux automatiques (règles) ──────────
 let RECO_OK = false; // moteur de reco IA configuré côté serveur ?
-function bilanTile(label, disp, n, n1, invert) {
+function bilanTile(label, disp, n, n1, invert, sig) {
   const p = pc(n, n1);
   const good = p == null ? null : ((invert ? -p : p) >= 0);
-  const cls = p == null ? 'na' : (good ? 'up' : 'dn');
-  const arrow = p == null ? '' : (p >= 0 ? '▲ ' : '▼ ');
+  const nonSig = sig === false; // testé ET non significatif (bruit) → on ne le colore pas comme un signal
+  const cls = (p == null || nonSig) ? 'na' : (good ? 'up' : 'dn');
+  const arrow = (p == null || nonSig) ? '' : (p >= 0 ? '▲ ' : '▼ ');
+  const tail = nonSig ? ' <span class="nsig" title="Écart non significatif statistiquement (bruit — test z 95 %)">ns</span>' : '';
   return `<div class="kc"><div class="l">${label}</div><div class="v">${disp}</div>
-    <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1'}</div></div>`;
+    <div class="bdelta ${cls}">${p == null ? '<span class="na">— vs N-1</span>' : arrow + sgn(p) + ' vs N-1' + tail}</div></div>`;
 }
 // Détecte les leviers prioritaires CLASSÉS PAR IMPACT MONÉTAIRE (€ gagnés/perdus vs N-1) — 100% client.
 function bilanSignals(rep) {
@@ -1900,7 +1902,8 @@ function bilanSignals(rep) {
     if (worst) push(worst.d, worst.d >= 0 ? 'up' : 'dn', '🏬', `Marketplace — <b>${esc(worst.n)}</b> ${worst.d >= 0 ? '+' : '−'}<b>${eur(worst.d)}</b> vs N-1 → ${worst.d < 0 ? 'vérifier listing/stock/prix' : 'capitaliser'} sur ce canal.`);
   }
   // 6) Taux de transfo — impact € estimé (à sessions constantes)
-  if (k && k1 && k.tt != null && k1.tt != null && k.sessions) {
+  const ttSig = (rep.significance && rep.significance.tt) ? rep.significance.tt.sig : true; // pas de levier sur du bruit statistique
+  if (k && k1 && k.tt != null && k1.tt != null && k.sessions && ttSig) {
     const pm = k.pm || k1.pm || 0;
     const ttImpact = (k.tt - k1.tt) * k.sessions * pm;
     if (Math.abs(ttImpact) > 1000) push(ttImpact, ttImpact >= 0 ? 'up' : 'dn', '🛒', `Taux de transfo ${sgn(pc(k.tt, k1.tt))} vs N-1 (~<b>${eur(ttImpact)}</b> de CA ${ttImpact >= 0 ? 'gagné' : 'perdu'}) → fiches produit, réassurance, checkout.`);
@@ -1938,19 +1941,20 @@ function actionPlanText(rep) {
 }
 // Scorecard réutilisable (Bilan période / Cumul mensuel / Cumul saison).
 // pack = { n: {kpi, ca, mkt, cancel, cos}, n1: {...} } ; showDetails = sous-blocs détaillés.
-function renderScorecard(title, pack, showDetails) {
+function renderScorecard(title, pack, showDetails, sig) {
   if (!pack || !pack.n || !pack.n.kpi) return '';
   const n = pack.n, n1 = pack.n1 || {};
   const k = n.kpi, k1 = n1.kpi || {};
   const ann = n.cancel ? n.cancel.tauxCommande : null;
   const ann1 = n1.cancel ? n1.cancel.tauxCommande : null;
   const cosD = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
+  const sg = key => (sig && sig[key]) ? sig[key].sig : undefined; // true=significatif, false=bruit, undefined=non testé
   const tiles = [
     bilanTile('CA Global EShop', fEur(k.ca), k.ca, k1.ca),
     bilanTile('Commandes', fInt(k.commandes), k.commandes, k1.commandes),
-    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1.tt),
+    bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1.tt, false, sg('tt')),
     bilanTile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
-    bilanTile('Taux d\'annulation', ann != null ? fPct(ann) : '—', ann, ann1, true),
+    bilanTile('Taux d\'annulation', ann != null ? fPct(ann) : '—', ann, ann1, true, sg('annulation')),
     bilanTile('Sessions', fInt(k.sessions), k.sessions, k1.sessions),
     bilanTile('COS', cosD(n.cos), n.cos, n1.cos, true),
   ].join('');
@@ -1994,7 +1998,7 @@ function buildBilan(rep) {
     n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null, sessZone: sz.n1 } : null,
   };
   const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
-  const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true);
+  const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true, rep.significance);
   const sigs = bilanSignals(rep);
   const sigHtml = sigs.length
     ? `<div class="bilan-sigs">${sigs.slice(0, 6).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
