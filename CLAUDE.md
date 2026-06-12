@@ -360,7 +360,9 @@ Maquette de référence : `web/mockup-bilan.html` (page autonome, non liée à l
 et les **CTA d'action sont discrets** (`.btn.blue` gris pastel `#E9ECF1` ; `.btn.primary` laiton pastel `accent-soft` ;
 `.pb.on` gris `inset2`, sauf `#hdr .pb.on` qui reste encre = repère « vous êtes ici »). **Grilles KPI** : `balanceKgrids()`
 (app/commerciale/saison) évite toute ligne à 1 KPI orphelin (recalc au resize + `document.fonts.ready` + rAF). **Volet latéral
-éditeur** : `#reportNav` porte « ➕ Nouveau tableau de bord » (`createDashboard`) + « ✏️ Éditer cette vue » (`enterEditMode`).
+éditeur** : `#reportNav` = sommaire + **actions en pictos en bas** (➕ `createDashboard`, ✏️ `enterEditMode`) +
+**drag'n'drop des sections** (`wireNavDrag`/`applyNavOrder`, si `canEdit`) → réordonne le layout **par bloc de thème**
+(`THEME_OF`) et persiste (`persistLayout` → `saveLayout`/`saveMyView`). `full` honore un override de layout (fusionné `ALL_CARDS`).
 ⏳ **À faire** : export PDF (embarquer les TTF Space Grotesk + Inter dans pdfkit → règle aussi la limite WinAnsi `→`/`Δ`) + polish mobile.
 
 ### Graphiques (Chart.js) — comment ils sont construits

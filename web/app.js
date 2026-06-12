@@ -166,7 +166,11 @@ async function deleteMyView(key) { delete MY_VIEWS[key]; try { await fetch('/api
 
 function getLayout(m) {
   if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? v.cards : ['kpi']; }
-  if (m === 'full') return ALL_CARDS.slice();
+  if (m === 'full') {
+    const ov = SERVER_LAYOUTS['full']; // ordre personnalisé (réordonnancement des sections) si présent
+    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return ov.concat(ALL_CARDS.filter(k => !seen.has(k))); }
+    return ALL_CARDS.slice();
+  }
   const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m);
 }
 function isCustomLayout(m) { if (isMyView(m)) return true; const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
@@ -1554,19 +1558,21 @@ function buildReportNav() {
   }
   const report = document.getElementById('report');
   const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
-  // Éditeur intégré au volet : créer un nouveau tableau de bord / éditer la vue courante.
   const canEdit = isMyView(CURRENT_MODULE) || IS_ADMIN;
+  // Actions réduites aux pictos, en BAS du volet.
   const actions = `<div class="rn-actions">
-      <button class="rn-act" id="rnNew" title="Créer un nouveau tableau de bord et y glisser les tableaux pertinents">➕ Nouveau tableau de bord</button>
-      ${canEdit ? '<button class="rn-act" id="rnEdit" title="Éditer cette vue : ajouter / retirer / réordonner les tableaux">✏️ Éditer cette vue</button>' : ''}
+      <button class="rn-act" id="rnNew" title="Nouveau tableau de bord">➕</button>
+      ${canEdit ? '<button class="rn-act" id="rnEdit" title="Éditer cette vue (ajouter / retirer les tableaux)">✏️</button>' : ''}
     </div>`;
   const hasList = heads.length >= 2;
   const items = hasList ? heads.map(h => {
     const id = h.id;
     const label = id === 'sec-bilan' ? '🎯 Bilan' : (h.textContent || id).trim();
-    return `<a href="#${id}" data-anchor="${id}">${esc(label)}</a>`;
+    const drag = canEdit && id !== 'sec-bilan'; // le Bilan est épinglé → non déplaçable
+    return `<a href="#${id}" data-anchor="${id}"${drag ? ' draggable="true"' : ''}>${drag ? '<span class="rn-grip">⠿</span>' : ''}${esc(label)}</a>`;
   }).join('') : '';
-  nav.innerHTML = `<div class="rn-head">${hasList ? 'Sommaire' : 'Tableaux de bord'}<span id="rnClose" title="Fermer">✕</span></div>${actions}${hasList ? `<div class="rn-list">${items}</div>` : ''}`;
+  const hint = (hasList && canEdit) ? '<div class="rn-hint">Glisse ⠿ pour réordonner les sections (déplace aussi leurs tableaux).</div>' : '';
+  nav.innerHTML = `<div class="rn-head">${hasList ? 'Sommaire' : 'Tableaux de bord'}<span id="rnClose" title="Fermer">✕</span></div>${hasList ? `<div class="rn-list">${items}</div>${hint}` : ''}${actions}`;
   const closeBtn = nav.querySelector('#rnClose'); if (closeBtn) closeBtn.onclick = () => nav.classList.remove('open');
   const nb = nav.querySelector('#rnNew'); if (nb) nb.onclick = () => createDashboard();
   const eb = nav.querySelector('#rnEdit'); if (eb) eb.onclick = () => enterEditMode(CURRENT_MODULE);
@@ -1577,6 +1583,7 @@ function buildReportNav() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (window.innerWidth < 1400) nav.classList.remove('open');
   }));
+  if (canEdit) wireNavDrag(nav);
   // Scroll-spy : surligne la section visible
   if (window._navObs) window._navObs.disconnect();
   window._navObs = new IntersectionObserver(entries => {
@@ -1587,6 +1594,48 @@ function buildReportNav() {
     });
   }, { rootMargin: '-10% 0px -80% 0px' });
   heads.forEach(h => window._navObs.observe(h));
+}
+
+// Drag'n'drop des SECTIONS dans le volet → réordonne le layout (bloc de thème) et persiste.
+function wireNavDrag(nav) {
+  const list = nav.querySelector('.rn-list'); if (!list) return;
+  let dragA = null;
+  list.addEventListener('dragstart', e => {
+    const a = e.target.closest('a[draggable="true"]'); if (!a) { e.preventDefault(); return; }
+    dragA = a; a.classList.add('rn-dragging'); e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', a.dataset.anchor); } catch (x) { /* ignore */ }
+  });
+  list.addEventListener('dragend', () => { if (dragA) dragA.classList.remove('rn-dragging'); dragA = null; });
+  list.addEventListener('dragover', e => {
+    if (!dragA) return; e.preventDefault();
+    const after = [...list.querySelectorAll('a[draggable="true"]:not(.rn-dragging)')].find(el => { const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if (after) list.insertBefore(dragA, after); else list.appendChild(dragA);
+  });
+  list.addEventListener('drop', e => { e.preventDefault(); applyNavOrder(); });
+}
+// Lit l'ordre des sections dans le volet, reconstruit le layout (thèmes regroupés dans le nouvel ordre), persiste, recharge.
+async function applyNavOrder() {
+  const list = document.querySelector('#reportNav .rn-list'); if (!list) return;
+  const order = [...list.querySelectorAll('a[data-anchor]')].map(a => a.dataset.anchor)
+    .filter(id => id && id !== 'sec-bilan').map(id => id.replace(/^sec-/, ''));
+  const layout = getLayout(CURRENT_MODULE).slice();
+  const themeItems = {}, seq = [], leading = []; let curT = null;
+  layout.forEach(k => {
+    const t = (typeof k === 'string') ? THEME_OF[k] : null;
+    if (typeof k === 'string' && t) curT = t;          // une carte à thème ouvre/poursuit sa section
+    if (!curT) { leading.push(k); return; }             // items avant tout thème → en tête
+    if (!themeItems[curT]) { themeItems[curT] = []; seq.push(curT); }
+    themeItems[curT].push(k);                            // widgets & cartes sans thème suivent la section courante
+  });
+  const finalThemes = order.filter(t => themeItems[t]).concat(seq.filter(t => !order.includes(t)));
+  const newLayout = leading.slice();
+  finalThemes.forEach(t => themeItems[t].forEach(k => newLayout.push(k)));
+  try { await persistLayout(CURRENT_MODULE, newLayout); loadReport(); }
+  catch (e) { alert('Réordonnancement non enregistré : ' + (e.message || 'erreur')); loadReport(); }
+}
+async function persistLayout(m, arr) {
+  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)] || {}; await saveMyView(myKey(m), v.label || viewLabel(m), arr); }
+  else await saveLayout(m, arr);
 }
 
 // ── Éditeur de vue : cocher / réordonner (drag'n'drop) les tableaux d'une vue ──────
