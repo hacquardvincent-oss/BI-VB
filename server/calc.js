@@ -350,6 +350,41 @@ function propZTest(x1, n1, x2, n2) {
   return { z, sig: Math.abs(z) >= 1.96, p1, p2 };
 }
 
+// ── Scoring qualité de données (déterministe, §7) : score 0-100 par jeu + 4 dimensions + lignes fautives.
+// Ne score PAS l'« exactitude » (nécessiterait une source de vérité externe — assumé hors périmètre).
+function dataQuality(ds) {
+  if (!ds || !Array.isArray(ds.rows) || !ds.rows.length || !ds.map) return null;
+  const rows = ds.rows, map = ds.map, n = rows.length;
+  const cell = (r, i) => (i != null && r[i] != null) ? String(r[i]).trim() : '';
+  // 1) Complétude : taux de cellules renseignées sur les colonnes mappées (métier).
+  const keyCols = Object.values(map).filter(i => typeof i === 'number');
+  let filled = 0, total = 0;
+  rows.forEach(r => keyCols.forEach(ci => { total++; if (cell(r, ci) !== '') filled++; }));
+  const completude = total ? filled / total : 1;
+  // 2) Validité : dates parseables + prix numériques (sur les colonnes présentes).
+  let valOk = 0, valTot = 0; const badRows = [];
+  const di = map.date, pi = map.prix;
+  rows.forEach((r, idx) => {
+    let bad = false;
+    if (di != null && cell(r, di) !== '') { valTot++; if (parseFrD(r[di])) valOk++; else { bad = true; } }
+    if (pi != null && cell(r, pi) !== '') { valTot++; const v = fN(r[pi]); if (Number.isFinite(v)) valOk++; else { bad = true; } }
+    if (bad && badRows.length < 20) badRows.push(idx);
+  });
+  const validite = valTot ? valOk / valTot : 1;
+  // 3) Unicité : doublons exacts de ligne.
+  const seen = new Set(); let dups = 0;
+  rows.forEach(r => { const k = r.join(''); if (seen.has(k)) dups++; else seen.add(k); });
+  const unicite = n ? 1 - dups / n : 1;
+  // 4) Fraîcheur : ancienneté de la dernière date du jeu.
+  let fraicheur = null, ageDays = null;
+  if (ds.date_max) { const d = new Date(ds.date_max); if (!isNaN(+d)) { ageDays = Math.max(0, Math.floor((Date.now() - +d) / 86400000)); fraicheur = ageDays <= 2 ? 1 : ageDays <= 7 ? 0.85 : ageDays <= 30 ? 0.6 : ageDays <= 90 ? 0.4 : 0.2; } }
+  const dims = { completude, validite, unicite };
+  if (fraicheur != null) dims.fraicheur = fraicheur;
+  const vals = Object.values(dims);
+  const score = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 100);
+  return { score, dims, rows: n, dups, ageDays, badRows: badRows.length, badSample: badRows.slice(0, 5) };
+}
+
 // ── CA par ZONE (FR / Inter) × Full/Off (hors mkt) — pivot GLOBAL commercial ─
 function calcZoneFullOff(rows, map) {
   const pi = map.prix, pai = map.pays, ti = map.type, pvi = map.pv, pvri = map.pv_remise;
@@ -1541,7 +1576,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, varianceDecomp, propZTest,
+  monthlyEShopCA, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,

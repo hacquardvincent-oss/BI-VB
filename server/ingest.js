@@ -227,6 +227,16 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
 
 router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
 
+// Scoring qualité de données (déterministe, §7) : score + dimensions par jeu chargé.
+router.get('/quality', requireAuth, (req, res) => {
+  const out = store.listDatasets().map(d => {
+    const ds = store.getDataset(d.source, d.period);
+    const q = calc.dataQuality(ds);
+    return { source: d.source, period: d.period, filename: d.filename, date_max: d.date_max, quality: q };
+  }).filter(x => x.quality);
+  res.json(out);
+});
+
 router.delete('/:source/:period', requireAuth, (req, res) => {
   store.delDataset(req.params.source, req.params.period);
   res.json({ ok: true });
