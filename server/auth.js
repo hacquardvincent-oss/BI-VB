@@ -46,11 +46,7 @@ async function checkCreds(username, password) {
       return { username: u.username, role: u.role, canEdit: u.can_edit !== false };
     }
   }
-<<<<<<< HEAD
   if (isEnvAdmin(uname, password)) return { username: uname, role: 'admin', canEdit: true };
-=======
-  if (isEnvAdmin(uname, password)) return { username: uname, role: 'admin' };
->>>>>>> origin/main
   return null;
 }
 
@@ -149,11 +145,7 @@ router.get('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
 router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
     const username = String((req.body || {}).username || '').trim(); // stocke sans espaces parasites
-<<<<<<< HEAD
     const { password, role, allowedViews, canEdit } = req.body || {};
-=======
-    const { password, role, allowedViews } = req.body || {};
->>>>>>> origin/main
     if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
     const r = (role === 'admin') ? 'admin' : 'user';
     const views = normViews(allowedViews);
