@@ -18,11 +18,13 @@
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="setupToggle" title="Afficher / masquer le panneau de paramétrage (gauche)">⚙️ Paramètres</button>
   <button class="btn hidden" id="adminBtn" title="Gestion des comptes équipe">👤 Admin</button>
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap">
+<div class="wrap layout-side">
+  <aside id="setupCol">
   <!-- 1 · TYPE D'ANALYSE (vue) -->
   <div class="card">
     <h3>1 · Type d'analyse</h3>
@@ -149,7 +151,9 @@
       </div>
     </div>
   </div>
+  </aside>
 
+  <main id="mainCol">
   <!-- RECOMMANDATIONS STRATÉGIQUES (IA) -->
   <div class="card hidden" id="recoCard">
     <h3>🧠 Recommandations stratégiques (IA)</h3>
@@ -165,6 +169,7 @@
   <div id="report"></div>
 
   <!-- ADMIN · COMPTES ÉQUIPE (rattaché au compte admin, masqué par défaut) -->
+  </main>
 </div>
 
 <script src="/app.js"></script>

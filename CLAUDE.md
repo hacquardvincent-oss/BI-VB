@@ -363,6 +363,9 @@ et les **CTA d'action sont discrets** (`.btn.blue` gris pastel `#E9ECF1` ; `.btn
 éditeur** : `#reportNav` = sommaire + **actions en pictos en bas** (➕ `createDashboard`, ✏️ `enterEditMode`) +
 **drag'n'drop des sections** (`wireNavDrag`/`applyNavOrder`, si `canEdit`) → réordonne le layout **par bloc de thème**
 (`THEME_OF`) et persiste (`persistLayout` → `saveLayout`/`saveMyView`). `full` honore un override de layout (fusionné `ALL_CARDS`).
+**Layout desktop 3 zones (Reporting)** : `.wrap.layout-side` (grid) = `#setupCol` (paramétrage à gauche, **sticky/scrollable**) ·
+`#mainCol` (rapport au centre) · `#reportNav` (sommaire **à droite**, fixé). Toggle header **⚙️ Paramètres** → `body.setup-collapsed`
+(mémorisé localStorage) masque le panneau gauche. Replié en 1 colonne sous 1100px. ⏳ À répliquer sur commerciale/saison/objectifs.
 ⏳ **À faire** : export PDF (embarquer les TTF Space Grotesk + Inter dans pdfkit → règle aussi la limite WinAnsi `→`/`Δ`) + polish mobile.
 
 ### Graphiques (Chart.js) — comment ils sont construits

@@ -37,6 +37,18 @@ a{color:var(--a);text-decoration:none}
 
 .wrap{padding:24px;display:flex;flex-direction:column;gap:18px;max-width:1180px;margin:0 auto}
 
+/* Layout desktop 3 zones : paramétrage (gauche, sticky) · rapport (centre) · sommaire (#reportNav, droite) */
+.layout-side{display:grid;grid-template-columns:336px minmax(0,1fr);gap:22px;max-width:1580px;align-items:start}
+@media(min-width:1400px){.layout-side{padding-right:206px}} /* réserve la place du sommaire fixe à droite */
+#setupCol{position:sticky;top:74px;align-self:start;max-height:calc(100vh - 92px);overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:1px}
+#mainCol{display:flex;flex-direction:column;gap:18px;min-width:0}
+body.setup-collapsed .layout-side{grid-template-columns:minmax(0,1fr)}
+body.setup-collapsed #setupCol{display:none}
+@media(max-width:1100px){
+  .layout-side{grid-template-columns:minmax(0,1fr);padding-right:0}
+  #setupCol{position:static;max-height:none;overflow:visible}
+}
+
 /* Cartes */
 .card{background:var(--s);border:1px solid var(--br);border-radius:12px;padding:20px}
 /* Titres : l'ANCRE visuelle de l'écran (plus visibles que les CTA) — encre + filet laiton. */
@@ -122,7 +134,7 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .bilan{scroll-margin-top:16px}
 
 /* Sommaire latéral à ancres */
-#reportNav{position:fixed;left:16px;top:84px;width:190px;max-height:calc(100vh - 110px);overflow-y:auto;background:var(--s);border:1px solid var(--br);border-radius:12px;padding:10px;z-index:40;display:none;box-shadow:var(--shadow)}
+#reportNav{position:fixed;right:16px;top:84px;width:190px;max-height:calc(100vh - 110px);overflow-y:auto;background:var(--s);border:1px solid var(--br);border-radius:12px;padding:10px;z-index:40;display:none;box-shadow:var(--shadow)}
 #reportNav.open{display:block}
 #reportNav .rn-head{font-family:var(--disp);font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 #reportNav .rn-head span{cursor:pointer;color:var(--t3)}#reportNav .rn-head span:hover{color:var(--a)}
