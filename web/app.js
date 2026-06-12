@@ -766,6 +766,30 @@ let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 // Recalcul une fois les polices web chargées (les largeurs de tuiles changent) → évite tout orphelin résiduel.
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
+// 🔎 Qualité des données (déterministe) : charge au 1ᵉʳ dépli, rend score + dimensions + lignes fautives.
+(function () {
+  const fold = document.getElementById('qualityFold'); if (!fold) return;
+  const SRC = { oms: 'EShop (OMS)', y2: 'Y2 Marketplace', ga: 'GA4', gasess: 'GA4 sessions', gatot: 'GA4 total', ads: 'Google Ads', metaads: 'Meta Ads', ret: 'Retours', ref: 'Référentiel', impl: 'Implantation', offre: 'Offre' };
+  const dimL = { completude: 'Complétude', validite: 'Validité', unicite: 'Unicité', fraicheur: 'Fraîcheur' };
+  const bar = v => { const p = Math.round(v * 100); const c = p >= 90 ? 'var(--g)' : p >= 70 ? 'var(--a)' : 'var(--r)'; return `<span title="${p}%" style="display:inline-block;width:42px;height:6px;border-radius:99px;background:var(--inset2);vertical-align:middle"><span style="display:block;width:${p}%;height:100%;border-radius:99px;background:${c}"></span></span>`; };
+  async function load() {
+    const box = document.getElementById('qualityBox'); if (!box) return;
+    box.textContent = 'Analyse en cours…';
+    try {
+      const r = await fetch('/api/ingest/quality'); const list = await r.json();
+      if (!Array.isArray(list) || !list.length) { box.textContent = 'Aucun jeu de données chargé.'; return; }
+      const rows = list.map(d => {
+        const q = d.quality, sc = q.score, scc = sc >= 90 ? 'up' : sc >= 70 ? '' : 'dn';
+        const dims = Object.entries(q.dims).map(([k, v]) => `${dimL[k] || k} ${bar(v)}`).join(' &nbsp; ');
+        const issues = [q.dups ? `${q.dups} doublon(s)` : '', q.badRows ? `${q.badRows} ligne(s) invalide(s)` : '', q.ageDays != null ? `MàJ il y a ${q.ageDays} j` : ''].filter(Boolean).join(' · ');
+        return `<tr><td><b>${esc(SRC[d.source] || d.source)}</b> <span class="na">${esc(d.period)}</span></td><td><span class="${scc}">${sc}/100</span></td><td style="font-size:11px">${dims}</td><td style="font-size:11px;color:var(--t3)">${esc(issues || '—')}</td></tr>`;
+      }).join('');
+      box.innerHTML = `<table style="font-size:12px"><thead><tr><th>Jeu</th><th>Score</th><th>Dimensions</th><th>Constats</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="note" style="margin-top:6px">Score déterministe (complétude · validité formats · unicité · fraîcheur). L'<b>exactitude</b> n'est pas notée (nécessiterait une source de vérité externe).</div>`;
+    } catch (e) { box.textContent = '⚠ ' + (e.message || 'Erreur'); }
+  }
+  fold.addEventListener('toggle', () => { if (fold.open && !fold._loaded) { fold._loaded = true; load(); } });
+})();
 // Toggle du panneau de paramétrage (colonne gauche) — état mémorisé ; recalcul des grilles après le changement de largeur.
 try { if (localStorage.getItem('setupCollapsed') === '1') document.body.classList.add('setup-collapsed'); } catch (e) { /* ignore */ }
 (function () { const b = document.getElementById('setupToggle'); if (b) b.addEventListener('click', () => { const on = document.body.classList.toggle('setup-collapsed'); try { localStorage.setItem('setupCollapsed', on ? '1' : '0'); } catch (e) { /* ignore */ } setTimeout(() => balanceKgrids(), 80); }); })();
