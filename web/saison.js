@@ -277,6 +277,26 @@ function render(rep) {
     </div>`;
   }
 
+  // 3ter · Poids des regroupements par mois (matrice regroupement × mois)
+  let regroupCard = '';
+  const rbm = rep.regroupByMonth;
+  if (rbm && rbm.rows && rbm.rows.length && rbm.months.length) {
+    const moLabel = m => { const p = m.split('-'); const noms = ['', 'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']; return `${noms[+p[1]]} ${p[0].slice(2)}`; };
+    const head = `<tr><th>Regroupement</th>${rbm.months.map(m => `<th style="text-align:right">${moLabel(m)}</th>`).join('')}<th style="text-align:right">Total</th><th style="text-align:right">Poids</th></tr>`;
+    const body = rbm.rows.slice(0, 20).map(r => `<tr>
+      <td><b>${esc(r.regroup)}</b></td>
+      ${rbm.months.map(m => `<td style="text-align:right">${r.byMonth[m] ? fEur(r.byMonth[m]) : '<span class="na">·</span>'}</td>`).join('')}
+      <td style="text-align:right"><b>${fEur(r.total)}</b></td>
+      <td style="text-align:right">${fPct(r.weight)}</td>
+    </tr>`).join('');
+    const foot = `<tr style="font-weight:700;border-top:2px solid var(--br)"><td>Total mois</td>${rbm.months.map(m => `<td style="text-align:right">${fEur(rbm.monthTotals[m])}</td>`).join('')}<td style="text-align:right">${fEur(rbm.total)}</td><td style="text-align:right">100%</td></tr>`;
+    regroupCard = `<div class="card">
+      <h3>🗓️ Poids des regroupements par mois — saison N</h3>
+      <div style="overflow-x:auto"><table><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>
+      <div class="note">CA EShop (hors marketplaces, Outstore) par <b>regroupement</b> (référentiel) et par <b>mois</b> de la saison. Le <b>poids</b> = part du regroupement dans le CA saison. Lecture du rythme : quels regroupements portent le CA à chaque mois (lancement, soldes…). Top 20 regroupements.</div>
+    </div>`;
+  }
+
   // 4 · Démarque — opérations détectées automatiquement (à partir du CA off-price quotidien)
   let demCard = '';
   if (rep.demarque && rep.demarque.ops) {
@@ -343,7 +363,7 @@ function render(rep) {
     selSaison.dataset.filled = String(m.saisons.length);
   }
   if (selSaison) selSaison.value = SAISON;
-  box.innerHTML = kpiCard + fullOffCard + famTablesCard + dropCard + demCard + demandeCard + controlSection;
+  box.innerHTML = kpiCard + fullOffCard + famTablesCard + dropCard + regroupCard + demCard + demandeCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
   if (ds) ds.addEventListener('change', loadReport);

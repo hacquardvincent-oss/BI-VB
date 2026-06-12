@@ -1059,6 +1059,8 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const salesRefS = calc.salesByRef(rowsN, omsN.map);
   const salesRefSN1 = (rowsN1 && rowsN1.length) ? calc.salesByRef(rowsN1, mapN1) : {};
   const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRefS, salesRefSN1) : null;
+  // Poids des regroupements par mois (croisement OMS × référentiel × mois).
+  const regroupByMonth = Object.keys(refMap).length ? calc.calcRegroupByMonth(rowsN, omsN.map, refMap) : null;
   return {
     meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet, hasGA },
     global: {
@@ -1080,6 +1082,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
     demande,
     familles,
     seasonCompare,
+    regroupByMonth,
   };
 }
 

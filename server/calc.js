@@ -323,6 +323,39 @@ function monthlyEShopCA(rows, map) {
   return out;
 }
 
+// ── Poids des regroupements par mois (saison) ───────────────────────────────
+// Croise OMS (CA EShop hors mkt, Outstore) × refMap (réf. externe → regroupement) × mois.
+// Sortie : { months[], monthTotals{}, total, rows[{regroup, total, weight, byMonth{}}] } trié par CA.
+function calcRegroupByMonth(rows, map, refMap) {
+  const pi = map.prix, ti = map.type, di = map.date, li = map.lieu;
+  const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (di === undefined || refIdx === undefined || !refMap) return null;
+  const by = {}, monthTotals = {}, monthsSet = new Set();
+  let total = 0;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return; // périmètre EShop = Outstore
+    const d = parseFrD(r[di]); if (!d) return;
+    const month = `${d.y}-${String(d.m).padStart(2, '0')}`;
+    const rc = (r[refIdx] || '').toString().trim();
+    const reg = (refMap[rc]) || '(non référencé)';
+    const p = fN(r[pi]);
+    monthsSet.add(month);
+    const e = by[reg] || (by[reg] = { regroup: reg, total: 0, byMonth: {} });
+    e.total += p; e.byMonth[month] = (e.byMonth[month] || 0) + p;
+    monthTotals[month] = (monthTotals[month] || 0) + p;
+    total += p;
+  });
+  const months = [...monthsSet].sort();
+  const out = Object.values(by).map(e => ({
+    regroup: e.regroup, total: Math.round(e.total),
+    weight: total > 0 ? e.total / total : 0,
+    byMonth: months.reduce((o, m) => { o[m] = Math.round(e.byMonth[m] || 0); return o; }, {}),
+  })).sort((a, b) => b.total - a.total);
+  const mt = {}; months.forEach(m => { mt[m] = Math.round(monthTotals[m] || 0); });
+  return { months, monthTotals: mt, total: Math.round(total), rows: out };
+}
+
 // ── Décomposition de variance (déterministe) : ΔCA vs N-1 = effet Trafic × Transformation × Panier.
 // Décomposition séquentielle (trafic → transfo → panier) → les 3 effets somment EXACTEMENT à ΔCA.
 // CA = sessions × (commandes/sessions) × (CA/commandes). Entrées = kpiEShop {n, n1}.
@@ -1590,7 +1623,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,
