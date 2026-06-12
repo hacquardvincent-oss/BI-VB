@@ -28,66 +28,64 @@
   <!-- 1 · TYPE D'ANALYSE (vue) -->
   <div class="card">
     <h3>1 · Type d'analyse</h3>
-    <div class="toolbar" id="moduleBar"></div>
-    <div class="toolbar" style="margin-top:8px">
-      <button class="btn hidden" id="editViewBtn" title="Mode édition des vues partagées : choisir les tableaux et les réordonner (admin)">✏️ EDIT (vues partagées)</button>
-      <span id="myViewCtl" class="hidden" style="display:inline-flex;gap:6px">
-        <button class="btn" id="myEditBtn" title="Éditer mon tableau de bord">✏️ Éditer ce tableau</button>
-        <button class="btn" id="myDelBtn" title="Supprimer mon tableau de bord">🗑️</button>
-      </span>
-      <button class="btn" id="navToggle" title="Sommaire / navigation rapide dans la page">☰ Sommaire</button>
-      <span class="note" id="customViewNote" style="margin:0"></span>
+    <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+      <div id="moduleBar" style="flex:1;min-width:0"></div>
+      <button class="btn" id="newDashBtn" title="Nouveau type d'analyse (créer une vue)">➕</button>
+      <button class="btn hidden" id="editViewBtn" title="Éditer les vues partagées (admin)">✏️</button>
     </div>
-    <div class="toolbar hidden" id="editBar" style="margin-top:8px;background:var(--s2);border:1px solid var(--a);border-radius:8px;padding:8px 10px">
+    <!-- Contrôles legacy conservés (référencés par le JS) mais masqués : l'édition passe par ✏️ et le sommaire -->
+    <span style="display:none">
+      <span id="myViewCtl" class="hidden"><button id="myEditBtn"></button><button id="myDelBtn"></button></span>
+      <button id="navToggle"></button><span id="customViewNote"></span>
+    </span>
+    <div class="toolbar hidden" id="editBar" style="margin-top:8px;background:var(--s2);border:1px solid var(--accent-line);border-radius:8px;padding:8px 10px;flex-wrap:wrap">
       <b style="font-size:12px">✏️ Édition :</b>
       <select id="editViewSel" class="dt"></select>
-      <input id="editViewName" class="dt hidden" placeholder="Nom du tableau de bord" style="min-width:200px">
+      <input id="editViewName" class="dt hidden" placeholder="Nom du tableau de bord" style="min-width:160px">
       <span class="pill" id="editCount"></span>
-      <span class="note" style="margin:0">Clique « + Ajouter » sur un tableau pour l'inclure · glisse (⠿) pour réordonner le sens de lecture.</span>
+      <span class="note" style="margin:0">« + Ajouter » sur un tableau pour l'inclure · ⠿ pour réordonner.</span>
       <div class="spacer" style="flex:1"></div>
-      <button class="btn" id="addWidgetBtn" title="Composer un widget from scratch : donnée × métrique × forme (KPI, tableau, barres, camembert, courbe)">🧱 Nouveau tableau</button>
-      <button class="btn" id="editReset" title="Revenir à la configuration d'origine de cette vue">↺ Réinitialiser</button>
+      <button class="btn" id="addWidgetBtn" title="Composer un tableau : donnée × métrique × forme">🧱 Nouveau tableau</button>
+      <button class="btn" id="editReset" title="Revenir à la configuration d'origine">↺</button>
       <button class="btn" id="editCancel">Annuler</button>
       <button class="btn primary" id="editSave">💾 Enregistrer</button>
     </div>
-    <div class="note" id="modHint"></div>
+    <div class="note" id="modHint" style="margin-top:8px"></div>
   </div>
 
   <!-- 2 · PÉRIODE D'ANALYSE -->
   <div class="card">
-    <h3>2 · Période d'analyse — N vs N-1</h3>
-    <div class="toolbar">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase" title="« N seule » = analyse sans comparaison N-1 : pas besoin d'avoir importé l'année précédente">Comparaison</span>
-      <button class="pb on" data-cmp="1">N vs N-1</button>
-      <button class="pb" data-cmp="0">N seule</button>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:12px">N</span>
-      <input type="date" id="dNfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dNto" class="dt">
-      <span id="n1Wrap"><span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px">N-1</span>
-      <input type="date" id="dCfrom" class="dt"> <span style="color:var(--t3)">→</span> <input type="date" id="dCto" class="dt">
-      <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine). Sinon, période N-1 libre.">≈ −364 j</button></span>
+    <h3>2 · Période</h3>
+    <div class="toolbar" style="gap:5px">
+      <button class="pb on" data-cmp="1" title="Comparer à l'an dernier">N vs N-1</button>
+      <button class="pb" data-cmp="0" title="Analyse sans comparaison N-1">N seule</button>
     </div>
-    <div class="toolbar" style="margin-top:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Presets</span>
-      <button class="pb" data-range="yesterday" title="Hier (J-1) vs même jour de semaine N-1">Hier</button>
-      <button class="pb" data-range="week" title="Semaine dernière complète (lun→dim) vs N-1">Semaine (S-1)</button>
-      <button class="pb" data-range="month" title="Cumul du mois en cours (1er → aujourd'hui) vs même cumul N-1">Mois en cours</button>
-      <button class="pb" data-range="ytd" title="Cumul de l'année en cours (1er janv → aujourd'hui) vs même cumul N-1">Année en cours</button>
-      <button class="pb on" id="datesAll">Tout</button>
+    <label class="setlabel">Période analysée</label>
+    <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+      <input type="date" id="dNfrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dNto" class="dt" style="flex:1;min-width:0">
     </div>
-    <div class="toolbar" style="margin-top:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Dimension</span>
+    <div id="n1Wrap">
+      <label class="setlabel">Comparaison N-1 <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (mêmes jours de semaine)" style="padding:1px 7px;font-size:10px">≈ −364 j</button></label>
+      <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+        <input type="date" id="dCfrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dCto" class="dt" style="flex:1;min-width:0">
+      </div>
+    </div>
+    <label class="setlabel">Raccourcis</label>
+    <div class="toolbar" style="gap:5px">
+      <button class="pb" data-range="yesterday" title="Hier vs même jour N-1">Hier</button>
+      <button class="pb" data-range="week" title="Semaine dernière (lun→dim) vs N-1">S-1</button>
+      <button class="pb" data-range="month" title="Mois en cours vs même cumul N-1">Mois</button>
+      <button class="pb" data-range="ytd" title="Année en cours vs même cumul N-1">Année</button>
+      <button class="pb on" id="datesAll" title="Toute la période importée">Tout</button>
+    </div>
+    <label class="setlabel">Dimension géographique</label>
+    <div class="toolbar" style="gap:5px">
       <button class="pb on" data-dim="global">FR + Inter</button>
       <button class="pb" data-dim="fr">France</button>
       <button class="pb" data-dim="inter">International</button>
-      <select id="countrySel" class="dt" title="Filtrer sur UN pays précis (la liste se remplit avec les pays présents dans les données)" style="min-width:130px"><option value="">🌍 Tous pays</option></select>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px">Périmètre</span>
-      <button class="pb on" data-scope="all" title="Mode complet : CA global de la période (toutes ventes, y compris archives/relances)">Tout (saison complète)</button>
-      <button class="pb" data-scope="collection" title="Mode exclusif : uniquement les références de la collection (implantation E26/E25)">Collection saison (exclusif)</button>
-      <div class="spacer" style="flex:1"></div>
-      <button class="btn blue" id="applyDates">Appliquer</button>
+      <select id="countrySel" class="dt" title="Filtrer sur un pays précis" style="flex:1;min-width:110px"><option value="">🌍 Tous pays</option></select>
     </div>
-    <div class="note">🧵 <b>Périmètre</b> : <b>« Tout »</b> = CA global de la période ; <b>« Collection saison »</b> = uniquement les pièces de l'implantation (E26/E25). Pour une analyse de saison complète (période longue, sell-through, couverture), utilise la page dédiée <a href="/saison.html">🏷️ Analyse de saison</a>.</div>
-    <div class="note" id="metaNote"></div>
+    <div class="note" id="metaNote" style="margin-top:8px"></div>
   </div>
 
   <!-- 3 · CHARGEMENT DES DONNÉES (API + import manuel) -->
@@ -123,22 +121,24 @@
     </div>
     <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads / SFTP). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
 
-    <!-- Consentement cookies (RGPD) : ajuste les sessions GA (GA ne voit que les consentants) -->
-    <div class="toolbar" style="margin-top:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase" title="GA ne compte que les visiteurs ayant accepté les cookies. Sessions réelles = sessions GA ÷ taux d'acceptation.">🍪 Taux d'acceptation cookies</span>
-      <span style="font-size:11px;color:var(--t3)">N</span>
-      <input type="number" id="consentN" min="1" max="100" step="1" placeholder="ex. 70" style="width:70px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span style="color:var(--t3)">%</span>
-      <span style="font-size:11px;color:var(--t3);margin-left:8px">N-1</span>
-      <input type="number" id="consentN1" min="1" max="100" step="1" placeholder="ex. 68" style="width:70px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span style="color:var(--t3)">%</span>
-      <span class="note" style="margin:0">Laisse vide = pas d'ajustement (sessions GA brutes).</span>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:14px" title="Seuil de rentabilité acquisition : les campagnes au-dessus perdent de la marge, en-dessous = marge pour scaler.">🎯 Cible COS</span>
-      <input type="number" id="cosTarget" min="1" max="100" step="1" value="30" style="width:70px;background:var(--s2);color:var(--t);border:1px solid var(--br);border-radius:6px;padding:5px 8px"> <span style="color:var(--t3)">%</span>
-    </div>
+    <!-- Réglages avancés (cookies RGPD + cible COS) — repliés -->
+    <details class="fold" style="margin-top:8px">
+      <summary>⚙️ Réglages avancés (cookies, cible COS)</summary>
+      <div class="toolbar" style="margin-top:8px">
+        <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase" title="GA ne compte que les visiteurs ayant accepté les cookies. Sessions réelles = sessions GA ÷ taux d'acceptation.">🍪 Acceptation cookies</span>
+        <span style="font-size:11px;color:var(--t3)">N</span>
+        <input type="number" id="consentN" min="1" max="100" step="1" placeholder="ex. 70" class="dt" style="width:64px"> <span style="color:var(--t3)">%</span>
+        <span style="font-size:11px;color:var(--t3);margin-left:6px">N-1</span>
+        <input type="number" id="consentN1" min="1" max="100" step="1" placeholder="ex. 68" class="dt" style="width:64px"> <span style="color:var(--t3)">%</span>
+        <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:10px" title="Seuil de rentabilité acquisition.">🎯 Cible COS</span>
+        <input type="number" id="cosTarget" min="1" max="100" step="1" value="30" class="dt" style="width:64px"> <span style="color:var(--t3)">%</span>
+      </div>
+      <div class="note" style="margin-top:4px">Cookies vides = sessions GA brutes (pas d'ajustement).</div>
+    </details>
 
     <!-- Bouton PDF : sous les CTA de chargement -->
     <div class="toolbar" style="margin-top:10px">
-      <button class="btn blue" id="pdf">⬇ Générer le PDF</button>
-      <span class="note" style="margin:0">Édite le reporting de la période sélectionnée en PDF.</span>
+      <button class="btn" id="pdf">⬇ Générer le PDF</button>
     </div>
 
     <!-- Import manuel (replié par défaut) -->
@@ -151,6 +151,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Bouton de validation STICKY (toujours visible en bas du paramétrage) -->
+  <div id="setupApply"><button class="btn blue" id="applyDates" style="width:100%">✓ Appliquer & actualiser le reporting</button></div>
   </aside>
 
   <main id="mainCol">

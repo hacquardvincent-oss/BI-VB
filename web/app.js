@@ -471,38 +471,35 @@ function updateApiHint() {
 }
 
 // Barre de modules
+// Bascule de vue (type d'analyse) — appelée par la liste déroulante.
+function switchModule(mod) {
+  CURRENT_MODULE = mod;
+  const m = MODULES[CURRENT_MODULE] || {};
+  CURRENT_DIM = m.dim || USER_DIM;
+  document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
+  { const cs = document.getElementById('countrySel'); if (cs) cs.value = ''; }
+  if (m && m.dates) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('dNfrom', m.dates.from); set('dNto', m.dates.to); set('dCfrom', m.dates.cfrom); set('dCto', m.dates.cto);
+    DATES = { from: m.dates.from, to: m.dates.to, cfrom: m.dates.cfrom, cto: m.dates.cto };
+    const da = document.getElementById('datesAll'); if (da) da.classList.remove('on');
+  }
+  const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.toggle('hidden', !isMyView(CURRENT_MODULE));
+  renderModuleHint();
+  loadReport();
+}
 function initModules() {
   const bar = document.getElementById('moduleBar');
   let order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
   if (ALLOWED_VIEWS) order = order.filter(k => ALLOWED_VIEWS.includes(k)); // RBAC : vues autorisées
   const myKeys = Object.keys(MY_VIEWS);
-  const myBtns = myKeys.map(k => `<button class="pb${('my:' + k) === CURRENT_MODULE ? ' on' : ''}" data-mod="my:${esc(k)}">📌 ${esc(MY_VIEWS[k].label)}</button>`).join('');
-  bar.innerHTML = '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Vue</span>'
-    + order.map(k => `<button class="pb${k === CURRENT_MODULE ? ' on' : ''}" data-mod="${k}">${MODULES[k].icon} ${MODULES[k].label}</button>`).join('')
-    + (myKeys.length ? '<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:6px">Mes tableaux</span>' + myBtns : '')
-    + '<button class="pb" id="newDashBtn" title="Créer mon propre tableau de bord (choisir les tableaux et l\'ordre)" style="border-style:dashed;color:var(--a)">➕ Nouveau tableau de bord</button>';
-  bar.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
-    bar.querySelectorAll('[data-mod]').forEach(x => x.classList.remove('on'));
-    b.classList.add('on');
-    CURRENT_MODULE = b.dataset.mod;
-    const m = MODULES[CURRENT_MODULE] || {};
-    // La période est pilotée par le sélecteur de dates (indépendant de la vue).
-    // Prisme géo : la vue qui l'impose (International → hors France) prime ; sinon on
-    // conserve le choix utilisateur (Global/FR/Inter) → prisme persistant entre les vues.
-    CURRENT_DIM = m.dim || USER_DIM;
-    document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
-    { const cs = document.getElementById('countrySel'); if (cs) cs.value = ''; } // le changement de vue repasse en FR/Inter
-    // Vue à période fixe (ex. Démarque E26/E25) : applique ses dates au sélecteur.
-    if (m && m.dates) {
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-      set('dNfrom', m.dates.from); set('dNto', m.dates.to); set('dCfrom', m.dates.cfrom); set('dCto', m.dates.cto);
-      DATES = { from: m.dates.from, to: m.dates.to, cfrom: m.dates.cfrom, cto: m.dates.cto };
-      const da = document.getElementById('datesAll'); if (da) da.classList.remove('on');
-    }
-    const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.toggle('hidden', !isMyView(CURRENT_MODULE));
-    renderModuleHint();
-    loadReport();
-  }));
+  const opt = (val, label) => `<option value="${esc(val)}"${val === CURRENT_MODULE ? ' selected' : ''}>${esc(label)}</option>`;
+  let html = '<select id="moduleSelect" class="dt" style="width:100%"><optgroup label="Analyses">'
+    + order.map(k => opt(k, `${MODULES[k].icon} ${MODULES[k].label}`)).join('') + '</optgroup>';
+  if (myKeys.length) html += `<optgroup label="Mes types d'analyse">` + myKeys.map(k => opt('my:' + k, `📌 ${MY_VIEWS[k].label}`)).join('') + '</optgroup>';
+  html += '</select>';
+  bar.innerHTML = html;
+  const sel = document.getElementById('moduleSelect'); if (sel) sel.addEventListener('change', () => switchModule(sel.value));
   const ev = document.getElementById('editViewBtn'); if (ev && !ev._wired) { ev._wired = true; ev.addEventListener('click', () => enterEditMode()); }
   const nt = document.getElementById('navToggle'); if (nt && !nt._wired) { nt._wired = true; nt.addEventListener('click', () => { const n = document.getElementById('reportNav'); if (n) n.classList.toggle('open'); }); }
   const es = document.getElementById('editViewSel'); if (es && !es._wired) { es._wired = true; es.addEventListener('change', () => { EDIT_VIEW = es.value; loadReport(); }); }
@@ -1557,7 +1554,7 @@ function buildReportNav() {
   if (!nav) {
     nav = document.createElement('nav'); nav.id = 'reportNav';
     document.body.appendChild(nav);
-    if (window.innerWidth >= 1400) nav.classList.add('open'); // ouvert par défaut sur grand écran
+    if (window.innerWidth >= 1100) nav.classList.add('open'); // sommaire sticky en permanence sur desktop
   }
   const report = document.getElementById('report');
   const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
