@@ -14,6 +14,10 @@ let PERSIST = false;       // base de données active (persistance) ?
 let COMPARE = true;        // comparaison N-1 activée ? (false = analyse N seule, pas besoin des données N-1)
 let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
 let IS_ADMIN = false;      // l'utilisateur courant est admin (→ CTA EDIT, page Admin)
+let CAN_EDIT = true;       // droit de modification (créer/éditer des vues) ; false = lecture seule
+// Peut éditer la vue COURANTE (admin sur partagée ; can_edit sur sa vue perso) · peut CRÉER une vue perso.
+function canEditView() { return IS_ADMIN || (isMyView(CURRENT_MODULE) && CAN_EDIT); }
+function canCreateView() { return IS_ADMIN || CAN_EDIT; }
 let EDIT_VIEW = null;      // mode édition WYSIWYG : clé de la vue en cours d'édition (null = rendu normal)
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
@@ -408,7 +412,10 @@ async function me() {
   PERSIST = !!u.dbAccounts;
   // RBAC par vue : restreint la barre de vues si le compte a une liste autorisée.
   ALLOWED_VIEWS = (Array.isArray(u.allowedViews) && u.allowedViews.length) ? u.allowedViews : null;
+  CAN_EDIT = u.canEdit !== false; // droit de créer/modifier des vues (false = lecture seule)
   if (ALLOWED_VIEWS && !ALLOWED_VIEWS.includes(CURRENT_MODULE)) CURRENT_MODULE = ALLOWED_VIEWS.find(k => MODULES[k]) || CURRENT_MODULE;
+  // Masque les CTA de création si le compte est en lecture seule.
+  if (!(u.role === 'admin' || CAN_EDIT)) { const nd = document.getElementById('newDashBtn'); if (nd) nd.classList.add('hidden'); }
   const pn = document.getElementById('persistNote');
   if (pn) pn.innerHTML = PERSIST
     ? '🟢 Persistance active : les fichiers sont conservés (base de données) — pas besoin de les re-déposer.'
@@ -539,6 +546,7 @@ function initModules() {
 
 // Crée un tableau de bord personnel (nom → vue vide démarrée sur le Bilan + Pilotage, puis éditeur).
 async function createDashboard() {
+  if (!canCreateView()) { alert('Votre compte est en lecture seule — la création de vues n\'est pas autorisée.'); return; }
   const name = (prompt('Nom de ton tableau de bord ?', 'Mon tableau de bord') || '').trim();
   if (!name) return;
   const key = 'd' + Date.now().toString(36);
@@ -709,7 +717,7 @@ async function loadReport() {
 // CTA « Edit » directement sur chaque carte (hors mode édition global) : ⚙️ modifier un widget, ✕ retirer de la vue.
 function wireCardEdit() {
   if (EDIT_VIEW) return;
-  if (!(isMyView(CURRENT_MODULE) || IS_ADMIN)) return; // seulement si la vue est éditable
+  if (!canEditView()) return; // seulement si la vue est éditable
   const report = document.getElementById('report'); if (!report) return;
   report.querySelectorAll('.card[data-ckey], .card[data-wid]').forEach(cardEl => {
     if (cardEl.querySelector(':scope > .card-edit-ctl')) return;
@@ -1627,10 +1635,10 @@ function buildReportNav() {
   if (window.innerWidth >= 1100) nav.classList.add('open'); // sticky en permanence : réaffiché à CHAQUE rendu (ex. après édition)
   const report = document.getElementById('report');
   const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
-  const canEdit = isMyView(CURRENT_MODULE) || IS_ADMIN;
+  const canEdit = canEditView();
   // Actions réduites aux pictos, en BAS du volet.
   const actions = `<div class="rn-actions">
-      <button class="rn-act" id="rnNew" title="Nouveau tableau de bord">➕</button>
+      ${canCreateView() ? '<button class="rn-act" id="rnNew" title="Nouveau tableau de bord">➕</button>' : ''}
       ${canEdit ? '<button class="rn-act" id="rnEdit" title="Éditer cette vue (ajouter / retirer les tableaux)">✏️</button>' : ''}
     </div>`;
   const hasList = heads.length >= 2;

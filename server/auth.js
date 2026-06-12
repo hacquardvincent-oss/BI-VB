@@ -43,10 +43,10 @@ async function checkCreds(username, password) {
     const { rows } = await db.query('SELECT * FROM users WHERE lower(username) = lower($1)', [uname]);
     const u = rows[0];
     if (u && u.active && verifyPassword(password, u.pass_hash, u.pass_salt)) {
-      return { username: u.username, role: u.role };
+      return { username: u.username, role: u.role, canEdit: u.can_edit !== false };
     }
   }
-  if (isEnvAdmin(uname, password)) return { username: uname, role: 'admin' };
+  if (isEnvAdmin(uname, password)) return { username: uname, role: 'admin', canEdit: true };
   return null;
 }
 
@@ -58,6 +58,7 @@ router.post('/login', async (req, res) => {
     req.session.uid = u.username;
     req.session.username = u.username;
     req.session.role = u.role;
+    req.session.canEdit = u.canEdit !== false;
     res.json(u);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -93,14 +94,17 @@ router.post('/change-password', requireAuth, async (req, res) => {
 router.get('/me', async (req, res) => {
   if (!req.session || !req.session.uid) return res.status(401).json({ error: 'Non connecté' });
   // RBAC par vue : null = toutes les vues (admins + comptes sans restriction).
-  let allowedViews = null;
+  let allowedViews = null, canEdit = (req.session.role === 'admin') || (req.session.canEdit !== false);
   if (db.enabled && req.session.role !== 'admin') {
     try {
-      const { rows } = await db.query('SELECT allowed_views FROM users WHERE username = $1', [req.session.username]);
-      if (rows[0] && Array.isArray(rows[0].allowed_views) && rows[0].allowed_views.length) allowedViews = rows[0].allowed_views;
+      const { rows } = await db.query('SELECT allowed_views, can_edit FROM users WHERE username = $1', [req.session.username]);
+      if (rows[0]) {
+        if (Array.isArray(rows[0].allowed_views) && rows[0].allowed_views.length) allowedViews = rows[0].allowed_views;
+        canEdit = rows[0].can_edit !== false; // la base fait foi (changement de droit pris en compte au reload)
+      }
     } catch (e) { /* en cas d'erreur, on n'impose aucune restriction */ }
   }
-  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled, allowedViews });
+  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled, allowedViews, canEdit });
 });
 
 function requireAuth(req, res, next) {
@@ -110,6 +114,18 @@ function requireAuth(req, res, next) {
 function requireAdmin(req, res, next) {
   if (req.session && req.session.role === 'admin') return next();
   return res.status(403).json({ error: 'Accès réservé à l’administrateur' });
+}
+// Droit de MODIFICATION (créer/éditer des vues) : admin OU compte avec can_edit. La base fait foi.
+async function requireEdit(req, res, next) {
+  if (!req.session || !req.session.uid) return res.status(401).json({ error: 'Authentification requise' });
+  if (req.session.role === 'admin') return next();
+  if (db.enabled) {
+    try {
+      const { rows } = await db.query('SELECT can_edit FROM users WHERE username = $1', [req.session.username]);
+      if (rows[0] && rows[0].can_edit === false) return res.status(403).json({ error: 'Droit de modification requis (compte en lecture seule).' });
+    } catch (e) { /* en cas d'erreur on n'empêche pas */ }
+  }
+  return next();
 }
 
 // ── Gestion des comptes (admin, base requise) ──
@@ -122,24 +138,25 @@ function requireDb(req, res, next) {
 const normViews = v => (Array.isArray(v) && v.length) ? JSON.stringify(v.filter(x => typeof x === 'string')) : null;
 
 router.get('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
-  const { rows } = await db.query('SELECT username, role, active, allowed_views, created_at FROM users ORDER BY username');
+  const { rows } = await db.query('SELECT username, role, active, allowed_views, can_edit, created_at FROM users ORDER BY username');
   res.json(rows);
 });
 
 router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
     const username = String((req.body || {}).username || '').trim(); // stocke sans espaces parasites
-    const { password, role, allowedViews } = req.body || {};
+    const { password, role, allowedViews, canEdit } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'username et password requis' });
     const r = (role === 'admin') ? 'admin' : 'user';
     const views = normViews(allowedViews);
+    const ce = canEdit !== false; // défaut : peut modifier
     const { hash, salt } = hashPassword(password);
     await db.query(
-      `INSERT INTO users (username, pass_hash, pass_salt, role, active, allowed_views) VALUES ($1, $2, $3, $4, true, $5)
-       ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, pass_salt = EXCLUDED.pass_salt, role = EXCLUDED.role, allowed_views = EXCLUDED.allowed_views`,
-      [username, hash, salt, r, views],
+      `INSERT INTO users (username, pass_hash, pass_salt, role, active, allowed_views, can_edit) VALUES ($1, $2, $3, $4, true, $5, $6)
+       ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, pass_salt = EXCLUDED.pass_salt, role = EXCLUDED.role, allowed_views = EXCLUDED.allowed_views, can_edit = EXCLUDED.can_edit`,
+      [username, hash, salt, r, views, ce],
     );
-    res.json({ username, role: r, active: true });
+    res.json({ username, role: r, active: true, can_edit: ce });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -148,12 +165,13 @@ router.post('/users', requireAuth, requireAdmin, requireDb, async (req, res) => 
 router.patch('/users/:username', requireAuth, requireAdmin, requireDb, async (req, res) => {
   try {
     const { username } = req.params;
-    const { active, role, password, allowedViews } = req.body || {};
+    const { active, role, password, allowedViews, canEdit } = req.body || {};
     const sets = [], vals = []; let i = 1;
     if (typeof active === 'boolean') { sets.push(`active = $${i++}`); vals.push(active); }
     if (role === 'admin' || role === 'user') { sets.push(`role = $${i++}`); vals.push(role); }
     if (password) { const { hash, salt } = hashPassword(password); sets.push(`pass_hash = $${i++}`, `pass_salt = $${i++}`); vals.push(hash, salt); }
     if (allowedViews !== undefined) { sets.push(`allowed_views = $${i++}`); vals.push(normViews(allowedViews)); }
+    if (typeof canEdit === 'boolean') { sets.push(`can_edit = $${i++}`); vals.push(canEdit); }
     if (!sets.length) return res.status(400).json({ error: 'Rien à modifier' });
     vals.push(username);
     const { rowCount } = await db.query(`UPDATE users SET ${sets.join(', ')} WHERE username = $${i}`, vals);
@@ -169,4 +187,4 @@ router.delete('/users/:username', requireAuth, requireAdmin, requireDb, async (r
   res.json({ ok: true });
 });
 
-module.exports = { router, requireAuth, requireAdmin };
+module.exports = { router, requireAuth, requireAdmin, requireEdit };

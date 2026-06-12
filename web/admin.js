@@ -30,14 +30,20 @@ async function loadUsers() {
   const rows = users.map(u => {
     const av = Array.isArray(u.allowed_views) && u.allowed_views.length ? u.allowed_views : null;
     const viewsTxt = u.role === 'admin' ? '<span class="na">toutes</span>' : (av ? esc(av.map(vLabel).join(', ')) : '<span class="na">toutes</span>');
+    const perm = u.role === 'admin' ? '<span class="pill">tous droits</span>' : (u.can_edit === false ? '<span class="pill miss">👁 Lecture</span>' : '<span class="pill">✏️ Modification</span>');
     const editor = u.role === 'admin' ? '' :
-      `<tr class="rights-row hidden" data-rights="${esc(u.username)}"><td colspan="5"><div class="note">Vues autorisées (aucune = toutes) :</div><div class="vbox" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0"></div><button class="btn blue" data-act="saverights" data-u="${esc(u.username)}">Enregistrer les droits</button></td></tr>`;
+      `<tr class="rights-row hidden" data-rights="${esc(u.username)}"><td colspan="6">
+        <div class="note">Droit de modification :</div>
+        <select class="perm-sel" data-u="${esc(u.username)}" style="margin:4px 0"><option value="edit">✏️ Modification (créer/éditer des vues)</option><option value="read">👁 Lecture seule</option></select>
+        <div class="note">Vues autorisées (aucune = toutes) :</div><div class="vbox" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0"></div>
+        <button class="btn blue" data-act="saverights" data-u="${esc(u.username)}">Enregistrer les droits</button></td></tr>`;
     return `<tr><td>${esc(u.username)}</td><td>${u.role === 'admin' ? '🔑 Admin' : 'Utilisateur'}</td>
       <td>${u.active ? '<span class="pill">actif</span>' : '<span class="pill miss">inactif</span>'}</td>
+      <td>${perm}</td>
       <td style="font-size:11px;color:var(--t2)">${viewsTxt}</td>
       <td>${u.role === 'admin' ? '' : `<button class="btn" data-act="rights" data-u="${esc(u.username)}">Droits</button> `}<button class="btn" data-act="pass" data-u="${esc(u.username)}">🔑 Mot de passe</button> <button class="btn" data-act="toggle" data-u="${esc(u.username)}" data-v="${u.active ? 0 : 1}">${u.active ? 'Désactiver' : 'Réactiver'}</button> <button class="btn" data-act="del" data-u="${esc(u.username)}">Supprimer</button></td></tr>${editor}`;
   }).join('');
-  list.innerHTML = `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Vues autorisées</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  list.innerHTML = `<table><thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Modification</th><th>Vues autorisées</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   const rightsRow = u => [...list.querySelectorAll('tr[data-rights]')].find(tr => tr.dataset.rights === u);
   list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', async () => {
     const u = b.dataset.u;
@@ -54,12 +60,13 @@ async function loadUsers() {
     else if (b.dataset.act === 'rights') {
       const row = rightsRow(u); if (!row) return;
       const wasHidden = row.classList.toggle('hidden');
-      if (!wasHidden) { const usr = users.find(x => x.username === u); renderViewChecks(row.querySelector('.vbox'), Array.isArray(usr.allowed_views) ? usr.allowed_views : null); }
+      if (!wasHidden) { const usr = users.find(x => x.username === u); renderViewChecks(row.querySelector('.vbox'), Array.isArray(usr.allowed_views) ? usr.allowed_views : null); const ps = row.querySelector('.perm-sel'); if (ps) ps.value = (usr.can_edit === false) ? 'read' : 'edit'; }
     }
     else if (b.dataset.act === 'saverights') {
       const row = rightsRow(u); if (!row) return;
       const allowedViews = readViewChecks(row.querySelector('.vbox'));
-      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowedViews }) });
+      const ps = row.querySelector('.perm-sel'); const canEdit = ps ? ps.value !== 'read' : true;
+      await fetch(`/auth/users/${encodeURIComponent(u)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowedViews, canEdit }) });
       document.getElementById('acNote').textContent = `✓ Droits de « ${u} » mis à jour.`;
       loadUsers();
     }
@@ -71,9 +78,10 @@ async function addUser() {
   const username = document.getElementById('acUser').value.trim();
   const password = document.getElementById('acPass').value;
   const role = document.getElementById('acRole').value;
+  const canEdit = document.getElementById('acPerm').value !== 'read';
   if (!username || !password) { note.textContent = '⚠ Identifiant et mot de passe requis.'; return; }
   const allowedViews = readViewChecks(document.getElementById('acViews'));
-  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role, allowedViews }) });
+  const r = await fetch('/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role, allowedViews, canEdit }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
   note.textContent = `✓ Compte « ${username} » enregistré${allowedViews.length ? ` (${allowedViews.length} vue(s))` : ' (toutes vues)'}.`;
@@ -100,8 +108,21 @@ async function addUser() {
   renderViewChecks(document.getElementById('acViews'), null);
   document.getElementById('acAdd').addEventListener('click', addUser);
   document.getElementById('mpSave').addEventListener('click', changeMyPassword);
+  wireEyes();
   loadUsers();
 })();
+
+// 👁 Afficher/masquer ce qu'on tape dans les champs mot de passe (le MDP stocké, lui, est haché et non lisible).
+function wireEyes() {
+  document.querySelectorAll('input[type="password"]').forEach(inp => {
+    if (inp.dataset.eye) return; inp.dataset.eye = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn'; btn.textContent = '👁'; btn.title = 'Afficher / masquer la saisie';
+    btn.style.cssText = 'padding:6px 9px;margin-left:-4px';
+    btn.addEventListener('click', () => { inp.type = inp.type === 'password' ? 'text' : 'password'; });
+    inp.after(btn);
+  });
+}
 
 // Changer son propre mot de passe (compte connecté, admin ou user).
 async function changeMyPassword() {

@@ -6,7 +6,7 @@
 // ============================================================================
 const express = require('express');
 const db = require('./db');
-const { requireAuth } = require('./auth');
+const { requireAuth, requireEdit } = require('./auth');
 
 const router = express.Router();
 const MEM = {}; // repli mémoire : { username: { key: {label, cards} } }
@@ -61,7 +61,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // Crée / met à jour une vue perso. body : { label, cards:[...] }
-router.put('/:key', requireAuth, async (req, res) => {
+router.put('/:key', requireAuth, requireEdit, async (req, res) => {
   const u = who(req); if (!u) return res.status(401).json({ error: 'non connecté' });
   const key = (req.params.key || '').toString().slice(0, 40).replace(/[^a-z0-9_-]/gi, '');
   const label = ((req.body && req.body.label) || '').toString().trim().slice(0, 60) || 'Mon tableau de bord';
@@ -77,7 +77,7 @@ router.put('/:key', requireAuth, async (req, res) => {
 });
 
 // Supprime une vue perso.
-router.delete('/:key', requireAuth, async (req, res) => {
+router.delete('/:key', requireAuth, requireEdit, async (req, res) => {
   const u = who(req); if (!u) return res.status(401).json({ error: 'non connecté' });
   const key = (req.params.key || '').toString();
   try { const views = await load(u); delete views[key]; await save(u, views); res.json({ ok: true }); }
