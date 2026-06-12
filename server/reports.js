@@ -531,6 +531,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     n1: (rowsN1 && rowsN1.length) ? calc.calcCancellations(rowsN1, mapN1) : null,
     detail: calc.calcCancellationsDetail(rowsN, omsN.map),
   };
+  // Significativité (z-test de proportion) des écarts de TAUX vs N-1 → ne pas crier au signal sur du bruit.
+  const significance = {};
+  if (kpiEShopN1) {
+    significance.tt = calc.propZTest(kpiEShopN.commandes, kpiEShopN.sessions, kpiEShopN1.commandes, kpiEShopN1.sessions);
+    if (cancellations.n && cancellations.n1) significance.annulation = calc.propZTest(cancellations.n.commandesImpactees, cancellations.n.commandes, cancellations.n1.commandesImpactees, cancellations.n1.commandes);
+  }
 
   // ── Retours ──
   let returns = null;
@@ -696,6 +702,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     seasonCompare,
     crossChannel,
     cancellations,
+    significance,
     returns,
     famille,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },

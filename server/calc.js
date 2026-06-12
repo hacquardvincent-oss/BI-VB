@@ -337,6 +337,19 @@ function varianceDecomp(n, n1) {
   return { dCA: CA - CA1, trafic, tt, panier };
 }
 
+// ── Test de significativité (z-test de DEUX proportions) — déterministe (ADR-008).
+// x = succès (ex. commandes), n = essais (ex. sessions). `sig` = écart significatif à 95 % (|z| ≥ 1,96)
+// → permet de NE PAS présenter comme « signal » une variation de taux qui est du bruit statistique.
+function propZTest(x1, n1, x2, n2) {
+  x1 = +x1; n1 = +n1; x2 = +x2; n2 = +n2;
+  if (!(n1 > 0 && n2 > 0) || x1 < 0 || x2 < 0) return null;
+  const p1 = x1 / n1, p2 = x2 / n2, p = (x1 + x2) / (n1 + n2);
+  const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
+  if (!(se > 0)) return { z: 0, sig: false, p1, p2 };
+  const z = (p1 - p2) / se;
+  return { z, sig: Math.abs(z) >= 1.96, p1, p2 };
+}
+
 // ── CA par ZONE (FR / Inter) × Full/Off (hors mkt) — pivot GLOBAL commercial ─
 function calcZoneFullOff(rows, map) {
   const pi = map.prix, pai = map.pays, ti = map.type, pvi = map.pv, pvri = map.pv_remise;
@@ -1528,7 +1541,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, varianceDecomp,
+  monthlyEShopCA, varianceDecomp, propZTest,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,

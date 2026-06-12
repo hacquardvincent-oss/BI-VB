@@ -136,6 +136,7 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .bdelta.up{color:var(--g);background:var(--pos-bg)}
 .bdelta.dn{color:var(--r);background:var(--neg-bg)}
 .bdelta.na{color:var(--t3);background:var(--inset2)}
+.nsig{font-size:9px;font-weight:700;color:var(--t3);background:var(--inset2);border-radius:5px;padding:1px 5px;margin-left:5px;text-transform:uppercase;letter-spacing:.04em}
 
 /* Leviers */
 .bilan-sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:14px}
