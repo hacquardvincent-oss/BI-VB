@@ -184,13 +184,22 @@ function orderToRows(order) {
     // étant alors dans `compareAtPrice` → on prend le PLUS HAUT des deux comme catalogue plein.
     // « Prix Vente Remisé » = prix après démarque : champ dédié de l'API si présent, sinon, si le prix
     // payé est sous le catalogue, on prend `unitPrice` (la démarque est dans le payé).
+    const v = it.variant || {}, prod = it.product || {};
     const cmpAt = Number(it.compareAtPrice || 0) || 0;
     const ouPrice = Number(it.originalUnitPrice != null ? it.originalUnitPrice : unit) || 0;
-    const pvUnit = Math.max(cmpAt, ouPrice) || 0;
+    let pvUnit = Math.max(cmpAt, ouPrice) || 0;
+    // FALLBACK INTERNATIONAL : si le catalogue standard (originalUnitPrice / compareAtPrice) n'excède
+    // PAS le prix payé, la démarque est invisible (cas observé sur les commandes hors France → Off = 0).
+    // On cherche alors un prix d'origine ailleurs (liste, variante, produit). N'est utilisé QUE comme
+    // repli (ne touche pas le calcul France déjà validé au TCD : là, pvUnit > unit est déjà vrai).
+    if (!(pvUnit > unit) && unit > 0 && (pays || '').toLowerCase() !== 'france') {
+      const alt = [it.listPrice, it.basePrice, it.regularPrice, it.msrp, it.fullPrice, it.priceWithoutDiscount,
+        it.originalPrice, it.catalogPrice, it.retailPrice, v.price, v.originalPrice, v.compareAtPrice, v.listPrice,
+        prod.price, prod.originalPrice, prod.compareAtPrice].map(x => Number(x) || 0).filter(x => x > unit);
+      if (alt.length) pvUnit = Math.max(pvUnit, ...alt);
+    }
     let pvrUnit = Number(it.originalDiscountedUnitPrice || it.discountedUnitPrice || it.salePrice || it.markdownPrice || 0) || 0;
     if (!(pvrUnit > 0) && pvUnit > 0 && unit > 0 && unit < pvUnit) pvrUnit = unit;
-    // Coloris (best-effort selon le schéma WSHOP) → ajouté à la désignation produit.
-    const v = it.variant || {};
     const color = (it.color || it.colour || it.colorLabel || it.couleur || it.colorName || v.color || v.colour || v.colorLabel || v.label || '').toString().trim();
     const titre = (it.title || it.name || '').toString().trim();
     const designation = color && !titre.toLowerCase().includes(color.toLowerCase()) ? `${titre} - ${color}` : titre;
@@ -600,6 +609,28 @@ router.get('/ping', requireAuth, async (req, res) => {
         exemple: pick(demoItems[0]),
         originalDiscountedUnitPriceRenseigne: demoItems.filter(it => Number(it.originalDiscountedUnitPrice) > 0).length + '/' + demoItems.length,
       } : 'aucune ligne démarquée détectée dans l\'échantillon (unitPrice < catalogue)';
+      // Diagnostic « DÉMARQUE PAR ZONE » : la démarque off-price International tombe à 0 quand l'API
+      // ne renvoie pas de prix catalogue exploitable pour les commandes hors France. On compare donc
+      // l'encodage des prix FRANCE vs INTERNATIONAL pour repérer le champ catalogue/remisé manquant.
+      const zoneStat = () => {
+        const z = { france: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null },
+          inter: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null } };
+        arr.forEach(o => {
+          const code = ((o.shippingAddress && o.shippingAddress.countryCode) || '').toUpperCase();
+          const g = code === 'FR' ? z.france : z.inter;
+          (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+            const u = Number(it.unitPrice) || 0, cat = Number(it.originalUnitPrice) || 0, cmp = Number(it.compareAtPrice) || 0, disc = Number(it.originalDiscountedUnitPrice) || 0;
+            const catalogue = Math.max(cat, cmp);
+            g.items++;
+            if (catalogue > 0) g.catRenseigne++;
+            if (catalogue > 0 && u > 0 && u < catalogue * 0.98) g.markdownDetectable++;
+            if (disc > 0) g.discRenseigne++;
+            if (!g.exemple && u > 0) g.exemple = pick(it);
+          });
+        });
+        return z;
+      };
+      out.demarqueParZone = zoneStat();
       // Champs de statut (pour caler la règle « annulation » sur les commandes finalisées)
       const ST = /(status|statut|state|etat|fulfil|ship|exped|livr|cancel|annul)/i;
       const pickSt = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { if (ST.test(k)) r[k] = obj[k]; }); return r; };

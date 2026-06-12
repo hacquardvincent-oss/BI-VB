@@ -2888,10 +2888,12 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   if (!N1_MANUAL) syncComparable();
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
 }));
-// Lien « modifier » : passe la comparaison N-1 en saisie manuelle.
+// N-1 toujours visible : dès que l'utilisateur édite directement une date N-1, on passe en
+// saisie manuelle (les changements de N ne l'écrasent plus). Le bouton « ≈ −364 j » recale.
+['dCfrom', 'dCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { N1_MANUAL = true; }); });
 { const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); syncComparable(); }); }
-// Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande).
-document.getElementById('n1Default').addEventListener('click', () => { syncComparable(); });
+// Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande) → repasse en auto.
+document.getElementById('n1Default').addEventListener('click', () => { N1_MANUAL = false; syncComparable(); });
 // Comparaison N-1 : « N vs N-1 » (défaut) ou « N seule » (pas besoin des données de l'année précédente).
 document.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-cmp]').forEach(x => x.classList.remove('on'));
