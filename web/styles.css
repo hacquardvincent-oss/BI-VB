@@ -137,6 +137,15 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .bdelta.dn{color:var(--r);background:var(--neg-bg)}
 .bdelta.na{color:var(--t3);background:var(--inset2)}
 .nsig{font-size:9px;font-weight:700;color:var(--t3);background:var(--inset2);border-radius:5px;padding:1px 5px;margin-left:5px;text-transform:uppercase;letter-spacing:.04em}
+/* Synthèse par périmètre (mini-cartes cliquables) */
+.perim-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px}
+.perim{display:block;background:var(--s2);border:1px solid var(--br);border-radius:10px;padding:12px 14px;color:var(--t);text-decoration:none;transition:border-color .12s}
+.perim:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+.pr-h{font-family:var(--disp);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--a);margin-bottom:8px}
+.pr-kpi{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;padding:3px 0;border-top:1px solid var(--line-soft)}
+.pr-kpi:first-of-type{border-top:none}
+.pr-l{color:var(--t3)}
+.pr-v{font-weight:600;font-variant-numeric:tabular-nums}
 
 /* Leviers */
 .bilan-sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:14px}

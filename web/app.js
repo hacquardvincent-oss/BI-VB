@@ -104,23 +104,23 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AQ: '📡 Acquisition',
+  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'P', actionplan: 'P', variance: 'P',
+  kpi: 'P', actionplan: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
-  famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
-  itemfunnel: 'ES', gafunnel: 'ES', device: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
+  famille: 'ES', produits: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
+  pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
   pays: 'IN', ttpays: 'IN', fampays: 'IN',
@@ -138,7 +138,7 @@ function sectionize(layout) {
 
 // ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
 const CARD_LABELS = {
-  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', stockalerts: 'Alertes stock',
@@ -149,8 +149,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -1602,9 +1602,25 @@ function renderReport(rep) {
     const note = `<div class="note">Décomposition déterministe : <b>CA = Sessions × Taux de transfo × Panier moyen</b>. La ${v.dCA >= 0 ? 'hausse' : 'baisse'} de CA vient surtout du <b>${esc(top[0].replace(/^[^\s]+\s/, '').toLowerCase())}</b> (${sgnEur(top[1])}). Les trois effets somment exactement à la variation totale.</div>`;
     return `<div class="card"><h3>🧮 Pourquoi le CA bouge vs N-1 ?</h3>${tiles}${note}</div>`;
   })();
+  // 🎯 Synthèse par périmètre : mini-cartes (KPI clés + Δ N-1) sous le Bilan, cliquables → section détaillée.
+  const perimSynthCard = (() => {
+    const k = rep.kpiEShop && rep.kpiEShop.n; if (!k) return '';
+    const k1 = (rep.kpiEShop.n1) || {}, ca = (rep.ca && rep.ca.n) || {}, ca1 = (rep.ca && rep.ca.n1) || {};
+    const mk = (rep.marketplace && rep.marketplace.n) || {}, mk1 = (rep.marketplace && rep.marketplace.n1) || {};
+    const row = (l, v, d) => `<div class="pr-kpi"><span class="pr-l">${l}</span><span class="pr-v">${v}${d ? ` ${d}` : ''}</span></div>`;
+    const panel = (icon, title, anchor, rows) => `<a href="#${anchor}" class="perim">${`<div class="pr-h">${icon} ${title}</div>`}${rows}</a>`;
+    const out = [];
+    out.push(panel('🛒', 'E-Store', 'sec-ES', row('CA', fEur(k.ca), delta(k.ca, k1.ca)) + row('Commandes', fInt(k.commandes), delta(k.commandes, k1.commandes)) + row('Transfo', fPct(k.tt), delta(k.tt, k1.tt)) + row('Panier', fEur(k.pm), delta(k.pm, k1.pm))));
+    if (k.sessions) out.push(panel('📡', 'Acquisition', 'sec-AQ', row('Sessions', fInt(k.sessions), delta(k.sessions, k1.sessions)) + (rep.ads && rep.ads.roas ? row('ROAS', rep.ads.roas.n != null ? rep.ads.roas.n.toFixed(2) + '×' : '—', '') : '') + (rep.ads && rep.ads.cos ? row('COS', rep.ads.cos.n != null ? fPct(rep.ads.cos.n) : '—', '') : '')));
+    if (ca.caInt != null) out.push(panel('🌍', 'International', 'sec-IN', row('CA Inter', fEur(ca.caInt), delta(ca.caInt, ca1.caInt)) + row('Part', ca.caEShop > 0 ? fPct(ca.caInt / ca.caEShop) : '—', '') + row('CA France', fEur(ca.caFR), delta(ca.caFR, ca1.caFR))));
+    if (mk.total > 0) out.push(panel('🛍️', 'Marketplace', 'sec-MP', row('CA mkt', fEur(mk.total), delta(mk.total, mk1.total)) + row('Part EShop+mkt', (k.ca + mk.total) > 0 ? fPct(mk.total / (k.ca + mk.total)) : '—', '')));
+    if (ca.caOP != null) { const tot = (ca.caFP || 0) + (ca.caOP || 0); out.push(panel('🏷️', 'Démarque', 'sec-CO', row('Off price', fEur(ca.caOP), '') + row('Part off', tot > 0 ? fPct(ca.caOP / tot) : '—', '') + row('Full price', fEur(ca.caFP), ''))); }
+    if (out.length < 2) return '';
+    return `<div class="card"><h3>🎯 Synthèse par périmètre</h3><div class="perim-grid">${out.join('')}</div><div class="note">Clique un périmètre pour aller à son analyse détaillée.</div></div>`;
+  })();
   const C = {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
-    fulloff: fullOffCard, variance: varianceCard,
+    fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
