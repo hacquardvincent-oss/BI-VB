@@ -235,6 +235,11 @@ REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES`. `ensureRefExtIdx` garant
 ### KPI EShop — `calcKPIEShop(rows,map,sessions)` (hors mkt)
 `ca`=Σ prix · `pieces`=Σ qte · `commandes`=|num distincts| · `pm`=ca/commandes · `tt`=commandes/sessions (TT) · `caFP/caOP`.
 
+### Décomposition de variance — `varianceDecomp(n,n1)` (déterministe, ADR-008)
+ΔCA vs N-1 décomposé en **effet Trafic × Transfo × Panier** (séquentiel : `CA=Sessions×TT×Panier` ; les 3 effets somment
+EXACTEMENT à ΔCA). Entrées = `kpiEShop{n,n1}` (besoin sessions+commandes+CA des 2 périodes). → `rep.variance` → carte `variance`
+(« Pourquoi le CA bouge vs N-1 ? », thème P). 1ʳᵉ brique de la couche analytique déterministe du moat vertical.
+
 ### Annulations — `calcCancellations` / `calcCancellationsDetail` (hors mkt, cf §12)
 - **Taux d'annulation = `commandesImpactees ÷ commandes`** (à la **commande**, pas à la pièce). `tauxPieces`, `tauxCA` aussi.
 - **Annulation** = lignes `Quantité non livré > 0` au statut **Cancelled\*** (ou statut absent). `unit = prix/cmd` (prorata).

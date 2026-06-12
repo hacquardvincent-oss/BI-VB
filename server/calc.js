@@ -323,6 +323,20 @@ function monthlyEShopCA(rows, map) {
   return out;
 }
 
+// ── Décomposition de variance (déterministe) : ΔCA vs N-1 = effet Trafic × Transformation × Panier.
+// Décomposition séquentielle (trafic → transfo → panier) → les 3 effets somment EXACTEMENT à ΔCA.
+// CA = sessions × (commandes/sessions) × (CA/commandes). Entrées = kpiEShop {n, n1}.
+function varianceDecomp(n, n1) {
+  if (!n || !n1) return null;
+  const S = +n.sessions, C = +n.commandes, CA = +n.ca, S1 = +n1.sessions, C1 = +n1.commandes, CA1 = +n1.ca;
+  if (!(S > 0 && C > 0 && CA > 0 && S1 > 0 && C1 > 0 && CA1 > 0)) return null; // besoin de sessions+commandes+CA des 2 périodes
+  const T = C / S, A = CA / C, T1 = C1 / S1, A1 = CA1 / C1; // taux de transfo · panier moyen
+  const trafic = (S - S1) * T1 * A1;   // effet du volume de sessions
+  const tt = S * (T - T1) * A1;         // effet du taux de transformation
+  const panier = S * T * (A - A1);      // effet du panier moyen
+  return { dCA: CA - CA1, trafic, tt, panier };
+}
+
 // ── CA par ZONE (FR / Inter) × Full/Off (hors mkt) — pivot GLOBAL commercial ─
 function calcZoneFullOff(rows, map) {
   const pi = map.prix, pai = map.pays, ti = map.type, pvi = map.pv, pvri = map.pv_remise;
@@ -1514,7 +1528,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA,
+  monthlyEShopCA, varianceDecomp,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,
