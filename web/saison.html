@@ -17,10 +17,12 @@
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="setupToggle" title="Afficher / masquer le paramétrage">⚙️ Paramètres</button>
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap">
+<div class="wrap layout-2col">
+  <aside id="setupCol">
   <!-- INTRO -->
   <div class="card">
     <h3>🏷️ Analyse de saison — E26 vs E25</h3>
@@ -149,8 +151,11 @@
     </div>
   </div>
 
+  </aside>
+  <main id="mainCol">
   <!-- RÉSULTAT -->
   <div id="report"></div>
+  </main>
 </div>
 
 <script src="/saison.js"></script>
