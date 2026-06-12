@@ -708,6 +708,9 @@ let _balanceT;
 window.addEventListener('resize', () => { clearTimeout(_balanceT); _balanceT = setTimeout(() => balanceKgrids(), 150); });
 // Recalcul une fois les polices web chargées (les largeurs de tuiles changent) → évite tout orphelin résiduel.
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => balanceKgrids());
+// Toggle du panneau de paramétrage (colonne gauche) — état mémorisé ; recalcul des grilles après le changement de largeur.
+try { if (localStorage.getItem('setupCollapsed') === '1') document.body.classList.add('setup-collapsed'); } catch (e) { /* ignore */ }
+(function () { const b = document.getElementById('setupToggle'); if (b) b.addEventListener('click', () => { const on = document.body.classList.toggle('setup-collapsed'); try { localStorage.setItem('setupCollapsed', on ? '1' : '0'); } catch (e) { /* ignore */ } setTimeout(() => balanceKgrids(), 80); }); })();
 
 // Bannière de couverture : la période sélectionnée ne recoupe pas l'OMS importé (→ 0 vente).
 // Cause n°1 des « chiffres qui ne chargent plus » : la plage d'analyse est hors de la fenêtre importée.
