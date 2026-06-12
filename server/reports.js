@@ -726,6 +726,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     })(),
     produits,
     funnel,
+    variance: calc.varianceDecomp(kpiEShopN, kpiEShopN1),
     channels,
     channelTypes,
     device,

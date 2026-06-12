@@ -100,7 +100,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -112,7 +112,7 @@ const THEME_META = {
 };
 const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'P', actionplan: 'P',
+  kpi: 'P', actionplan: 'P', variance: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES', pages: 'ES', landing: 'ES', lostpages: 'ES',
@@ -134,7 +134,7 @@ function sectionize(layout) {
 
 // ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
 const CARD_LABELS = {
-  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', stockalerts: 'Alertes stock',
@@ -145,8 +145,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -1557,9 +1557,23 @@ function renderReport(rep) {
         <div class="note">Alertes d'exécution générées automatiquement : campagnes N-1 non reconduites, campagnes payantes en dérive (COS/saturation/budget), landing pages dont la conversion décroche, pages fortes disparues.</div></div>`;
     }
   }
+  // 🧮 Décomposition de variance — pourquoi le CA bouge vs N-1 (déterministe : trafic × transfo × panier)
+  const varianceCard = (() => {
+    const v = rep.variance; if (!v) return '';
+    const sgnEur = n => (n >= 0 ? '+' : '−') + fEur(Math.abs(n));
+    const tone = n => n >= 0 ? 'up' : 'dn';
+    const factors = [['🚦 Trafic (sessions)', v.trafic], ['🎯 Taux de transformation', v.tt], ['🛒 Panier moyen', v.panier]];
+    const top = factors.slice().sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+    const tiles = `<div class="kgrid">
+      <div class="kc"><div class="l">Variation de CA vs N-1</div><div class="v"><span class="${tone(v.dCA)}">${sgnEur(v.dCA)}</span></div></div>
+      ${factors.map(([l, val]) => `<div class="kc"><div class="l">${l}</div><div class="v"><span class="${tone(val)}">${sgnEur(val)}</span></div></div>`).join('')}
+    </div>`;
+    const note = `<div class="note">Décomposition déterministe : <b>CA = Sessions × Taux de transfo × Panier moyen</b>. La ${v.dCA >= 0 ? 'hausse' : 'baisse'} de CA vient surtout du <b>${esc(top[0].replace(/^[^\s]+\s/, '').toLowerCase())}</b> (${sgnEur(top[1])}). Les trois effets somment exactement à la variation totale.</div>`;
+    return `<div class="card"><h3>🧮 Pourquoi le CA bouge vs N-1 ?</h3>${tiles}${note}</div>`;
+  })();
   const C = {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
-    fulloff: fullOffCard,
+    fulloff: fullOffCard, variance: varianceCard,
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
