@@ -24,6 +24,7 @@ async function me() {
   if (!r.ok) { location.href = '/login.html'; return null; }
   const u = await r.json();
   document.getElementById('who').textContent = u.username || '';
+  if (u.role === 'admin') { const _ab = document.getElementById('adminBtn'); if (_ab) { _ab.classList.remove('hidden'); _ab.onclick = () => { location.href = '/admin.html'; }; } }
   return u;
 }
 

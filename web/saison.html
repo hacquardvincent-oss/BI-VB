@@ -17,6 +17,7 @@
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn hidden" id="adminBtn" title="Administration des comptes">👤 Admin</button>
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
@@ -85,12 +86,12 @@
     <div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">📖 Référentiel produit (familles, par saison)</div>
     <div class="grid sources" style="margin-top:4px">
       <div class="src">
-        <div class="name">Référentiel E26 — N <span class="pill miss" id="pillRefN">optionnel</span></div>
+        <div class="name">Référentiel produit — N <span class="pill miss" id="pillRefN">optionnel</span></div>
         <label>Réf. externe → famille (saison N)</label>
         <input type="file" id="fileRefN" accept=".csv,.xlsx,.xls,.txt">
       </div>
       <div class="src">
-        <div class="name">Référentiel E25 — N-1 <span class="pill miss" id="pillRefN1">optionnel</span></div>
+        <div class="name">Référentiel produit — N-1 <span class="pill miss" id="pillRefN1">optionnel</span></div>
         <label>Réf. externe → famille (saison N-1)</label>
         <input type="file" id="fileRefN1" accept=".csv,.xlsx,.xls,.txt">
       </div>

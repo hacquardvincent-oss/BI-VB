@@ -580,6 +580,7 @@ async function syncDelta() {
   try { const r = await fetch('/auth/me'); if (!r.ok) { location.href = '/login.html'; return; } u = await r.json(); }
   catch (e) { location.href = '/login.html'; return; }
   document.getElementById('who').textContent = u.username;
+  if (u.role === 'admin') { const _ab = document.getElementById('adminBtn'); if (_ab) { _ab.classList.remove('hidden'); _ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   // Pré-remplissage : dernière opération mémorisée, sinon 7 derniers jours.
   let saved = null; try { saved = JSON.parse(localStorage.getItem('vbOp') || 'null'); } catch (e) { /* ignore */ }
