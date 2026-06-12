@@ -607,8 +607,8 @@ router.get('/ping', requireAuth, async (req, res) => {
       const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
       const pickAll = obj => { const r = {}; Object.keys(obj || {}).forEach(k => { const v = obj[k]; if (!PII.test(k) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 40))) r[k] = v; }); return r; };
       const zoneStat = () => {
-        const z = { france: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, pays: null },
-          inter: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, pays: null } };
+        const z = { france: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, exempleDemarque: null, paysDemarque: null, pays: null },
+          inter: { items: 0, catRenseigne: 0, markdownDetectable: 0, discRenseigne: 0, exemple: null, exempleComplet: null, exempleDemarque: null, paysDemarque: null, pays: null } };
         arr.forEach(o => {
           const code = ((o.shippingAddress && o.shippingAddress.countryCode) || '').toUpperCase();
           const g = code === 'FR' ? z.france : z.inter;
@@ -617,9 +617,12 @@ router.get('/ping', requireAuth, async (req, res) => {
             const catalogue = Math.max(cat, cmp);
             g.items++;
             if (catalogue > 0) g.catRenseigne++;
+            const isMarkdown = (catalogue > 0 && u > 0 && u < catalogue * 0.98) || disc > 0;
             if (catalogue > 0 && u > 0 && u < catalogue * 0.98) g.markdownDetectable++;
             if (disc > 0) g.discRenseigne++;
             if (!g.exemple && u > 0) { g.exemple = pick(it); g.exempleComplet = pickAll(it); g.pays = countryName(code); }
+            // Exemple d'une ligne RÉELLEMENT démarquée (montre comment l'API encode la démarque) → priorité au dump complet.
+            if (!g.exempleDemarque && isMarkdown) { g.exempleDemarque = pickAll(it); g.paysDemarque = countryName(code); }
           });
         });
         return z;
