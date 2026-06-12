@@ -345,3 +345,35 @@ Objectif : simplifier l'usage (au lieu d'un seul grand tableau qui exige tous le
 11. **Rebrancher une base** (persistance + comptes) dès qu'un slot Postgres est dispo (cf. ADR-006)
 12. (Phase 3) Connecteur API wshop
 13. ~~Correctifs V1 : dashboard GA, TT, code mort~~ ✅ fait (03/06)
+
+---
+
+## 🧭 Cap produit — moat vertical mode (cadré 12/06/2026, cf. ADR-008)
+Vision : outil BI **déterministe** (aucun LLM dans le calcul), **vertical retail/mode**, **possédé** par VB.
+On pousse l'outil ACTUEL au max (test équipes VB → éventuel déploiement SI). **Pas de réécriture** :
+on récolte les idées à forte valeur sur la stack existante. Légende : ✅ livré · 🟢 codable maintenant
+(données présentes) · 🟡 bloqué par données (cf. backlog data) · 🔵 différé (jalon productisation).
+
+### Catalogue de métriques (le moat) — état
+| Métrique | Statut | Note |
+|---|---|---|
+| `full_price_share`, `markdown_rate` | ✅ | cartes démarque / full-off (règle figée, validée TCD) |
+| `return_rate` | ✅ | cartes retours + top produits retournés |
+| `sell_through` | ✅ | page Analyse de saison |
+| `cannibalization` / `cross_sell` (partiel) | ✅ | cross-channel + arbitrage marketplace |
+| `net_roas` (CA net de retours ÷ dépense) | 🟢 | on a la dépense (Ads/Meta) + les retours → **codable sans nouvelle donnée** |
+| `newness_ratio` | 🟢 | nécessite date de lancement produit (déduisible ref/impl) |
+| `net_sell_through` | 🟡 | besoin retours × stock reçu |
+| `gmroi`, `stock_turn`, `weeks_of_supply`, `broken_size_rate` | 🟡 | besoin **stock valorisé / tailles** (backlog data) |
+| `net_contribution_margin`, `net_return_cost` | 🟡 | besoin **COGS / coût logistique retour** (backlog data) |
+| `repeat_rate`, `ltv_by_channel`, `inter_purchase_gap`, `cross_sell_rate` client | 🟡 | besoin **ID client pseudonymisé** (RGPD-clean) |
+
+### Couche analytique déterministe (§4 du doc) — additif, sans nouvelle donnée
+- 🟢 **Décomposition de variance** : ΔCA vs N-1 = effet trafic × effet TT × effet panier. *(reco n°1 : CODIR-grade, pur calc)*
+- 🟢 **Test de significativité** : z-test de proportion sur les taux (transfo, retour, annulation, full price) → marquer « non significatif » le bruit.
+- 🟢 **Décomposition de funnel** vs cible (localiser la fuite) · détection **paradoxe de Simpson** (global vs segments).
+- 🟢 **Scoring qualité de données** (§7) : complétude/validité/unicité/cohérence/fraîcheur + drill-down.
+
+### Fondation
+- 🟢 **Registre de métriques formel** : passer `W_METRICS/W_DIMS` (codé en dur) en registre déclaré/versionné (résolveur JS par id).
+- 🔵 Monitoring/alerting admin, entrepôt SQL + `metric_registry` littéral, React/Tailwind, on-premise → jalon productisation différé.

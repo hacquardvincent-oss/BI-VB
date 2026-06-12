@@ -213,3 +213,44 @@ des données datées (jour) et dimensionnées (canal, device, pays).
 - Nouvelle dépendance (`@google-analytics/data` ou appel REST + `google-auth-library`).
 - Implémentation **non testable sans ces prérequis** → livrée dès réception des accès.
 - Secrets gérés via Render uniquement (cohérent avec ADR-005/006).
+
+---
+
+## ADR-008 — Cap produit : moat vertical retail/mode, déterministe (registre de métriques)
+
+**Date** : 12/06/2026
+**Statut** : Cadré (vision) — récolte **incrémentale sur la stack actuelle**, sans réécriture
+
+> Clarification : « Solune » dans le doc de vision = la société **Vanessa Bruno** (placeholder erroné).
+> Objectif : pousser l'outil ACTUEL au maximum, bien documenté, en vue d'un **test par les équipes VB**
+> puis éventuel déploiement dans leur SI. Pas de nouveau produit, pas de réécriture.
+
+### Contexte
+Document stratégique reçu (« outil BI déterministe, vertical retail/mode »). Il décrit un moat (sémantique
+métier pré-encodée), un registre de métriques central, une couche analytique sans IA, du monitoring, des
+scripts RGPD et un scoring qualité. La cible « stack » du doc (React/Tailwind + entrepôt SQL + on-premise)
+diverge de l'outil actuel (vanilla JS + Express + store RAM + Postgres optionnel + Render).
+
+### Décision
+- **Positionnement** : ne pas concurrencer Power BI sur la largeur, mais sur le *fit* vertical mode +
+  déterminisme + possession. Concurrent réel = « Excel + exports manuels ».
+- **Déterminisme** : calcul/scoring restent purs (JS/stats), **AUCUN LLM dans la boucle d'analyse**.
+  L'IA (reco) reste opt-in = **génération de texte à partir de chiffres déjà calculés**, hors boucle
+  numérique (re-cadrer le wording ; jamais « insights chiffrés par IA »).
+- **Registre de métriques = pièce centrale** : le concepteur de tableaux compose depuis un catalogue
+  **déclaré et versionné** (jamais de SQL libre / colonnes brutes). Évolution du catalogue `W_METRICS/W_DIMS`
+  vers un registre formel (id, family, unit, grain, higher_is_better, baseline, test de signif).
+- **Stack** : on **garde l'existant**. Réécriture React/Tailwind + entrepôt SQL = jalon « productisation »
+  **différé**, déclenché seulement si déploiement dans le SI VB confirmé.
+
+### Récolte incrémentale (sans réécriture, valeur immédiate)
+- Couche déterministe : **test de significativité** (z-test de proportion → ne plus afficher le bruit comme
+  signal), **décomposition de variance** (CA = trafic × TT × panier), décomposition de funnel, détection Simpson.
+- **Scoring qualité de données** (complétude/validité/unicité/cohérence/fraîcheur) + drill-down lignes fautives.
+- Élargir le moat §2 **au fil des données débloquées** (cf. backlog data `STATUS.md`).
+
+### Conséquences
+- Le concepteur de tableaux (palier 1 livré) deviendra un **consommateur du registre formel**.
+- Métriques **cohorte/client bloquées par le design anti-PII** (ADR-005) tant qu'un **ID client pseudonymisé
+  (hash stable, sans PII)** n'est pas introduit → décision RGPD à acter séparément.
+- Métriques **marge/stock bloquées** par l'absence de fichiers coût/stock (backlog data).
