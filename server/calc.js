@@ -323,6 +323,39 @@ function monthlyEShopCA(rows, map) {
   return out;
 }
 
+// ── Poids des regroupements par mois (saison) ───────────────────────────────
+// Croise OMS (CA EShop hors mkt, Outstore) × refMap (réf. externe → regroupement) × mois.
+// Sortie : { months[], monthTotals{}, total, rows[{regroup, total, weight, byMonth{}}] } trié par CA.
+function calcRegroupByMonth(rows, map, refMap) {
+  const pi = map.prix, ti = map.type, di = map.date, li = map.lieu;
+  const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (di === undefined || refIdx === undefined || !refMap) return null;
+  const by = {}, monthTotals = {}, monthsSet = new Set();
+  let total = 0;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return; // périmètre EShop = Outstore
+    const d = parseFrD(r[di]); if (!d) return;
+    const month = `${d.y}-${String(d.m).padStart(2, '0')}`;
+    const rc = (r[refIdx] || '').toString().trim();
+    const reg = (refMap[rc]) || '(non référencé)';
+    const p = fN(r[pi]);
+    monthsSet.add(month);
+    const e = by[reg] || (by[reg] = { regroup: reg, total: 0, byMonth: {} });
+    e.total += p; e.byMonth[month] = (e.byMonth[month] || 0) + p;
+    monthTotals[month] = (monthTotals[month] || 0) + p;
+    total += p;
+  });
+  const months = [...monthsSet].sort();
+  const out = Object.values(by).map(e => ({
+    regroup: e.regroup, total: Math.round(e.total),
+    weight: total > 0 ? e.total / total : 0,
+    byMonth: months.reduce((o, m) => { o[m] = Math.round(e.byMonth[m] || 0); return o; }, {}),
+  })).sort((a, b) => b.total - a.total);
+  const mt = {}; months.forEach(m => { mt[m] = Math.round(monthTotals[m] || 0); });
+  return { months, monthTotals: mt, total: Math.round(total), rows: out };
+}
+
 // ── Décomposition de variance (déterministe) : ΔCA vs N-1 = effet Trafic × Transformation × Panier.
 // Décomposition séquentielle (trafic → transfo → panier) → les 3 effets somment EXACTEMENT à ΔCA.
 // CA = sessions × (commandes/sessions) × (CA/commandes). Entrées = kpiEShop {n, n1}.
@@ -1377,6 +1410,20 @@ function calcSeasonCompare(implN, implN1, salesRef, salesRefN1) {
   const bests = [...sold].sort((a, b) => b.ca - a.ca).slice(0, 15);
   const slowers = [...sold].sort((a, b) => a.ca - b.ca).slice(0, 15);
   const nonVendus = all.filter(x => x.qte === 0).sort((a, b) => b.prix - a.prix);
+  // N-1 enrichi (ventes E25) pour comparer permanents/saisonniers et drops N vs N-1.
+  const allN1 = [...mN1.values()].map(x => { const s1 = salesModelN1[x.ref] || { ca: 0, qte: 0 }; return { ref: x.ref, famille: x.famille, drop: x.drop, ca: s1.ca, qte: s1.qte }; });
+  // Ventes par DROP (P1, P2…, PER) — N et N-1.
+  const byDrop = arr => { const o = {}; arr.forEach(x => { const d = ((x.drop || '').trim().toUpperCase()) || '(n.c.)'; const e = o[d] || (o[d] = { drop: d, ca: 0, qte: 0, count: 0 }); e.ca += x.ca; e.qte += x.qte; e.count++; }); return Object.values(o); };
+  const dropN = byDrop(all), dropN1m = {}; byDrop(allN1).forEach(d => { dropN1m[d.drop] = d; });
+  const drops = dropN.map(d => ({ ...d, caN1: (dropN1m[d.drop] || {}).ca || 0, qteN1: (dropN1m[d.drop] || {}).qte || 0 }))
+    .concat(byDrop(allN1).filter(d => !dropN.some(x => x.drop === d.drop)).map(d => ({ drop: d.drop, ca: 0, qte: 0, count: 0, caN1: d.ca, qteN1: d.qte })))
+    .sort((a, b) => (b.ca + b.caN1) - (a.ca + a.caN1));
+  // Permanents vs Saisonniers — N vs N-1 (CA, qté, nb modèles).
+  const agg = (arr, pred) => arr.filter(x => pred(x.drop)).reduce((s, x) => ({ ca: s.ca + x.ca, qte: s.qte + x.qte, count: s.count + 1 }), { ca: 0, qte: 0, count: 0 });
+  const permSaiso = {
+    perm: { n: agg(all, isPermanent), n1: agg(allN1, isPermanent) },
+    saiso: { n: agg(all, isSeasonal), n1: agg(allN1, isSeasonal) },
+  };
   return {
     counts: {
       modN: mN.size, modN1: mN1.size, varN: N.length, varN1: N1.length,
@@ -1384,7 +1431,7 @@ function calcSeasonCompare(implN, implN1, salesRef, salesRefN1) {
       vendus: sold.length, nonVendus: nonVendus.length,
       caSaisonniers: saisonniers.reduce((s, x) => s + x.ca, 0), caPermanents: permanents.reduce((s, x) => s + x.ca, 0),
     },
-    familles,
+    familles, drops, permSaiso,
     saisonniers: saisonniers.slice(0, 15), permanents: permanents.slice(0, 15), manquants: manquants.slice(0, 15),
     bests, slowers, nonVendus: nonVendus.slice(0, 15),
   };
@@ -1576,7 +1623,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf,

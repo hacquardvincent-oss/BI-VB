@@ -24,12 +24,36 @@ async function me() {
   if (!r.ok) { location.href = '/login.html'; return null; }
   const u = await r.json();
   document.getElementById('who').textContent = u.username || '';
+  if (u.role === 'admin') { const _ab = document.getElementById('adminBtn'); if (_ab) { _ab.classList.remove('hidden'); _ab.onclick = () => { location.href = '/admin.html'; }; } }
   return u;
 }
 
 function period() {
   const v = id => document.getElementById(id).value;
   return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
+}
+
+// ── N-1 auto (−364 j, discret) ↔ manuel (calendrier visible) ──
+let N1_MANUAL = false;
+const shiftDays = (iso, d) => { if (!iso) return ''; const p = iso.split('-').map(Number); const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2])); dt.setUTCDate(dt.getUTCDate() + d); return dt.toISOString().slice(0, 10); };
+function syncComparable() {
+  const f = document.getElementById('dNfrom').value, t = document.getElementById('dNto').value;
+  if (f) document.getElementById('dCfrom').value = shiftDays(f, -364);
+  if (t) document.getElementById('dCto').value = shiftDays(t, -364);
+  refreshN1Display();
+}
+function refreshN1Display() {
+  const lab = document.getElementById('n1Label'); if (!lab) return;
+  const f = document.getElementById('dCfrom').value, t = document.getElementById('dCto').value;
+  const fr = s => { if (!s) return ''; const p = s.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+  lab.textContent = (f || t) ? `${fr(f)} → ${fr(t)}` : '−364 j (auto)';
+}
+function setN1Manual(on) {
+  N1_MANUAL = on;
+  const a = document.getElementById('n1Auto'), m = document.getElementById('n1Manual');
+  if (a) a.classList.toggle('hidden', on);
+  if (m) m.classList.toggle('hidden', !on);
+  if (!on) refreshN1Display();
 }
 
 function render(rep) {
@@ -207,6 +231,72 @@ function render(rep) {
     <div class="note">Poids = part de la famille dans le total de la colonne. Clique une ligne → volet latéral : tous les produits (Δ N-1) + les références qui cartonnaient en N-1 et manquent cette année.</div>
   </div>`;
 
+  // 3bis · Ventes par drop / saison + permanents vs saisonniers (via implantation N/N-1 croisée OMS + référentiel)
+  let dropCard = '';
+  const sc = rep.seasonCompare;
+  if (sc && (sc.drops && sc.drops.length || sc.permSaiso)) {
+    // a) Permanents vs Saisonniers N vs N-1
+    let psBlock = '';
+    if (sc.permSaiso) {
+      const ps = sc.permSaiso;
+      const totN = (ps.perm.n.ca || 0) + (ps.saiso.n.ca || 0);
+      const totN1 = (ps.perm.n1.ca || 0) + (ps.saiso.n1.ca || 0);
+      const psRow = (label, n, n1, tot) => `<tr>
+        <td><b>${label}</b></td>
+        <td>${fEur(n.ca)}</td>
+        <td>${tot > 0 ? fPct(n.ca / tot) : '—'}</td>
+        <td>${fInt(n.qte)}</td>
+        <td>${fInt(n.count)} réf.</td>
+        <td>${delta(n.ca, n1.ca)} · ${fEur(n1.ca)}</td>
+      </tr>`;
+      psBlock = `<table><thead><tr><th>Type d'offre</th><th>CA N</th><th>Poids</th><th>Qté N</th><th>Réfs</th><th>vs N-1</th></tr></thead><tbody>
+        ${psRow('Permanents', ps.perm.n, ps.perm.n1, totN)}
+        ${psRow('Saisonniers', ps.saiso.n, ps.saiso.n1, totN)}
+        <tr style="font-weight:700;border-top:2px solid var(--br)"><td>Total</td><td>${fEur(totN)}</td><td>100%</td><td>—</td><td>—</td><td>${delta(totN, totN1)} · ${fEur(totN1)}</td></tr>
+      </tbody></table>`;
+    }
+    // b) Détail par drop
+    let dropBlock = '';
+    if (sc.drops && sc.drops.length) {
+      const totD = sc.drops.reduce((s, d) => s + (d.ca || 0), 0);
+      const dr = sc.drops.map(d => `<tr>
+        <td><b>${esc(d.drop)}</b></td>
+        <td>${fEur(d.ca)}</td>
+        <td>${totD > 0 ? fPct(d.ca / totD) : '—'}</td>
+        <td>${fInt(d.qte)}</td>
+        <td>${fInt(d.count)} réf.</td>
+        <td>${delta(d.ca, d.caN1)} · ${fEur(d.caN1)}</td>
+      </tr>`).join('');
+      dropBlock = `<table><thead><tr><th>Drop</th><th>CA N</th><th>Poids</th><th>Qté N</th><th>Réfs</th><th>vs N-1</th></tr></thead><tbody>${dr}</tbody></table>`;
+    }
+    dropCard = `<div class="card">
+      <h3>📅 Ventes par drop &amp; saisonnalité — N vs N-1</h3>
+      ${psBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:0">Permanents vs Saisonniers</div>${psBlock}` : ''}
+      ${dropBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">Détail par drop (vague d'implantation)</div>${dropBlock}` : ''}
+      <div class="note">Croisement <b>implantation</b> (DROP : PER = permanent, P1/P2/P3 = saisonnier) × <b>ventes OMS</b> × <b>référentiel</b> (regroupements). N = réfs implantées en N (E26), N-1 = réfs implantées en N-1 (E25). Permet de mesurer le poids du fonds de rayon vs les nouveautés saison et la performance de chaque vague de drop.</div>
+    </div>`;
+  }
+
+  // 3ter · Poids des regroupements par mois (matrice regroupement × mois)
+  let regroupCard = '';
+  const rbm = rep.regroupByMonth;
+  if (rbm && rbm.rows && rbm.rows.length && rbm.months.length) {
+    const moLabel = m => { const p = m.split('-'); const noms = ['', 'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']; return `${noms[+p[1]]} ${p[0].slice(2)}`; };
+    const head = `<tr><th>Regroupement</th>${rbm.months.map(m => `<th style="text-align:right">${moLabel(m)}</th>`).join('')}<th style="text-align:right">Total</th><th style="text-align:right">Poids</th></tr>`;
+    const body = rbm.rows.slice(0, 20).map(r => `<tr>
+      <td><b>${esc(r.regroup)}</b></td>
+      ${rbm.months.map(m => `<td style="text-align:right">${r.byMonth[m] ? fEur(r.byMonth[m]) : '<span class="na">·</span>'}</td>`).join('')}
+      <td style="text-align:right"><b>${fEur(r.total)}</b></td>
+      <td style="text-align:right">${fPct(r.weight)}</td>
+    </tr>`).join('');
+    const foot = `<tr style="font-weight:700;border-top:2px solid var(--br)"><td>Total mois</td>${rbm.months.map(m => `<td style="text-align:right">${fEur(rbm.monthTotals[m])}</td>`).join('')}<td style="text-align:right">${fEur(rbm.total)}</td><td style="text-align:right">100%</td></tr>`;
+    regroupCard = `<div class="card">
+      <h3>🗓️ Poids des regroupements par mois — saison N</h3>
+      <div style="overflow-x:auto"><table><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>
+      <div class="note">CA EShop (hors marketplaces, Outstore) par <b>regroupement</b> (référentiel) et par <b>mois</b> de la saison. Le <b>poids</b> = part du regroupement dans le CA saison. Lecture du rythme : quels regroupements portent le CA à chaque mois (lancement, soldes…). Top 20 regroupements.</div>
+    </div>`;
+  }
+
   // 4 · Démarque — opérations détectées automatiquement (à partir du CA off-price quotidien)
   let demCard = '';
   if (rep.demarque && rep.demarque.ops) {
@@ -273,7 +363,7 @@ function render(rep) {
     selSaison.dataset.filled = String(m.saisons.length);
   }
   if (selSaison) selSaison.value = SAISON;
-  box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + demandeCard + controlSection;
+  box.innerHTML = kpiCard + fullOffCard + famTablesCard + dropCard + regroupCard + demCard + demandeCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
   if (ds) ds.addEventListener('change', loadReport);
@@ -481,6 +571,12 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); DIM = b.dataset.dim; loadReport();
 }));
+
+// N-1 : auto (−364 j, discret) ↔ manuel. En auto, N-1 suit la période N.
+{ const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); }); }
+{ const e = document.getElementById('n1Default'); if (e) e.addEventListener('click', syncComparable); }
+['dNfrom', 'dNto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { if (!N1_MANUAL) syncComparable(); }); });
+setN1Manual(false);
 
 document.getElementById('saisonFilter').addEventListener('change', e => { SAISON = e.target.value || ''; loadReport(); });
 

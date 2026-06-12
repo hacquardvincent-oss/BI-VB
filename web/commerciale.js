@@ -9,6 +9,7 @@ if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color =
 let DIM = 'global';
 let COMPARE = true; // comparer vs N-1 (CTA)
 let LAST = null; // dernier rep de l'opération
+let N1_MANUAL = false; // N-1 : auto (−364 j, discret) par défaut ; true = saisie à la main
 
 // ── Formatters (miroir de app.js) ──
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
@@ -27,6 +28,26 @@ function deltaInv(n, n1) {
   return `<span class="${p >= 0 ? 'dn' : 'up'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
 const shiftDays = (iso, d) => { const p = iso.split('-').map(Number); const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2])); dt.setUTCDate(dt.getUTCDate() + d); return dt.toISOString().slice(0, 10); };
+// ── N-1 auto (−364 j, discret) ↔ manuel (calendrier visible) ──
+function syncComparable() {
+  const f = document.getElementById('dFrom').value, t = document.getElementById('dTo').value;
+  if (f) document.getElementById('dCFrom').value = shiftDays(f, -364);
+  if (t) document.getElementById('dCTo').value = shiftDays(t, -364);
+  refreshN1Display();
+}
+function refreshN1Display() {
+  const lab = document.getElementById('n1Label'); if (!lab) return;
+  const f = document.getElementById('dCFrom').value, t = document.getElementById('dCTo').value;
+  const fr = s => { if (!s) return ''; const p = s.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+  lab.textContent = (f || t) ? `${fr(f)} → ${fr(t)}` : '−364 j (auto)';
+}
+function setN1Manual(on) {
+  N1_MANUAL = on;
+  const a = document.getElementById('n1Auto'), m = document.getElementById('n1Manual');
+  if (a) a.classList.toggle('hidden', on);
+  if (m) m.classList.toggle('hidden', !on);
+  if (!on) refreshN1Display();
+}
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); }
 const tile = (label, disp, n, n1, inv) => {
@@ -580,21 +601,24 @@ async function syncDelta() {
   try { const r = await fetch('/auth/me'); if (!r.ok) { location.href = '/login.html'; return; } u = await r.json(); }
   catch (e) { location.href = '/login.html'; return; }
   document.getElementById('who').textContent = u.username;
+  if (u.role === 'admin') { const _ab = document.getElementById('adminBtn'); if (_ab) { _ab.classList.remove('hidden'); _ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   // Pré-remplissage : dernière opération mémorisée, sinon 7 derniers jours.
   let saved = null; try { saved = JSON.parse(localStorage.getItem('vbOp') || 'null'); } catch (e) { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
   const from = (saved && saved.from) || shiftDays(today, -6), to = (saved && saved.to) || today;
   document.getElementById('dFrom').value = from; document.getElementById('dTo').value = to;
-  document.getElementById('dCFrom').value = (saved && saved.cfrom) || shiftDays(from, -364);
-  document.getElementById('dCTo').value = (saved && saved.cto) || shiftDays(to, -364);
-  // N-1 = pré-rempli à −364 j en DÉFAUT, mais éditable librement (les périodes peuvent être décalées
-  // d'une semaine vs N-1). On NE recale PAS automatiquement N-1 quand N change.
-  document.getElementById('n1Default').addEventListener('click', () => {
-    const f = document.getElementById('dFrom').value, t = document.getElementById('dTo').value;
-    if (f) document.getElementById('dCFrom').value = shiftDays(f, -364);
-    if (t) document.getElementById('dCTo').value = shiftDays(t, -364);
-  });
+  // N-1 manuel si une période sauvegardée diffère du −364 j auto (sinon auto/discret).
+  const savedCf = saved && saved.cfrom, savedCt = saved && saved.cto;
+  N1_MANUAL = !!(savedCf && savedCt && (savedCf !== shiftDays(from, -364) || savedCt !== shiftDays(to, -364)));
+  document.getElementById('dCFrom').value = savedCf || shiftDays(from, -364);
+  document.getElementById('dCTo').value = savedCt || shiftDays(to, -364);
+  setN1Manual(N1_MANUAL);
+  // N-1 = pré-rempli à −364 j en mode AUTO (suit N) ; éditable librement en mode manuel.
+  document.getElementById('n1Default').addEventListener('click', syncComparable);
+  { const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); }); }
+  // En mode auto, recale N-1 (−364 j) dès que l'utilisateur change la période N.
+  ['dFrom', 'dTo'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { if (!N1_MANUAL) syncComparable(); }); });
   let USER_DIM = 'global';
   document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));
