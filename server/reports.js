@@ -1055,6 +1055,10 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
     demande = { top, total: top.reduce((s, x) => s + x.count, 0) };
   }
 
+  // Analyse d'offre saison : ventes × implantation (DROP/regroupement) → drops, permanents/saisonniers N vs N-1.
+  const salesRefS = calc.salesByRef(rowsN, omsN.map);
+  const salesRefSN1 = (rowsN1 && rowsN1.length) ? calc.salesByRef(rowsN1, mapN1) : {};
+  const seasonCompare = (implN || implN1) ? calc.calcSeasonCompare(implN, implN1, salesRefS, salesRefSN1) : null;
   return {
     meta: { from, to, cfrom: cf, cto: ct, dim, hasN1, collection: !!(setN || setN1), rowsN: rowsN.length, rowsN1: rowsN1 ? rowsN1.length : 0, dataMax: omsN.dateMax, saisons: saisonsDispo, saison: selSaison || '', saisonN1: selSaison ? prevSaison(selSaison) : '', hasStock, hasRet, hasGA },
     global: {
@@ -1075,6 +1079,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
     demarque,
     demande,
     familles,
+    seasonCompare,
   };
 }
 

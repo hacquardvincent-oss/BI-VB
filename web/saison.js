@@ -208,6 +208,52 @@ function render(rep) {
     <div class="note">Poids = part de la famille dans le total de la colonne. Clique une ligne → volet latéral : tous les produits (Δ N-1) + les références qui cartonnaient en N-1 et manquent cette année.</div>
   </div>`;
 
+  // 3bis · Ventes par drop / saison + permanents vs saisonniers (via implantation N/N-1 croisée OMS + référentiel)
+  let dropCard = '';
+  const sc = rep.seasonCompare;
+  if (sc && (sc.drops && sc.drops.length || sc.permSaiso)) {
+    // a) Permanents vs Saisonniers N vs N-1
+    let psBlock = '';
+    if (sc.permSaiso) {
+      const ps = sc.permSaiso;
+      const totN = (ps.perm.n.ca || 0) + (ps.saiso.n.ca || 0);
+      const totN1 = (ps.perm.n1.ca || 0) + (ps.saiso.n1.ca || 0);
+      const psRow = (label, n, n1, tot) => `<tr>
+        <td><b>${label}</b></td>
+        <td>${fEur(n.ca)}</td>
+        <td>${tot > 0 ? fPct(n.ca / tot) : '—'}</td>
+        <td>${fInt(n.qte)}</td>
+        <td>${fInt(n.count)} réf.</td>
+        <td>${delta(n.ca, n1.ca)} · ${fEur(n1.ca)}</td>
+      </tr>`;
+      psBlock = `<table><thead><tr><th>Type d'offre</th><th>CA N</th><th>Poids</th><th>Qté N</th><th>Réfs</th><th>vs N-1</th></tr></thead><tbody>
+        ${psRow('Permanents', ps.perm.n, ps.perm.n1, totN)}
+        ${psRow('Saisonniers', ps.saiso.n, ps.saiso.n1, totN)}
+        <tr style="font-weight:700;border-top:2px solid var(--br)"><td>Total</td><td>${fEur(totN)}</td><td>100%</td><td>—</td><td>—</td><td>${delta(totN, totN1)} · ${fEur(totN1)}</td></tr>
+      </tbody></table>`;
+    }
+    // b) Détail par drop
+    let dropBlock = '';
+    if (sc.drops && sc.drops.length) {
+      const totD = sc.drops.reduce((s, d) => s + (d.ca || 0), 0);
+      const dr = sc.drops.map(d => `<tr>
+        <td><b>${esc(d.drop)}</b></td>
+        <td>${fEur(d.ca)}</td>
+        <td>${totD > 0 ? fPct(d.ca / totD) : '—'}</td>
+        <td>${fInt(d.qte)}</td>
+        <td>${fInt(d.count)} réf.</td>
+        <td>${delta(d.ca, d.caN1)} · ${fEur(d.caN1)}</td>
+      </tr>`).join('');
+      dropBlock = `<table><thead><tr><th>Drop</th><th>CA N</th><th>Poids</th><th>Qté N</th><th>Réfs</th><th>vs N-1</th></tr></thead><tbody>${dr}</tbody></table>`;
+    }
+    dropCard = `<div class="card">
+      <h3>📅 Ventes par drop &amp; saisonnalité — N vs N-1</h3>
+      ${psBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:0">Permanents vs Saisonniers</div>${psBlock}` : ''}
+      ${dropBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">Détail par drop (vague d'implantation)</div>${dropBlock}` : ''}
+      <div class="note">Croisement <b>implantation</b> (DROP : PER = permanent, P1/P2/P3 = saisonnier) × <b>ventes OMS</b> × <b>référentiel</b> (regroupements). N = réfs implantées en N (E26), N-1 = réfs implantées en N-1 (E25). Permet de mesurer le poids du fonds de rayon vs les nouveautés saison et la performance de chaque vague de drop.</div>
+    </div>`;
+  }
+
   // 4 · Démarque — opérations détectées automatiquement (à partir du CA off-price quotidien)
   let demCard = '';
   if (rep.demarque && rep.demarque.ops) {
@@ -274,7 +320,7 @@ function render(rep) {
     selSaison.dataset.filled = String(m.saisons.length);
   }
   if (selSaison) selSaison.value = SAISON;
-  box.innerHTML = kpiCard + fullOffCard + famTablesCard + demCard + demandeCard + controlSection;
+  box.innerHTML = kpiCard + fullOffCard + famTablesCard + dropCard + demCard + demandeCard + controlSection;
   // Recalcule la détection de démarque au changement de seuil
   const ds = document.getElementById('demSeuil');
   if (ds) ds.addEventListener('change', loadReport);
