@@ -9,6 +9,7 @@ let CURRENT_MODULE = 'full';
 let DATES = null;          // { from, to, cfrom, cto } si plage personnalisée, sinon null (= tout)
 let GRAN = 'auto';         // granularité du suivi temporel : auto | hour | day | week
 let SCOPE = 'all';         // périmètre produits : all | collection (implantation)
+let N1_MANUAL = false;     // N-1 : auto (−364 j, discret) par défaut ; true = période N-1 saisie à la main
 let PERSIST = false;       // base de données active (persistance) ?
 let COMPARE = true;        // comparaison N-1 activée ? (false = analyse N seule, pas besoin des données N-1)
 let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
@@ -614,6 +615,7 @@ function fillDateInputs(meta) {
   if (!meta) return;
   const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
   set('dNfrom', meta.from); set('dNto', meta.to); set('dCfrom', meta.cf); set('dCto', meta.ct);
+  refreshN1Display();
 }
 // Période actuellement saisie dans les calendriers (N début/fin + N-1 début/fin)
 function currentPeriod() {
@@ -638,6 +640,22 @@ function syncComparable() {
   const nf = document.getElementById('dNfrom').value, nt = document.getElementById('dNto').value;
   if (nf) document.getElementById('dCfrom').value = comparable364(nf);
   if (nt) document.getElementById('dCto').value = comparable364(nt);
+  refreshN1Display();
+}
+// Résumé lisible de la période N-1 (lecture seule, mode auto).
+function refreshN1Display() {
+  const lab = document.getElementById('n1Label'); if (!lab) return;
+  const f = document.getElementById('dCfrom').value, t = document.getElementById('dCto').value;
+  const fr = s => { if (!s) return ''; const p = s.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+  lab.textContent = (f || t) ? `${fr(f)} → ${fr(t)}` : '−364 j (auto)';
+}
+// Bascule N-1 auto (lecture seule) ↔ manuel (champs de dates).
+function setN1Manual(on) {
+  N1_MANUAL = on;
+  const a = document.getElementById('n1Auto'), m = document.getElementById('n1Manual');
+  if (a) a.classList.toggle('hidden', on);
+  if (m) m.classList.toggle('hidden', !on);
+  if (!on) refreshN1Display();
 }
 // Applique la période saisie au rapport (après un refresh API ciblé)
 function applyCurrentPeriod() {
@@ -2762,14 +2780,16 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   document.getElementById('dCto').value = calendarCompare ? shiftYearStr(nt) : comparable364(nt);
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
   document.getElementById('datesAll').classList.remove('on');
+  setN1Manual(false); // un raccourci rétablit la comparaison N-1 auto
   applyCurrentPeriod(); loadReport();
 }));
-// Saisie manuelle de N : on PROPOSE le comparable −364 j seulement si N-1 est vide (sinon on respecte
-// la période N-1 saisie — les comparaisons peuvent être décalées d'une semaine vs N-1).
+// Saisie manuelle de N : en mode AUTO, N-1 suit (−364 j) ; en mode manuel, on respecte la période N-1 saisie.
 ['dNfrom', 'dNto'].forEach(id => document.getElementById(id).addEventListener('change', () => {
-  if (!document.getElementById('dCfrom').value && !document.getElementById('dCto').value) syncComparable();
+  if (!N1_MANUAL) syncComparable();
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
 }));
+// Lien « modifier » : passe la comparaison N-1 en saisie manuelle.
+{ const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); syncComparable(); }); }
 // Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande).
 document.getElementById('n1Default').addEventListener('click', () => { syncComparable(); });
 // Comparaison N-1 : « N vs N-1 » (défaut) ou « N seule » (pas besoin des données de l'année précédente).
@@ -2787,6 +2807,7 @@ document.getElementById('datesAll').addEventListener('click', () => {
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
   document.getElementById('datesAll').classList.add('on');
   ['dNfrom', 'dNto', 'dCfrom', 'dCto'].forEach(id => { document.getElementById(id).value = ''; });
+  setN1Manual(false); // période complète → comparaison auto
   loadReport(); // le rapport renverra la plage complète et re-remplira les calendriers
 });
 document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
