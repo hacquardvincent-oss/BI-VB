@@ -31,17 +31,14 @@
       <span class="setlabel" style="margin:0;align-self:center">Comparer N-1</span>
       <button class="pb on" id="cmpToggle" data-on="1" title="Activer / désactiver la comparaison vs N-1">✓ Oui</button>
     </div>
-    <label class="setlabel">Période de l'opération</label>
+    <label class="setlabel">Période N (opération) — début → fin</label>
     <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
       <input type="date" id="dFrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dTo" class="dt" style="flex:1;min-width:0">
     </div>
     <div id="n1Wrap">
-      <div id="n1Auto" class="note" style="margin:7px 0 0">↪ Comparé à N-1 : <b id="n1Label">−364 j (auto)</b> · <a href="#" id="n1Edit">modifier</a></div>
-      <div id="n1Manual" class="hidden">
-        <label class="setlabel">Comparaison N-1 (libre) <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours" style="padding:1px 7px;font-size:10px">≈ −364 j</button></label>
-        <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
-          <input type="date" id="dCFrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dCTo" class="dt" style="flex:1;min-width:0">
-        </div>
+      <label class="setlabel">Période N-1 (comparaison) — début → fin <button class="pb" id="n1Default" title="Caler N-1 sur −364 jours (même jour de semaine)" style="padding:1px 7px;font-size:10px">≈ −364 j</button></label>
+      <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+        <input type="date" id="dCFrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dCTo" class="dt" style="flex:1;min-width:0">
       </div>
     </div>
     <label class="setlabel">Dimension</label>

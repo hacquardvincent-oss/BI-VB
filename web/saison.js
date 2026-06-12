@@ -33,27 +33,12 @@ function period() {
   return { from: v('dNfrom'), to: v('dNto'), cfrom: v('dCfrom'), cto: v('dCto') };
 }
 
-// ── N-1 auto (−364 j, discret) ↔ manuel (calendrier visible) ──
-let N1_MANUAL = false;
+// Cale N-1 sur −364 j (saison équivalente) à partir de la période N saisie.
 const shiftDays = (iso, d) => { if (!iso) return ''; const p = iso.split('-').map(Number); const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2])); dt.setUTCDate(dt.getUTCDate() + d); return dt.toISOString().slice(0, 10); };
 function syncComparable() {
   const f = document.getElementById('dNfrom').value, t = document.getElementById('dNto').value;
   if (f) document.getElementById('dCfrom').value = shiftDays(f, -364);
   if (t) document.getElementById('dCto').value = shiftDays(t, -364);
-  refreshN1Display();
-}
-function refreshN1Display() {
-  const lab = document.getElementById('n1Label'); if (!lab) return;
-  const f = document.getElementById('dCfrom').value, t = document.getElementById('dCto').value;
-  const fr = s => { if (!s) return ''; const p = s.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
-  lab.textContent = (f || t) ? `${fr(f)} → ${fr(t)}` : '−364 j (auto)';
-}
-function setN1Manual(on) {
-  N1_MANUAL = on;
-  const a = document.getElementById('n1Auto'), m = document.getElementById('n1Manual');
-  if (a) a.classList.toggle('hidden', on);
-  if (m) m.classList.toggle('hidden', !on);
-  if (!on) refreshN1Display();
 }
 
 function render(rep) {
@@ -572,11 +557,8 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   b.classList.add('on'); DIM = b.dataset.dim; loadReport();
 }));
 
-// N-1 : auto (−364 j, discret) ↔ manuel. En auto, N-1 suit la période N.
-{ const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); }); }
+// N-1 toujours visible et éditable ; bouton « ≈ −364 j » pour recaler sur la saison équivalente.
 { const e = document.getElementById('n1Default'); if (e) e.addEventListener('click', syncComparable); }
-['dNfrom', 'dNto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { if (!N1_MANUAL) syncComparable(); }); });
-setN1Manual(false);
 
 document.getElementById('saisonFilter').addEventListener('change', e => { SAISON = e.target.value || ''; loadReport(); });
 
