@@ -377,3 +377,42 @@ on récolte les idées à forte valeur sur la stack existante. Légende : ✅ li
 ### Fondation
 - 🟢 **Registre de métriques formel** : passer `W_METRICS/W_DIMS` (codé en dur) en registre déclaré/versionné (résolveur JS par id).
 - 🔵 Monitoring/alerting admin, entrepôt SQL + `metric_registry` littéral, React/Tailwind, on-premise → jalon productisation différé.
+
+---
+
+## 📦 Journal de session — refonte UX + connecteurs + couche déterministe (12/06/2026)
+Récapitulatif des évolutions livrées (toutes mergées sur `main`). Numéros = PR.
+
+### Connecteurs & données
+- **Module Objectifs** (#115) : prévision & suivi mensuels du CA (mix auto N-1×croissance / manuel), onglet header.
+- **Connecteur Meta** (#116, #117) : Ads (dépense/ROAS/campagnes) + **ventilations** (placement/âge-genre/pays) + **organique** (Instagram + Page FB). Env : `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID` (+ `META_IG_USER_ID`/`META_PAGE_ID`).
+
+### Refonte graphique « Maison » (thème clair)
+- **Reskin complet** (#118) : fond clair, typo Space Grotesk + Inter, deltas en **pilules pastel**, palette laiton/sauge/terracotta.
+- **Titres > CTA** (#119, #123) : filet d'accent laiton sur les titres, CTA en gris pastel discrets.
+- **Correctifs d'affichage** (#120, #121, #126) : pilules non rognées, fin des cellules vides grises, **plus d'orphelin KPI** (balanceKgrids), alignements Bilan (4 découpages sur 1 ligne, scorecard) & Pilotage 360.
+
+### UX desktop
+- **3 zones** (#127) : paramétrage **gauche sticky** · rapport centre · sommaire **droite** (Reporting), répliqué Commerciale/Saison (#131, 2 zones).
+- **Paramétrage compact** (#128) : vues en liste déroulante, ➕ « Nouveau type d'analyse », périmètre retiré, card 3 repliée, **bouton Appliquer sticky**, sommaire sticky permanent.
+- **Sélecteur de période v2** (#129) : raccourcis en tête, **N-1 auto/discret** (« modifier » pour libre).
+
+### Concepteur de tableaux
+- **Édition en place des widgets** (#122) : ⚙️ rouvre le constructeur pré-rempli + Top N libre + métriques omnicanal.
+- **CTA Edit par carte** (#130) : ⚙️ modifier / ✕ retirer au survol (hors mode édition global).
+- **Volet latéral** (#125) : pictos en bas, **drag'n'drop des sections** (réordonne layout par thème).
+
+### Couche analytique déterministe (moat, ADR-008)
+- **Décomposition de variance** (#132) : ΔCA = Trafic × Transfo × Panier (somme exacte).
+- **Test de significativité** (#133) : z-test → écarts de taux non significatifs dégrisés (« ns »), exclus des leviers.
+- **ROAS net** (#134) : CA net de retours ÷ dépense (Google Ads & Meta).
+- **Scoring qualité de données** (#136) : score /100 par jeu (complétude/validité/unicité/fraîcheur) + drill-down.
+
+### Sécurité & comptes
+- **Fix login** (#134) : identifiant insensible à la casse + trim (« Marine » vs « marine »).
+- **Droits Lecture / Modification** (#135) : `users.can_edit`, `requireEdit` côté serveur (vues perso), vues partagées = admin ; UI admin + masquage des CTA ; **œil 👁** sur la saisie MDP (le MDP haché reste non révélable).
+
+### Reste de la couche déterministe (à venir)
+- Registre de métriques **formel** (W_METRICS/W_DIMS → déclaré/versionné).
+- Décomposition de **funnel** vs cible · détection **Simpson**.
+- Métriques bloquées par données : GMROI/marge (coût), stock/WOS (stock), cohorte/LTV (**ID client pseudonymisé**).
