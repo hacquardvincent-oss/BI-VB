@@ -1089,7 +1089,7 @@ function renderReport(rep) {
   const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   // ── Pilotage 360 : sous-blocs (détail MP, Top 5 pays inter/canaux/pages, familles, produits) ──
   const miniPanel = (title, head, rows) => rows
-    ? `<div><div class="note" style="margin:0 0 6px"><b>${title}</b></div><table style="font-size:11px"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`
+    ? `<div class="mini"><div class="note" style="margin:0 0 6px"><b>${title}</b></div><table style="font-size:11px"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`
     : '';
   // Détail Marketplace (remplace le camembert)
   const pmk = rep.marketplace ? rep.marketplace.n : null, pmk1 = (rep.marketplace && rep.marketplace.n1) || {};
@@ -1896,24 +1896,24 @@ function renderScorecard(title, pack, showDetails) {
       <div class="note" style="margin:0 0 6px"><b>${label}</b></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div style="height:${donutPx}px;width:${donutPx}px;flex:0 0 auto"><canvas id="${donutId}"></canvas></div>
-        <div style="${tilesRow ? 'display:flex;gap:8px;flex-wrap:wrap' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px'};flex:1 1 160px">${rows}</div>
+        <div style="${tilesRow ? 'display:flex;gap:8px;flex-wrap:wrap' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px'};flex:1 1 116px">${rows}</div>
       </div></div>` : '';
     const sz = n.sessZone || {}, sz1 = n1.sessZone || {};
     const tInt = (l, v, v1) => bilanTile(l, fInt(v), v, v1);
-    const intlCa = block('🌍 International — CA', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt), 110);
+    const intlCa = block('🌍 International — CA', 'binDonutIntl', t('CA France', ca.caFR, ca1.caFR) + t('CA International', ca.caInt, ca1.caInt), 88);
     const intlSess = (sz.fr != null && (sz.fr > 0 || sz.inter > 0))
-      ? block('🌍 International — Sessions', 'binDonutIntlSess', tInt('Sessions France', sz.fr, sz1.fr) + tInt('Sessions International', sz.inter, sz1.inter), 110)
+      ? block('🌍 International — Sessions', 'binDonutIntlSess', tInt('Sessions France', sz.fr, sz1.fr) + tInt('Sessions International', sz.inter, sz1.inter), 88)
       : '';
     const intl = intlCa + intlSess;
-    const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS), 110);
-    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP), 110) : '';
+    const omni = block('🏬 Omnicanal', 'binDonutOmni', t('CA Entrepôt', ca.caEnt, ca1.caEnt) + t('CA Ship-from-store', ca.caSFS, ca1.caSFS), 88);
+    const dem = (ca.caFP != null || ca.caOP != null) ? block('🏷️ Démarque', 'binDonutDem', t('CA Full Price', ca.caFP, ca1.caFP) + t('CA Off Price', ca.caOP, ca1.caOP), 88) : '';
     let mp = '';
     if (mk.total > 0) {
       const mr = [['CA Marketplace', mk.total, mk1.total], ['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps], ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli', mk.lulli, mk1.lulli]].filter(([, v]) => v > 0).map(([l, v, v1]) => t(l, v, v1)).join('');
       mp = block('🛍️ Marketplace', 'binDonutMP', mr, 130, true); // une seule ligne : camembert + KPIs
     }
     // International / Omnicanal / Démarque alignés (grille responsive), Marketplace sur sa propre ligne.
-    details = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start;margin-top:10px">${intl}${omni}${dem}</div>${mp ? `<div style="margin-top:12px">${mp}</div>` : ''}`;
+    details = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:12px;align-items:start;margin-top:10px">${intl}${omni}${dem}</div>${mp ? `<div style="margin-top:12px">${mp}</div>` : ''}`;
   }
   return `<div class="section-head" style="margin-top:12px">${title}</div><div class="kgrid">${tiles}</div>${details}`;
 }
