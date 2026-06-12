@@ -700,10 +700,45 @@ async function loadReport() {
   renderCharts(rep);
   renderWidgetCharts(); // graphes des widgets « from scratch » (mode normal + édition)
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
-  else { wireBilan(); buildReportNav(); }
+  else { wireBilan(); buildReportNav(); wireCardEdit(); }
   balanceKgrids(box);
   requestAnimationFrame(() => balanceKgrids(box)); // recalcul après mise en page réelle (largeurs fiables)
   updateViewControls();
+}
+
+// CTA « Edit » directement sur chaque carte (hors mode édition global) : ⚙️ modifier un widget, ✕ retirer de la vue.
+function wireCardEdit() {
+  if (EDIT_VIEW) return;
+  if (!(isMyView(CURRENT_MODULE) || IS_ADMIN)) return; // seulement si la vue est éditable
+  const report = document.getElementById('report'); if (!report) return;
+  report.querySelectorAll('.card[data-ckey], .card[data-wid]').forEach(cardEl => {
+    if (cardEl.querySelector(':scope > .card-edit-ctl')) return;
+    const wid = cardEl.dataset.wid || '', ckey = cardEl.dataset.ckey || '';
+    const ctl = document.createElement('div');
+    ctl.className = 'card-edit-ctl';
+    ctl.innerHTML = (wid ? '<button class="cec-btn" data-act="edit" title="Modifier ce tableau">⚙️</button>' : '')
+      + '<button class="cec-btn" data-act="remove" title="Retirer ce tableau de la vue">✕</button>';
+    if (getComputedStyle(cardEl).position === 'static') cardEl.style.position = 'relative';
+    cardEl.appendChild(ctl);
+    ctl.addEventListener('click', async e => {
+      const btn = e.target.closest('.cec-btn'); if (!btn) return;
+      e.stopPropagation();
+      const layout = getLayout(CURRENT_MODULE).slice();
+      if (btn.dataset.act === 'edit' && wid) {
+        const w = layout.find(x => x && typeof x === 'object' && x.id === wid); if (!w) return;
+        openWidgetBuilder(nw => {
+          const i = layout.findIndex(x => x && typeof x === 'object' && x.id === wid);
+          if (i >= 0) layout[i] = nw;
+          persistLayout(CURRENT_MODULE, layout).then(loadReport).catch(err => alert('Échec : ' + (err.message || 'erreur')));
+        }, w);
+      } else if (btn.dataset.act === 'remove') {
+        if (!confirm('Retirer ce tableau de la vue ?')) return;
+        const next = layout.filter(x => wid ? !(x && typeof x === 'object' && x.id === wid) : x !== ckey);
+        if (!next.length) { alert('Garde au moins un tableau dans la vue.'); return; }
+        try { await persistLayout(CURRENT_MODULE, next); loadReport(); } catch (err) { alert('Échec : ' + (err.message || 'erreur')); }
+      }
+    });
+  });
 }
 
 // Adapte le nb de colonnes des grilles KPI à la largeur ET évite une dernière ligne avec 1 seul KPI orphelin.
@@ -1538,7 +1573,7 @@ function renderReport(rep) {
     let html = C[k] || ''; if (!html) return '';
     const a = ana(k, rep);
     if (a) html = html.replace(/<\/div>\s*$/, `<div class="insight">💡 ${a}</div></div>`);
-    return html;
+    return html.replace('<div class="card', `<div data-ckey="${esc(k)}" class="card`); // tag pour le CTA Edit par carte
   };
   if (EDIT_VIEW) return renderEditMode(rep, card); // mode édition WYSIWYG (admin)
   let body;
@@ -1547,7 +1582,7 @@ function renderReport(rep) {
     // Les items peuvent être des clés de cartes (string) ou des WIDGETS « from scratch » (objets).
     let lastTheme = null; const out = [];
     layout.forEach(k => {
-      if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html); return; }
+      if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html.replace('<div class="card', `<div data-wid="${esc(k.id)}" class="card`)); return; }
       const html = card(k); if (!html) return;
       const t = THEME_OF[k];
       if (t && t !== lastTheme) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); lastTheme = t; }
