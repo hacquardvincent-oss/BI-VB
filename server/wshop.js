@@ -671,16 +671,18 @@ router.get('/ping', requireAuth, async (req, res) => {
       const items0 = (r0 && Array.isArray(r0.orderItems)) ? r0.orderItems : [];
       const reasonFields = ['reason', 'returnReason', 'motif', 'comment', 'returnMotive', 'cause', 'refundType'];
       const found = {};
+      const bumpV = (f, v) => { const m = (found[f] = found[f] || {}); m[v] = (m[v] || 0) + 1; };
       ra.forEach(rt => {
-        reasonFields.forEach(f => { const v = (rt && rt[f] != null) ? String(rt[f]).trim() : ''; if (v) (found[f] = found[f] || new Set()).add(v); });
-        (Array.isArray(rt.orderItems) ? rt.orderItems : []).forEach(it => reasonFields.forEach(f => { const v = (it && it[f] != null) ? String(it[f]).trim() : ''; if (v) (found['item.' + f] = found['item.' + f] || new Set()).add(v); }));
+        reasonFields.forEach(f => { const v = (rt && rt[f] != null) ? String(rt[f]).trim() : ''; if (v) bumpV(f, v); });
+        (Array.isArray(rt.orderItems) ? rt.orderItems : []).forEach(it => reasonFields.forEach(f => { const v = (it && it[f] != null) ? String(it[f]).trim() : ''; if (v) bumpV('item.' + f, v); }));
       });
-      const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = { distinct: found[k].size, exemples: [...found[k]].slice(0, 8) }; });
+      // Répartition code → nb (triée) → permet de corréler les CODES de l'API aux libellés de l'export.
+      const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = Object.entries(found[k]).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([val, n]) => `${val} ×${n}`); });
       out.probeReturns = {
         count: ra.length, fenetre: `${iso(rFrom)} → ${iso(to)}`,
         returnKeys: r0 ? safeKeys(r0) : '(0 retour sur 7 j — élargir la fenêtre ?)',
         itemKeys: items0[0] ? safeKeys(items0[0]) : '(aucun orderItem)',
-        motifsTrouves: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné → l\'API ne porte que le type de remboursement, pas de motif détaillé (taille/qualité).',
+        motifsRepartition: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné.',
       };
     }
     // Alertes stock : les abonnements back-in-stock existent-ils sur 90 j ?
@@ -794,28 +796,44 @@ function returnsDataset(returns, eanToRef) {
   const rows = Object.entries(by).map(([ref, v]) => [ref, String(v.qte), v.montant.toFixed(2)]);
   return { hdrs: ['Ref. externe', 'Nb colisages rembourses', 'Montant rembourse'], rows, map: { ref_ext: 0, qte: 1, montant: 2 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
-// Retours niveau produit (pour le top produits retournés) : une ligne par article retourné,
-// avec date (filtrable par période), désignation (titre + coloris), quantité, montant et raison.
+// Motifs de retour WSHOP : l'API /returns/get renvoie un CODE numérique (configuré côté marchand),
+// pas un libellé. Mapping code → libellé, surchargeable via l'env WSHOP_RETURN_REASONS (JSON,
+// ex. {"1":"Trop petit","8":"Trop grand"}). À défaut, on garde le code (« Motif n°X ») + le commentaire.
+let RETURN_REASON_LABELS = {};
+try { RETURN_REASON_LABELS = JSON.parse(process.env.WSHOP_RETURN_REASONS || '{}') || {}; } catch (e) { RETURN_REASON_LABELS = {}; }
+function returnReasonLabel(code, comment) {
+  const c = String(code == null ? '' : code).trim();
+  if (c && RETURN_REASON_LABELS[c]) return RETURN_REASON_LABELS[c];
+  const cm = (comment || '').toString().trim();
+  if (c) return cm ? `Motif n°${c} — ${cm.slice(0, 40)}` : `Motif n°${c}`;
+  return cm || '(non précisé)';
+}
+// Retours niveau produit (pour le top produits retournés + motifs) : une ligne par article retourné.
+// ⚠️ L'item /returns/get ne porte PAS le titre (seulement l'ean) → on ne jette plus la ligne faute de
+// désignation (on retombe sur l'ean). Date = closedAt (= DATE DE VALIDATION du retour). reason = code mappé.
 function returnsProductDataset(returns) {
   const rows = [];
   returns.forEach(rt => {
-    const reasonRet = (rt.reason || rt.returnReason || rt.motif || rt.comment || '').toString().trim();
-    const rawDate = (rt.date || rt.returnDate || rt.createdAt || rt.created_at || '').toString();
+    const rawDate = (rt.closedAt || rt.validatedAt || rt.date || rt.returnDate || rt.requestedAt || rt.createdAt || '').toString();
     const m = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
     const date = m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+    const reasonRet = rt.reason != null ? rt.reason : '';
+    const commentRet = (rt.comment || '').toString();
     (rt.orderItems || []).forEach(it => {
       if (it.refund === false) return; // uniquement les lignes effectivement remboursées
       const title = (it.title || it.name || '').toString().trim();
       const color = (it.color || it.colour || '').toString().trim();
-      const des = color && !title.toLowerCase().includes(color.toLowerCase()) ? `${title} - ${color}` : title;
-      if (!des) return;
+      const ean = (it.ean || '').toString().trim();
+      const des = (color && title && !title.toLowerCase().includes(color.toLowerCase())) ? `${title} - ${color}` : (title || ean);
+      if (!des) return; // ni titre ni ean → ligne inexploitable
       const q = parseInt(it.quantity) || 0;
       const unit = toNum(it.originalDiscountedUnitPrice) || toNum(it.originalUnitPrice) || toNum(it.compareAtPrice);
-      const reason = (it.returnReason || it.reason || reasonRet || '').toString().trim() || '(non précisé)';
+      const code = (it.reason != null && it.reason !== '') ? it.reason : reasonRet;
+      const reason = returnReasonLabel(code, it.comment || commentRet);
       rows.push([date, des, String(q), (unit * q).toFixed(2), reason]);
     });
   });
-  return { hdrs: ['Date creation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+  return { hdrs: ['Date validation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
 // Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
 async function fetchBackInStock(fromISO, toISO) {
