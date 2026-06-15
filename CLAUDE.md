@@ -252,7 +252,12 @@ au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
 
 ### Annulations — `calcCancellations` / `calcCancellationsDetail` (hors mkt, cf §12)
 - **Taux d'annulation = `commandesImpactees ÷ commandes`** (à la **commande**, pas à la pièce). `tauxPieces`, `tauxCA` aussi.
-- **Annulation** = lignes `Quantité non livré > 0` au statut **Cancelled\*** (ou statut absent). `unit = prix/cmd` (prorata).
+- **Annulation** = lignes `Quantité non livré > 0` aux statuts **Annulé Stock / Annulé par le Client / Annulé Mags**
+  (API : `Cancelled` / `CancelledCustomer` / `CancelledInternal`) — ou statut absent. `unit = prix/cmd` (prorata).
+  Helper unique **`calc.isCancelStatus(st)`** (gère libellés OMS FR ET enum API EN) → partagé EShop + marketplace
+  (`calcMarketplaceCancelRefund`) + `orderToRows`. **EXCLUS** : demande non imputable au fulfillment (blacklist /
+  fraude / impayé / dossier refusé). ⚠️ **Choix client (révisé) : « Annulé par le Client » EST compté** (avant
+  exclu) — cf §12. Nécessite un **import complet** WSHOP pour recalculer la colonne « Quantité non livré ».
 - **`ShippedIncomplete` comptée À PART** (`/incomplete/ && !/cancel/`) → `qteIncomplete`/`caIncomplete`/`commandesIncompletes`,
   **hors du taux** (la commande a été expédiée, juste partielle). WSHOP l'applique très largement (splits/partiels) ≠ OMS.
 - `Detail` : `entrepot`/`magasin` (webstore vs ship-from-store), `incomplet{entrepot,magasin}`, `topStores`, `topProduits`,
@@ -438,6 +443,7 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | Symptôme | Cause racine | Fix |
 |---|---|---|
 | **Taux d'annulation 76 % puis 68 vs 7 puis 20 vs 7** | (1) `commandé−expédié` comptait les commandes EN ATTENTE. (2) `quantityOffered` ≠ « à expédier » mais « offert/cadeau » (≈0). (3) lecture de `orderStatus` (8 états, sans Shipped/Incomplete) au lieu de **`orderCustomerStatus`** (22 états). (4) toutes les variantes Cancelled comptées (client/fraude incluses). (5) `ShippedIncomplete` (statut live, splits) bien plus large côté WSHOP que côté OMS. | Statut = **`orderCustomerStatus`** ; **denylist demande** (`customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment`) ; **`ShippedIncomplete` comptée à part** ; **taux = Cancelled seul** (choix métier). Colonne `Statut commande` stockée + carte `byStatut` pour auditer. **WSHOP = live ≠ photo OMS figée** : ne JAMAIS viser le match au pixel. |
+| **Annulations marketplace (GL/Printemps) absentes + règle révisée** | (1) Carte marketplace : « Aucune annulation » car les lignes mkt n'avaient pas de `non livré > 0` sur la période (commandes en préparation). (2) Le client veut compter **« Annulé par le Client »** — qui était **exclu** par la denylist `customer`. | Règle d'annulation (EShop **&** marketplace) = statuts **Annulé Stock / Annulé par le Client / Annulé Mags** + `non livré > 0`, via **`calc.isCancelStatus`** (libellés FR + enum EN). `customer` **retiré** de la denylist `orderToRows` ; `calcCancellations`/`Detail`/`calcMarketplaceCancelRefund` filtrent sur `isCancelStatus` (excluent fraude/impayé/blacklist + ShippedIncomplete). **⬆️ Fait monter le taux EShop** (annulations client désormais incluses). **Exige un import complet.** |
 | **0 annulation après le fix** | `/ping` n'affichait pas les nouveaux champs ; et l'API n'expose pas les libellés FR mais l'enum EN (`Cancelled`/`ShippedIncomplete`). | Sondes API filtrées par statut + affichage front du bloc diagnostic. |
 | **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte (données non seuillées). | Jeu **`gasess`** (date×pays) pour le KPI **et** le TT (`dailySeries(sessByDay)`). Carte Acquisition : total **ancré sur le Bilan** + ventilation canal mise à l'échelle. |
 | **Sessions Bilan (35 487) < GA brut (42 728)** | `gasess` interroge GA4 avec la dim `country` → **seuillage de confidentialité GA4** masque les petits pays → la somme par pays SOUS-compte le total plateforme (~−17 %). | Jeu **`gatot`** (date SEULE, sans `country`) = total plateforme non seuillé → KPI sessions global du Bilan quand `dim=global` ; `gasess` reste pour FR/Inter (périmètre pays, forcément seuillé). **Exige un re-import GA4.** |

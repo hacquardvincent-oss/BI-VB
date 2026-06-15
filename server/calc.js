@@ -496,13 +496,18 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
   const round2 = x => Math.round(x * 100) / 100;
   const mktLabel = t => { const s = (t || '').toLowerCase(); if (s.includes('gl.com')) return 'GL.com'; if (s.includes('printemps')) return 'Printemps'; if (s.includes('la redoute')) return 'La Redoute'; if (s.includes('24s')) return '24S'; return t || 'Marketplace'; };
   const cancel = {}; let cancelQte = 0, cancelCA = 0;
-  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type;
+  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type, si = omsMap.statut;
   if (qni !== undefined) {
     (omsRows || []).forEach(r => {
       const type = (r[ti] || '').trim();
       if (!isMkt(type)) return;
       const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
       if (nonLivre <= 0) return;
+      // Annulation = statut Stock/Client/Mags (ou absent) ; on exclut demande (fraude/impayé) et
+      // expédition incomplète (ShippedIncomplete = expédiée, juste partielle).
+      const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
+      if (/incomplete/.test(st) && !/cancel/.test(st)) return;
+      if (st !== '' && !isCancelStatus(st)) return;
       const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
       const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
       const ch = mktLabel(type);
@@ -1180,6 +1185,16 @@ function calcBySeason(rows, omsMap, seasonMap) {
 // ── Annulations (OMS) : pièces non expédiées (Quantité non livré ≥ 1) ───────
 // Taux d'annulation = commandes ANNULÉES (statut Cancelled*) uniquement. Les expéditions
 // incomplètes (ShippedIncomplete) sont comptées à part (la commande a été expédiée, juste partielle).
+// Annulation COMPTÉE (choix client, EShop & marketplace) = statuts « Annulé Stock »,
+// « Annulé par le Client », « Annulé Mags » (API : Cancelled / CancelledCustomer /
+// CancelledInternal). On EXCLUT les annulations « demande » non imputables au fulfillment :
+// blacklist / fraude / impayé / dossier refusé / refus paiement. Gère les libellés OMS FR
+// (« Annulé… ») ET l'enum API EN (« Cancelled… »). À croiser avec « Quantité non livré » > 0.
+function isCancelStatus(st) {
+  const s = (st || '').toString().toLowerCase();
+  if (!/cancel|annul/.test(s)) return false;
+  return !/blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus|impay/.test(s);
+}
 function calcCancellations(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
@@ -1196,11 +1211,12 @@ function calcCancellations(rows, map) {
     if (nonLivre > 0) {
       const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
       const unit = cmd > 0 ? prix / cmd : prix;          // CA non livré estimé (prorata du prix payé)
-      // Expédition incomplète = comptée à part. Tout le reste (Cancelled*, ou statut absent) = annulation.
+      // Expédition incomplète = comptée à part. Annulation = statut Stock/Client/Mags (ou statut
+      // absent) ; les annulations « demande » (fraude/impayé/blacklist) sont EXCLUES du taux.
       if (/incomplete/.test(st) && !/cancel/.test(st)) {
         qteIncomplete += nonLivre; caIncomplete += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersIncomplete.add(r[ni]);
-      } else {
+      } else if (st === '' || isCancelStatus(st)) {
         qteAnnulee += nonLivre; caAnnule += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
       }
@@ -1246,6 +1262,8 @@ function calcCancellationsDetail(rows, map) {
       const b = isEnt ? incompletEnt : incompletMag; b.qte += nonLivre; b.ca += caAnn;
       return;
     }
+    // Annulation demande (fraude/impayé/blacklist) : exclue du détail des annulations (audit byStatut conservé).
+    if (sl !== '' && st !== '(statut absent)' && !isCancelStatus(sl)) return;
     const bucket = isEnt ? entrepot : magasin;
     bucket.qte += nonLivre; bucket.ca += caAnn;
     if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
@@ -1631,7 +1649,7 @@ module.exports = {
   monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
-  isFullPriceLine, discountDepthOf,
+  isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,

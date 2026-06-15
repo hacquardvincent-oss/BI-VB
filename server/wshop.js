@@ -159,16 +159,16 @@ function orderToRows(order) {
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
   // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées.
   // Signal = orderCustomerStatus (enum API à 22 états, calque les libellés OMS) ; orderItems sans statut.
-  //   • ANNULÉE  : Cancelled / CancelledCustomer / CancelledInternal / CancelledFileDenied /
-  //                CancelledBlacklist*  → /cancel/         → non livré = commandé − expédié
+  //   • ANNULÉE (comptée) : Annulé Stock / Annulé par le Client / Annulé Mags
+  //                = Cancelled / CancelledCustomer / CancelledInternal → non livré = commandé − expédié
   //   • EXPÉDIÉE INCOMPLÈTE : ShippedIncomplete           → /incomplete/  → non livré = commandé − expédié
   //   • TOUT LE RESTE (Waiting, Preparation, Late, Shipped, ShippedPartial/PreparationPartial = split
   //     en cours, WaitingValidation, PickupStoreProcessed…) → 0. On ne compte jamais une commande en cours.
-  // ⚠️ On EXCLUT les annulations DEMANDE (client/blacklist/fraude/impayé/dossier refusé) : pré-livraison,
-  //    hors périmètre « non livré » de l'OMS. On garde Cancelled (stock) + CancelledInternal (par le mag).
+  // ⚠️ On EXCLUT uniquement les annulations DEMANDE non imputables au fulfillment (blacklist / fraude /
+  //    impayé / dossier refusé). Choix client : « Annulé par le Client » EST compté (cf. calc.isCancelStatus).
   const rawStatus = (o.orderCustomerStatus || o.orderStatus || o.status || '').toString();
   const cstatus = rawStatus.toLowerCase();
-  const cancelled = /cancel/.test(cstatus) && !/customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/.test(cstatus);
+  const cancelled = /cancel/.test(cstatus) && !/blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus/.test(cstatus);
   const incomplete = /shippedincomplete|incomplete/.test(cstatus);
   return items.map(it => {
     const qOrd = parseInt(it.quantityOrdered != null ? it.quantityOrdered : (it.quantity || 1)) || 0;

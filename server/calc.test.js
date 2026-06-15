@@ -125,6 +125,28 @@ assert.strictEqual(can.commandesImpactees, 1, 'commandes impactées (C1)');
 assert.strictEqual(can.caAnnuleEstime, 130, 'CA annulé estimé (50 + 80)');
 assert.ok(Math.abs(can.tauxPieces - 0.5) < 1e-9, 'taux annulation pièces');
 
+// ── Statuts d'annulation : Stock/Client/Mags comptés, fraude/impayé exclus ───
+assert.strictEqual(calc.isCancelStatus('Annulé Stock'), true, 'Annulé Stock compté');
+assert.strictEqual(calc.isCancelStatus('Annulé par le Client'), true, 'Annulé par le Client compté');
+assert.strictEqual(calc.isCancelStatus('Annulé Mags'), true, 'Annulé Mags compté');
+assert.strictEqual(calc.isCancelStatus('CancelledCustomer'), true, 'CancelledCustomer (API) compté');
+assert.strictEqual(calc.isCancelStatus('CancelledInternal'), true, 'CancelledInternal (API) compté');
+assert.strictEqual(calc.isCancelStatus('CancelledBlacklistFraud'), false, 'fraude exclue');
+assert.strictEqual(calc.isCancelStatus('Annulé Impayé'), false, 'impayé exclu');
+assert.strictEqual(calc.isCancelStatus('Préparation'), false, 'préparation = pas une annulation');
+// avec colonne Statut : la ligne fraude (non-livré>0) est EXCLUE du taux, le client est comptée
+const cHdrs2 = ['Prix de vente paye', 'quantites commandees', 'Quantite non livre', 'Numeros', 'Type Paiement', 'Statut commande'];
+const cMap2 = calc.autoMap(cHdrs2, calc.OMS_ALIASES);
+const cRows2 = [
+  ['100', '1', '1', 'D1', 'Carte Bancaire', 'Annulé par le Client'],  // compté
+  ['80', '1', '1', 'D2', 'Carte Bancaire', 'Annulé Stock'],           // compté
+  ['60', '1', '1', 'D3', 'Carte Bancaire', 'Annulé Impayé'],          // EXCLU (demande)
+  ['40', '1', '0', 'D4', 'Carte Bancaire', 'Préparation'],            // pas non-livré
+];
+const can2 = calc.calcCancellations(cRows2, cMap2);
+assert.strictEqual(can2.commandesImpactees, 2, 'D1 (client) + D2 (stock) comptées, D3 (impayé) exclue');
+assert.strictEqual(can2.caAnnuleEstime, 180, 'CA annulé = 100 + 80 (impayé exclu)');
+
 // ── Retours ──────────────────────────────────────────────────────────────────
 const rHdrs = ['Date Creation', 'Montant Rembourse', 'Nb Colisages Rembourses', 'Numero de Retour', 'Raison', 'Ref Ext', 'Pays livraison', 'Destination du retour'];
 const rMap = calc.autoMap(rHdrs, calc.RET_ALIASES);
