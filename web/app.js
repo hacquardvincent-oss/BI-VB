@@ -110,17 +110,18 @@ const MODULES = {
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
+  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AN', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
-  famille: 'ES', produits: 'ES', stockalerts: 'ES',
+  famille: 'ES', produits: 'ES',
   annulations: 'AN', retours: 'AN',
+  stockalerts: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
@@ -1076,10 +1077,18 @@ function renderReport(rep) {
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
-    const ar = rep.stockAlerts.slice(0, 10).map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
-    stockAlertsCard = `<div class="card"><h3>🔔 Top 10 alertes stock — produits attendus (back-in-stock)</h3>
-      <table><thead><tr><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
-      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur la période → signal de demande sur les ruptures. « En attente » = pas encore notifiés (toujours en rupture). Source : back-in-stock WSHOP.</div></div>`;
+    const all = rep.stockAlerts;
+    const totProd = all.length;
+    const totAbo = all.reduce((s, a) => s + (a.count || 0), 0);
+    const totWait = all.reduce((s, a) => s + (a.waiting || 0), 0);
+    const kpis = `<div class="kgrid">
+      <div class="kc"><div class="l">Produits en alerte</div><div class="v">${fInt(totProd)}</div></div>
+      <div class="kc"><div class="l">Demandes (abonnements)</div><div class="v">${fInt(totAbo)}</div></div>
+      <div class="kc"><div class="l">En attente (toujours en rupture)</div><div class="v">${fInt(totWait)}</div></div></div>`;
+    const ar = all.slice(0, 20).map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Produits les plus demandés en rupture (back-in-stock)</h3>${kpis}
+      <table style="margin-top:10px"><thead><tr><th>#</th><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
+      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
   }
 
   // Top produits N vs N-1 + reconquête

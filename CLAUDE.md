@@ -343,7 +343,8 @@ Source **unique** consommée par `/api/report`, le **PDF**, et la **reco**. Clé
 ## 9. Frontend (`app.js`) — cartes & graphiques
 
 ### Modules / thèmes
-`MODULE_ORDER` (barre de vues, filtrée RBAC). Thèmes `THEME_ORDER = [P,T,ES,AQ,IN,MP,CR,OF,Z]` (`THEME_META` = bannières).
+`MODULE_ORDER` (barre de vues, filtrée RBAC). Thèmes `THEME_ORDER = [P,CO,T,ES,AN,SK,OS,AQ,IN,MP,CR,OF,Z]`
+(`THEME_META` = bannières ; **AN** = 🚫 Annulations & Remboursements [cartes `annulations`+`retours`], **SK** = 🔔 Alertes stock [`stockalerts`]).
 Modules notables : `full` (layout exhaustif : kpi, actionplan, timeline, timeline2, daily, famille, produits, …,
 ga, channels, canaltype, ads, campaigns, …, marketplace, crosschannel, …, saisoncompare, saison, renta, ca) ;
 `acquisition` (ga, **channels, canaltype**, ads, campaigns — ordre KPI→détail→récap, choix métier) ; `international`
@@ -412,8 +413,9 @@ Couleurs Maison : `--a #A8854A` (CA/laiton), `--b #6E7B8B` (sessions/ardoise), `
   `#retoursChart`, `#crossStack` (empilé famille×canal), `#prodChart`.
 
 ### Bilan / scorecard / helpers
-`buildBilan` → `renderScorecard` (7 tuiles : CA Global EShop, Commandes, TT, Panier moyen, **Taux annulation (inversé)**,
-Sessions, **COS (inversé)**) + donuts détail. `bilanTile(…,invert)` : `invert` → une hausse est **rouge** (annulation/COS).
+`buildBilan` → `renderScorecard` (9 tuiles, ordre : CA Global EShop, Commandes, TT, Sessions, Panier moyen, **Indice de
+vente** (= pièces/commandes), **COS (inversé)**, **Taux annulation (inversé)**, **Taux de retour (inversé)**) + donuts
+détail. `bilanTile(…,invert)` : `invert` → une hausse est **rouge** (annulation/COS/retour).
 Boutons (`wireBilan`) : `#bilanCopy` (contexte Claude.ai, `/api/reco/context`, 0€), `#planCopy` (plan d'action texte),
 `#bilanIA` (`/api/reco`, payant). Formatters : `fEur, fInt, fPct, f2, pc, sgn, delta, deltaInv, esc, cut, isFrance`
 (France ≈70% du CA → **exclue des tableaux/graphes par pays**).
