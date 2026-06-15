@@ -1319,8 +1319,8 @@ function calcReturns(rows, map) {
     caRetourne += montant; qte += q;
     if (nri !== undefined && r[nri]) retSet.add(r[nri]);
     const reason = (ri !== undefined ? (r[ri] || '').trim() : '') || '(non précisé)';
-    if (!byReason[reason]) byReason[reason] = { montant: 0, count: 0 };
-    byReason[reason].montant += montant; byReason[reason].count += 1;
+    if (!byReason[reason]) byReason[reason] = { montant: 0, count: 0, qte: 0 };
+    byReason[reason].montant += montant; byReason[reason].count += 1; byReason[reason].qte += q;
     const pays = (pi !== undefined ? (r[pi] || '').trim() : '') || '(inconnu)';
     byCountry[pays] = (byCountry[pays] || 0) + montant;
     const dest = (di !== undefined ? (r[di] || '').trim() : '') || '(n/a)';
@@ -1328,7 +1328,7 @@ function calcReturns(rows, map) {
   });
   return {
     caRetourne, qte, nbRetours: retSet.size,
-    reasons: Object.entries(byReason).map(([reason, v]) => ({ reason, montant: v.montant, count: v.count })).sort((a, b) => b.montant - a.montant),
+    reasons: Object.entries(byReason).map(([reason, v]) => ({ reason, montant: v.montant, count: v.count, qte: v.qte })).sort((a, b) => b.montant - a.montant),
     countries: Object.entries(byCountry).map(([pays, montant]) => ({ pays, montant })).sort((a, b) => b.montant - a.montant),
     destinations: Object.entries(byDest).map(([dest, montant]) => ({ dest, montant })).sort((a, b) => b.montant - a.montant),
   };

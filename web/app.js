@@ -110,16 +110,18 @@ const MODULES = {
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
+  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
-  famille: 'ES', produits: 'ES', annulations: 'ES', retours: 'ES', stockalerts: 'ES',
+  famille: 'ES', produits: 'ES',
+  annulations: 'AN', retours: 'AN',
+  stockalerts: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
@@ -999,6 +1001,7 @@ function renderReport(rep) {
   let cancellationsCard = '';
   if (cx) {
     const tiles = [
+      ['Pièces annulées', fInt(cx.qteAnnulee), cx.qteAnnulee, cx1.qteAnnulee],
       ['Commandes impactées', fInt(cx.commandesImpactees), cx.commandesImpactees, cx1.commandesImpactees],
       ['Commandes (total)', fInt(cx.commandes), cx.commandes, cx1.commandes],
       ['Taux d\'annulation (commande)', fPct(cx.tauxCommande), cx.tauxCommande, cx1.tauxCommande],
@@ -1039,7 +1042,7 @@ function renderReport(rep) {
       ['Pièces retournées', fInt(rt.qte), rt.qte, rt1.qte],
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
-    const reasons = rt.reasons.slice(0, 8).map(x => `<tr><td>${esc(x.reason)}</td><td>${fEur(x.montant)}</td><td>${fInt(x.count)}</td></tr>`).join('');
+    const reasons = rt.reasons.slice(0, 10).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte != null ? x.qte : x.count)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
     const reasonsCell = x => (x.reasons && x.reasons.length)
@@ -1064,7 +1067,7 @@ function renderReport(rep) {
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
-        <div><h3>Top raisons de retour</h3><table><thead><tr><th>Raison</th><th>Montant</th><th>Nb</th></tr></thead><tbody>${reasons}</tbody></table></div>
+        <div><h3>Raisons de retour (EShop, hors marketplace)</h3><table><thead><tr><th>Raison</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table></div>
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
       ${reasonsVsTable}
@@ -1074,10 +1077,18 @@ function renderReport(rep) {
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
-    const ar = rep.stockAlerts.slice(0, 10).map(a => `<tr><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
-    stockAlertsCard = `<div class="card"><h3>🔔 Top 10 alertes stock — produits attendus (back-in-stock)</h3>
-      <table><thead><tr><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
-      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur la période → signal de demande sur les ruptures. « En attente » = pas encore notifiés (toujours en rupture). Source : back-in-stock WSHOP.</div></div>`;
+    const all = rep.stockAlerts;
+    const totProd = all.length;
+    const totAbo = all.reduce((s, a) => s + (a.count || 0), 0);
+    const totWait = all.reduce((s, a) => s + (a.waiting || 0), 0);
+    const kpis = `<div class="kgrid">
+      <div class="kc"><div class="l">Produits en alerte</div><div class="v">${fInt(totProd)}</div></div>
+      <div class="kc"><div class="l">Demandes (abonnements)</div><div class="v">${fInt(totAbo)}</div></div>
+      <div class="kc"><div class="l">En attente (toujours en rupture)</div><div class="v">${fInt(totWait)}</div></div></div>`;
+    const ar = all.slice(0, 20).map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Produits les plus demandés en rupture (back-in-stock)</h3>${kpis}
+      <table style="margin-top:10px"><thead><tr><th>#</th><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
+      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
   }
 
   // Top produits N vs N-1 + reconquête
@@ -2006,14 +2017,19 @@ function renderScorecard(title, pack, showDetails, sig) {
   const ann1 = n1.cancel ? n1.cancel.tauxCommande : null;
   const cosD = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
   const sg = key => (sig && sig[key]) ? sig[key].sig : undefined; // true=significatif, false=bruit, undefined=non testé
+  // Indice de vente (IV) = pièces vendues / commandes (panier moyen en nb d'articles).
+  const iv = k.commandes > 0 ? k.pieces / k.commandes : null;
+  const iv1 = k1.commandes > 0 ? k1.pieces / k1.commandes : null;
   const tiles = [
     bilanTile('CA Global EShop', fEur(k.ca), k.ca, k1.ca),
     bilanTile('Commandes', fInt(k.commandes), k.commandes, k1.commandes),
     bilanTile('Taux de transfo', fPct(k.tt), k.tt, k1.tt, false, sg('tt')),
-    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
-    bilanTile('Taux d\'annulation', ann != null ? fPct(ann) : '—', ann, ann1, true, sg('annulation')),
     bilanTile('Sessions', fInt(k.sessions), k.sessions, k1.sessions),
+    bilanTile('Panier moyen', fEur(k.pm), k.pm, k1.pm),
+    bilanTile('Indice de vente', iv != null ? iv.toFixed(2).replace('.', ',') : '—', iv, iv1),
     bilanTile('COS', cosD(n.cos), n.cos, n1.cos, true),
+    bilanTile('Taux d\'annulation', ann != null ? fPct(ann) : '—', ann, ann1, true, sg('annulation')),
+    bilanTile('Taux de retour', n.ret != null ? fPct(n.ret) : '—', n.ret, n1.ret, true),
   ].join('');
   let details = '';
   if (showDetails) {
@@ -2050,9 +2066,11 @@ function buildBilan(rep) {
   const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   const cosPack = rep.ads && rep.ads.cos ? rep.ads.cos : {};
   const sz = rep.sessionsByZone || {};
+  const retN = rep.returns ? rep.returns.tauxRetour : null;
+  const retN1 = (rep.returns && rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) ? rep.returns.n1.caRetourne / rep.ca.n1.caEShop : null;
   const mainPack = {
-    n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null, sessZone: sz.n },
-    n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null, sessZone: sz.n1 } : null,
+    n: { kpi: rep.kpiEShop.n, ca: rep.ca.n, mkt: rep.marketplace.n, cancel: rep.cancellations && rep.cancellations.n, cos: cosPack.n != null ? cosPack.n : null, sessZone: sz.n, ret: retN },
+    n1: rep.kpiEShop.n1 ? { kpi: rep.kpiEShop.n1, ca: rep.ca.n1, mkt: rep.marketplace.n1, cancel: rep.cancellations && rep.cancellations.n1, cos: cosPack.n1 != null ? cosPack.n1 : null, sessZone: sz.n1, ret: retN1 } : null,
   };
   const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
   const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true, rep.significance);

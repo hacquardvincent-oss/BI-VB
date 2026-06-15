@@ -510,7 +510,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   if (bisDs && bisDs.rows && bisDs.rows.length) {
     const mp = bisDs.map || {};
     stockAlerts = bisDs.rows.map(r => ({ name: (r[mp.name] || '').toString(), count: parseInt(r[mp.count]) || 0, waiting: parseInt(r[mp.waiting]) || 0, last: (r[mp.last] || '').toString() }))
-      .sort((a, b) => b.count - a.count).slice(0, 20);
+      .sort((a, b) => b.count - a.count).slice(0, 300); // borne large : la carte affiche le top 20, les KPIs totalisent l'ensemble
   }
 
   // ── Saison (via référentiel) ──

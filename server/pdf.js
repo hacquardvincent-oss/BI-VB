@@ -26,10 +26,11 @@ const fEur = v => (v == null ? '—' : sp(Math.round(v).toLocaleString('fr-FR'))
 const fInt = v => (v == null ? '—' : sp(Math.round(v).toLocaleString('fr-FR')));
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 const cut = (s, n) => { s = (s == null ? '' : String(s)); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
-function dCell(n, n1) {
+function dCell(n, n1, invert) {
   if (n == null || n1 == null || n1 === 0) return { text: '—', color: COL.faint };
   const p = (n - n1) / n1 * 100;
-  return { text: (p >= 0 ? '+' : '') + p.toFixed(0) + '%', color: p >= 0 ? COL.up : COL.down };
+  const good = invert ? p <= 0 : p >= 0; // invert : annulation / COS / retour → une hausse est mauvaise
+  return { text: (p >= 0 ? '+' : '') + p.toFixed(0) + '%', color: good ? COL.up : COL.down };
 }
 
 function hr(doc, x1, x2, y, color, w = 0.6) { doc.save().moveTo(x1, y).lineTo(x2, y).lineWidth(w).strokeColor(color).stroke().restore(); }
@@ -155,13 +156,24 @@ function secBilan(doc, rep) {
   const k = rep.kpiEShop.n, k1 = rep.kpiEShop.n1 || {};
   const cx = rep.cancellations && rep.cancellations.n, cx1 = (rep.cancellations && rep.cancellations.n1) || {};
   section(doc, 'Bilan période');
+  // Indice de vente = pièces vendues / commandes. COS / Taux de retour pour la 2e rangée.
+  const iv = k.commandes > 0 ? k.pieces / k.commandes : null;
+  const iv1 = k1.commandes > 0 ? k1.pieces / k1.commandes : null;
+  const cos = (rep.ads && rep.ads.cos) || {};
+  const retN1 = (rep.returns && rep.returns.n1 && rep.ca.n1 && rep.ca.n1.caEShop > 0) ? rep.returns.n1.caRetourne / rep.ca.n1.caEShop : null;
+  const retN = rep.returns ? rep.returns.tauxRetour : null;
   kpiTiles(doc, [
     { label: 'CA Global EShop', value: fEur(k.ca), delta: dCell(k.ca, k1.ca), deltaSuffix: ' vs N-1' },
     { label: 'Commandes', value: fInt(k.commandes), delta: dCell(k.commandes, k1.commandes), deltaSuffix: ' vs N-1' },
-    { label: 'Panier moyen', value: fEur(k.pm), delta: dCell(k.pm, k1.pm), deltaSuffix: ' vs N-1' },
     { label: 'Taux de transfo', value: fPct(k.tt), delta: dCell(k.tt, k1.tt), deltaSuffix: ' vs N-1' },
     { label: 'Sessions', value: fInt(k.sessions), delta: dCell(k.sessions, k1.sessions), deltaSuffix: ' vs N-1' },
-    { label: 'Taux d’annulation', value: cx ? fPct(cx.tauxCommande) : '—', delta: cx ? dCell(cx.tauxCommande, cx1.tauxCommande) : null, deltaSuffix: ' vs N-1' },
+    { label: 'Panier moyen', value: fEur(k.pm), delta: dCell(k.pm, k1.pm), deltaSuffix: ' vs N-1' },
+  ]);
+  kpiTiles(doc, [
+    { label: 'Indice de vente', value: iv != null ? iv.toFixed(2).replace('.', ',') : '—', delta: dCell(iv, iv1), deltaSuffix: ' vs N-1' },
+    { label: 'COS', value: cos.n != null ? fPct(cos.n) : '—', delta: dCell(cos.n, cos.n1, true), deltaSuffix: ' vs N-1' },
+    { label: 'Taux d’annulation', value: cx ? fPct(cx.tauxCommande) : '—', delta: cx ? dCell(cx.tauxCommande, cx1.tauxCommande, true) : null, deltaSuffix: ' vs N-1' },
+    { label: 'Taux de retour', value: retN != null ? fPct(retN) : '—', delta: dCell(retN, retN1, true), deltaSuffix: ' vs N-1' },
   ]);
   const c = rep.ca.n, c1 = rep.ca.n1 || {}, mk = (rep.marketplace && rep.marketplace.n) || {};
   donut(doc, [

@@ -180,6 +180,7 @@ assert.strictEqual(ret.qte, 4, 'pièces retournées');
 assert.strictEqual(ret.nbRetours, 2, 'nb retours distincts (R1, R2)');
 assert.strictEqual(ret.reasons[0].reason, 'Taille', 'raison #1 par montant');
 assert.strictEqual(ret.reasons[0].montant, 130, 'montant raison Taille');
+assert.strictEqual(ret.reasons[0].qte, 2, 'pièces retournées pour raison Taille (1+1)');
 
 // ── Saison (référentiel) ─────────────────────────────────────────────────────
 const refHdrs = ['Ref. Externe', 'Saison', 'Regroupement'];
