@@ -836,10 +836,20 @@ function renderReport(rep) {
   const caBlocks = caRowsDef.map(([l, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${fEur(n)}</div><div style="font-size:11px">${delta(n, n1)}</div></div>`).join('');
 
   const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
+  // Sous-canaux Galeries Lafayette : dropshipping (WSHOP/OMS), corner (Y2, vendeurs 674*) et
+  // ship-from-store (Y2, 674SFS).
+  const glSub = [
+    { label: 'Dropshipping (WSHOP)', n: mk.glOMS, n1: mk1.glOMS || 0, sub: true },
+    { label: 'Corner GL Haussmann (Y2)', n: mk.glCorner || 0, n1: mk1.glCorner || 0, sub: true },
+    { label: 'Ship-from-store (Y2)', n: mk.glSFS || 0, n1: mk1.glSFS || 0, sub: true },
+  ].filter(r => r.n > 0 || r.n1 > 0);
   const mkRows = [
-    ['Galeries Lafayette', mk.glTotal, mk1.glTotal], ['Printemps', mk.printemps, mk1.printemps],
-    ['Place des Tendances', mk.pdt, mk1.pdt], ['Lulli EShop', mk.lulli, mk1.lulli],
-    ['TOTAL Marketplace', mk.total, mk1.total],
+    { label: 'Galeries Lafayette', n: mk.glTotal, n1: mk1.glTotal || 0 },
+    ...((mk.glTotal > 0 || (mk1.glTotal || 0) > 0) ? glSub : []),
+    { label: 'Printemps', n: mk.printemps, n1: mk1.printemps || 0 },
+    { label: 'Place des Tendances (Y2)', n: mk.pdt, n1: mk1.pdt || 0 },
+    { label: 'Lulli EShop (Y2)', n: mk.lulli, n1: mk1.lulli || 0 },
+    { label: 'TOTAL Marketplace', n: mk.total, n1: mk1.total || 0, total: true },
   ];
 
   // CA par pays : on exclut la France (≈ 70% du CA → écrase la lecture ; elle est isolée dans le split FR/Inter)
@@ -1254,20 +1264,20 @@ function renderReport(rep) {
   let mktCRhtml = '';
   const mcr = rep.marketplace && rep.marketplace.cancelRefund;
   if (mcr && ((mcr.cancellations.byChannel.length) || (mcr.refunds.byChannel.length))) {
-    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
-      || '<tr><td colspan="3" style="color:var(--t3)">Aucune annulation</td></tr>';
+    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${x.taux != null ? fPct(x.taux) : '—'}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="4" style="color:var(--t3)">Aucune annulation</td></tr>';
     const rRows = mcr.refunds.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.count)}</td><td class="dn">${fEur(x.ca)}</td></tr>`).join('')
       || '<tr><td colspan="3" style="color:var(--t3)">Aucun remboursement</td></tr>';
     mktCRhtml = `<div class="grid cols2" style="margin-top:12px">
-        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
+        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Taux annul.</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
         <div><h3>Remboursements / avoirs (Y2)</h3><table><thead><tr><th>Enseigne</th><th>Nb</th><th>Montant</th></tr></thead><tbody>${rRows}</tbody></table></div>
       </div>
-      <div class="note">Annulations = pièces marketplace non livrées (source WSHOP OMS, CA estimé au prorata). Remboursements = lignes Y2 à Total TTC négatif (retours/avoirs), exclues du CA marketplace ci-dessus.</div>`;
+      <div class="note">Taux d'annulation = commandes annulées (statut Annulé Stock / Client / Mags + non livré) ÷ commandes du canal. Calculable pour GL.com & Printemps (source OMS) ; pas pour le corner GL, PDT ni Lulli (Y2, sans statut). Remboursements = lignes Y2 à Total TTC négatif, exclues du CA marketplace ci-dessus.</div>`;
   }
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
-      <div style="height:180px;margin-bottom:10px"><canvas id="mktDonut"></canvas></div>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
-      <tbody>${mkRows.map((r, i) => `<tr${i === mkRows.length - 1 ? ' style="font-weight:700"' : ''}><td>${r[0]}</td><td>${fEur(r[1])}</td><td>${fEur(r[2])}</td><td>${delta(r[1], r[2])}</td></tr>`).join('')}</tbody></table>${mktCRhtml}</div>`;
+      <tbody>${mkRows.map(r => `<tr${r.total ? ' style="font-weight:700"' : ''}><td${r.sub ? ' style="padding-left:22px;color:var(--t2);font-size:12px"' : ''}>${r.sub ? '└ ' : ''}${r.label}</td><td>${fEur(r.n)}</td><td>${fEur(r.n1)}</td><td>${delta(r.n, r.n1)}</td></tr>`).join('')}</tbody></table>
+      <div class="note">Galeries Lafayette ventilé en sous-canaux : <b>dropshipping</b> (WSHOP, type GL.com), <b>corner GL Haussmann</b> et <b>ship-from-store</b> (Y2). Enseignes Y2 identifiées par établissement (corner + SFS inclus). Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
   // International : performance par famille pour le top 5 pays
@@ -2348,12 +2358,6 @@ function renderCharts(rep) {
   if (rep.pays && rep.pays.length) {
     const p = rep.pays.filter(x => (x.pays || '').trim().toLowerCase() !== 'france').slice(0, 10);
     growShrink('paysChart', p.map(x => ({ label: x.pays, n: x.n.ca, n1: x.n1 ? x.n1.ca : null })));
-  }
-  // Donut marketplace (part par enseigne)
-  if (rep.marketplace && rep.marketplace.n) {
-    const m = rep.marketplace.n;
-    const seg = [['Galeries Lafayette', m.glTotal], ['Printemps', m.printemps], ['Place des Tendances', m.pdt], ['Lulli', m.lulli]].filter(x => x[1] > 0);
-    if (seg.length) mk('mktDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
   }
   // Saison : modèles par famille E26 vs E25 (barres groupées)
   if (rep.seasonCompare && rep.seasonCompare.familles && rep.seasonCompare.familles.length) {

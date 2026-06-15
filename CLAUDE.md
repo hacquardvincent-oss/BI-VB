@@ -252,7 +252,12 @@ au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
 
 ### Annulations — `calcCancellations` / `calcCancellationsDetail` (hors mkt, cf §12)
 - **Taux d'annulation = `commandesImpactees ÷ commandes`** (à la **commande**, pas à la pièce). `tauxPieces`, `tauxCA` aussi.
-- **Annulation** = lignes `Quantité non livré > 0` au statut **Cancelled\*** (ou statut absent). `unit = prix/cmd` (prorata).
+- **Annulation** = lignes `Quantité non livré > 0` aux statuts **Annulé Stock / Annulé par le Client / Annulé Mags**
+  (API : `Cancelled` / `CancelledCustomer` / `CancelledInternal`) — ou statut absent. `unit = prix/cmd` (prorata).
+  Helper unique **`calc.isCancelStatus(st)`** (gère libellés OMS FR ET enum API EN) → partagé EShop + marketplace
+  (`calcMarketplaceCancelRefund`) + `orderToRows`. **EXCLUS** : demande non imputable au fulfillment (blacklist /
+  fraude / impayé / dossier refusé). ⚠️ **Choix client (révisé) : « Annulé par le Client » EST compté** (avant
+  exclu) — cf §12. Nécessite un **import complet** WSHOP pour recalculer la colonne « Quantité non livré ».
 - **`ShippedIncomplete` comptée À PART** (`/incomplete/ && !/cancel/`) → `qteIncomplete`/`caIncomplete`/`commandesIncompletes`,
   **hors du taux** (la commande a été expédiée, juste partielle). WSHOP l'applique très largement (splits/partiels) ≠ OMS.
 - `Detail` : `entrepot`/`magasin` (webstore vs ship-from-store), `incomplet{entrepot,magasin}`, `topStores`, `topProduits`,
@@ -264,10 +269,18 @@ au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
 qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
 
 ### Marketplace
-- **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours) :
-  `glY2` (etab `gl ac haussmann` + commercial `674sfs`), `pdt` (`place des tendances` + `686001`),
-  `lulli` (`lulli` + `610lulli` + ref `005…`). `glTotal = glOMS+glY2`, `total` = somme des 5.
+- **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours)
+  identifié par **ÉTABLISSEMENT** (`y2ChannelOf`, source unique du cross-canal — **JAMAIS par un code commercial
+  isolé**, sinon on perd le corner GL et des ventes Lulli) : GL (`gl ac haussmann`/`haussmann`/`galeries`) ventilé
+  en sous-canaux **corner** (codes commerciaux `674*` des vendeurs) vs **ship-from-store** (`674sfs`) → `glCorner`,
+  `glSFS`, `glY2 = glCorner+glSFS` ; `pdt` (`place des tendances`) ; `lulli` (`lulli`). `glTotal = glOMS+glY2`,
+  `total` = somme des 5. ⚠️ **Anomalie résolue (cf §12)** : l'ancienne règle ne gardait que `674sfs` (perdait ~77 K€
+  de corner GL) et `lulli` exigeait `ref 005…` (perdait ~37 K€ de ventes Lulli à réf `1000…`). Carte : GL en 3
+  sous-lignes (dropshipping WSHOP / corner Y2 / SFS Y2).
 - **`calcMarketplaceCancelRefund`** : annulations OMS (lignes mkt non livrées par enseigne) + remboursements Y2 (**`ttc < 0`**).
+  `byChannel` porte aussi le **taux d'annulation par marketplace OMS** (`commandesAnnulees ÷ commandes` = GL.com / Printemps ;
+  affiché **uniquement dans la carte CA Marketplace**, colonne « Taux annul. »). **Y2 (corner GL, PDT, Lulli) → pas de taux**
+  (ni statut ni non-livré dans Y2). EShop reste son propre taux (scorecard + dashboard annulations), pas ici.
 - **`calcCrossChannel`** (`ccAccumulate`, `omsChannelOf`=EShop/GL/Printemps, `y2ChannelOf`=PDT/Lulli/GL) :
   `channels` (ordre `EShop,GL,Printemps,PDT,Lulli`), `familles` (famille×canal), `topByMarketplace` (top 5/enseigne),
   **`arbitrage`** (produit fort sur un canal/faible sur l'autre ; seuil 300€ & 15% ; **on ne SOMME jamais EShop+mkt**),
@@ -433,11 +446,13 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | Symptôme | Cause racine | Fix |
 |---|---|---|
 | **Taux d'annulation 76 % puis 68 vs 7 puis 20 vs 7** | (1) `commandé−expédié` comptait les commandes EN ATTENTE. (2) `quantityOffered` ≠ « à expédier » mais « offert/cadeau » (≈0). (3) lecture de `orderStatus` (8 états, sans Shipped/Incomplete) au lieu de **`orderCustomerStatus`** (22 états). (4) toutes les variantes Cancelled comptées (client/fraude incluses). (5) `ShippedIncomplete` (statut live, splits) bien plus large côté WSHOP que côté OMS. | Statut = **`orderCustomerStatus`** ; **denylist demande** (`customer|blacklist|fraud|doubtful|unpaid|filedenied|denied|payment`) ; **`ShippedIncomplete` comptée à part** ; **taux = Cancelled seul** (choix métier). Colonne `Statut commande` stockée + carte `byStatut` pour auditer. **WSHOP = live ≠ photo OMS figée** : ne JAMAIS viser le match au pixel. |
+| **Annulations marketplace (GL/Printemps) absentes + règle révisée** | (1) Carte marketplace : « Aucune annulation » car les lignes mkt n'avaient pas de `non livré > 0` sur la période (commandes en préparation). (2) Le client veut compter **« Annulé par le Client »** — qui était **exclu** par la denylist `customer`. | Règle d'annulation (EShop **&** marketplace) = statuts **Annulé Stock / Annulé par le Client / Annulé Mags** + `non livré > 0`, via **`calc.isCancelStatus`** (libellés FR + enum EN). `customer` **retiré** de la denylist `orderToRows` ; `calcCancellations`/`Detail`/`calcMarketplaceCancelRefund` filtrent sur `isCancelStatus` (excluent fraude/impayé/blacklist + ShippedIncomplete). **⬆️ Fait monter le taux EShop** (annulations client désormais incluses). **Exige un import complet.** |
 | **0 annulation après le fix** | `/ping` n'affichait pas les nouveaux champs ; et l'API n'expose pas les libellés FR mais l'enum EN (`Cancelled`/`ShippedIncomplete`). | Sondes API filtrées par statut + affichage front du bloc diagnostic. |
 | **Sessions GA = 2× la plateforme (27993 vs 12163)** | Somme de la ventilation date×canal×device×pays sur-compte (données non seuillées). | Jeu **`gasess`** (date×pays) pour le KPI **et** le TT (`dailySeries(sessByDay)`). Carte Acquisition : total **ancré sur le Bilan** + ventilation canal mise à l'échelle. |
 | **Sessions Bilan (35 487) < GA brut (42 728)** | `gasess` interroge GA4 avec la dim `country` → **seuillage de confidentialité GA4** masque les petits pays → la somme par pays SOUS-compte le total plateforme (~−17 %). | Jeu **`gatot`** (date SEULE, sans `country`) = total plateforme non seuillé → KPI sessions global du Bilan quand `dim=global` ; `gasess` reste pour FR/Inter (périmètre pays, forcément seuillé). **Exige un re-import GA4.** |
 | **TT / ajout panier vides** | TT calculé sur les sessions ventilées. | `dailySeries` accepte `sessByDay` issu de `gasess`. |
 | **CA marketplace famille négatif** | Lignes Y2 `Total TTC ≤ 0` (retours/avoirs) comptées. | Exclure `ttc ≤ 0` (`calcMarketplace`, `ccAccumulate`) ; `ttc < 0` = signal remboursement. |
+| **Marketplace GL & Lulli sous-comptés (~77 K€ + ~37 K€)** | `calcMarketplace` identifiait l'enseigne Y2 par un **code commercial isolé** : GL = `674sfs` SEUL (perdait tout le corner = vendeurs `674GUM01/674MAELLE01/…`), Lulli exigeait `ref 005…` (perdait les ventes à réf `1000…`). Incohérent avec `ccAccumulate`/`y2ChannelOf` (qui, eux, identifient par établissement → corrects). | Identifier par **établissement** (`y2ChannelOf`) comme le cross-canal ; GL ventilé en **corner** (`674*` hors SFS) vs **ship-from-store** (`674sfs`). Validé sur l'export Y2 réel (GL 101 818 € = corner 77 213 + SFS 24 605 ; Lulli 108 292 €). Carte : donut retiré, GL en 3 sous-lignes. |
 | **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
 | **Test connexion / import en 504** | Appels WSHOP lents **en série** (auth + 5 sondes ≈ 8 s) ou échantillon 300 cmd. | **`Promise.all` (parallèle) + `Promise.race` (timeout 9 s)** → réponse partielle ; échantillons réduits. |
 | **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (démarque dans `originalDiscountedUnitPrice`). |

@@ -468,21 +468,26 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
     if (type.includes('gl.com')) glOMS += prix;
     else if (type.includes('printemps')) printemps += prix;
   });
-  let glY2 = 0, pdt = 0, lulli = 0;
+  // Y2 : on identifie l'enseigne par l'ÉTABLISSEMENT (comme y2ChannelOf, source unique du
+  // cross-canal) — JAMAIS par un code commercial isolé (sinon on perd le corner GL et des
+  // ventes Lulli). Pour GL on ventile ensuite en sous-canaux : 674SFS = ship-from-store,
+  // tout autre code 674* = corner (vendeurs nommés du corner GL Haussmann).
+  let glCorner = 0, glSFS = 0, pdt = 0, lulli = 0;
   if (y2Rows && y2Map && y2Map.ttc !== undefined) {
-    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial, ri = y2Map.ref;
+    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[ti2]);
       if (ttc <= 0) return; // exclure les retours (valeurs négatives)
-      const etab = (r[ei] || '').toLowerCase();
-      const com = (r[ci] || '').toLowerCase();
-      const ref = (r[ri] || '').trim();
-      if (etab.includes('gl ac haussmann') && com.includes('674sfs')) glY2 += ttc;
-      else if (etab.includes('place des tendances') && com.includes('686001')) pdt += ttc;
-      else if (etab.includes('lulli') && com.includes('610lulli') && ref.startsWith('005')) lulli += ttc;
+      const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
+      if (ch === 'GL') {
+        const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase();
+        if (com.includes('sfs')) glSFS += ttc; else glCorner += ttc;
+      } else if (ch === 'PDT') pdt += ttc;
+      else if (ch === 'Lulli') lulli += ttc;
     });
   }
-  return { glOMS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
+  const glY2 = glCorner + glSFS;
+  return { glOMS, glCorner, glSFS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
 }
 
 // Détail des commandes annulées (WSHOP OMS : lignes marketplace non livrées) et remboursées
@@ -491,18 +496,28 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
   const round2 = x => Math.round(x * 100) / 100;
   const mktLabel = t => { const s = (t || '').toLowerCase(); if (s.includes('gl.com')) return 'GL.com'; if (s.includes('printemps')) return 'Printemps'; if (s.includes('la redoute')) return 'La Redoute'; if (s.includes('24s')) return '24S'; return t || 'Marketplace'; };
   const cancel = {}; let cancelQte = 0, cancelCA = 0;
-  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type;
+  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type, si = omsMap.statut, ni = omsMap.num;
+  const hasStatut = si !== undefined;
   if (qni !== undefined) {
     (omsRows || []).forEach(r => {
       const type = (r[ti] || '').trim();
       if (!isMkt(type)) return;
+      const ch = mktLabel(type);
+      const order = (ni !== undefined && r[ni]) ? r[ni] : null;
+      // Dénominateur du taux : toutes les commandes du canal (pour GL.com / Printemps = OMS).
+      const e = cancel[ch] || (cancel[ch] = { qte: 0, ca: 0, orders: new Set(), allOrders: new Set() });
+      if (order) e.allOrders.add(order);
       const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
       if (nonLivre <= 0) return;
+      // Annulation = statut Stock/Client/Mags + non livré > 0 uniquement ; on exclut demande
+      // (fraude/impayé) et expédition incomplète (ShippedIncomplete = expédiée, juste partielle).
+      const st = (hasStatut ? (r[si] || '').toString().toLowerCase() : '');
+      if (/incomplete/.test(st) && !/cancel/.test(st)) return;
+      if (hasStatut && !isCancelStatus(st)) return;
       const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
       const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
-      const ch = mktLabel(type);
-      const e = cancel[ch] || (cancel[ch] = { qte: 0, ca: 0 });
       e.qte += nonLivre; e.ca += unit * nonLivre;
+      if (order) e.orders.add(order);
       cancelQte += nonLivre; cancelCA += unit * nonLivre;
     });
   }
@@ -519,7 +534,15 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
     });
   }
   return {
-    cancellations: { byChannel: Object.entries(cancel).map(([ch, v]) => ({ ch, qte: v.qte, ca: round2(v.ca) })).sort((a, b) => b.qte - a.qte), totalQte: cancelQte, totalCA: round2(cancelCA) },
+    // Taux d'annulation par marketplace OMS (GL.com / Printemps) = commandes annulées ÷ commandes
+    // du canal. Affiché dans la carte CA Marketplace. (Y2 : pas de statut/non-livré → pas de taux.)
+    cancellations: {
+      byChannel: Object.entries(cancel).map(([ch, v]) => ({
+        ch, qte: v.qte, ca: round2(v.ca), commandes: v.allOrders.size, commandesAnnulees: v.orders.size,
+        taux: v.allOrders.size > 0 ? v.orders.size / v.allOrders.size : null,
+      })).sort((a, b) => b.qte - a.qte),
+      totalQte: cancelQte, totalCA: round2(cancelCA),
+    },
     refunds: { byChannel: Object.entries(refund).map(([ch, v]) => ({ ch, ca: round2(v.ca), count: v.count })).sort((a, b) => a.ca - b.ca), totalCA: round2(refundCA), count: refundCount },
   };
 }
@@ -1175,9 +1198,20 @@ function calcBySeason(rows, omsMap, seasonMap) {
 // ── Annulations (OMS) : pièces non expédiées (Quantité non livré ≥ 1) ───────
 // Taux d'annulation = commandes ANNULÉES (statut Cancelled*) uniquement. Les expéditions
 // incomplètes (ShippedIncomplete) sont comptées à part (la commande a été expédiée, juste partielle).
+// Annulation COMPTÉE (choix client, EShop & marketplace) = statuts « Annulé Stock »,
+// « Annulé par le Client », « Annulé Mags » (API : Cancelled / CancelledCustomer /
+// CancelledInternal). On EXCLUT les annulations « demande » non imputables au fulfillment :
+// blacklist / fraude / impayé / dossier refusé / refus paiement. Gère les libellés OMS FR
+// (« Annulé… ») ET l'enum API EN (« Cancelled… »). À croiser avec « Quantité non livré » > 0.
+function isCancelStatus(st) {
+  const s = (st || '').toString().toLowerCase();
+  if (!/cancel|annul/.test(s)) return false;
+  return !/blacklist|fraud|doubtful|unpaid|filedenied|denied|payment|refus|impay/.test(s);
+}
 function calcCancellations(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
+  const hasStatut = si !== undefined;
   let qteAnnulee = 0, qteCmd = 0, caAnnule = 0, caPaye = 0;
   let qteIncomplete = 0, caIncomplete = 0;
   const ordersImpacted = new Set(), allOrders = new Set(), ordersIncomplete = new Set();
@@ -1189,13 +1223,15 @@ function calcCancellations(rows, map) {
     qteCmd += cmd; caPaye += prix;
     if (ni !== undefined && r[ni]) allOrders.add(r[ni]);
     if (nonLivre > 0) {
-      const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
+      const st = (hasStatut ? (r[si] || '').toString().toLowerCase() : '');
       const unit = cmd > 0 ? prix / cmd : prix;          // CA non livré estimé (prorata du prix payé)
-      // Expédition incomplète = comptée à part. Tout le reste (Cancelled*, ou statut absent) = annulation.
+      // Annulation = statut Annulé Stock / Client / Mags (isCancelStatus) + non livré > 0, ET RIEN
+      // D'AUTRE. Expédition incomplète comptée à part ; demande (fraude/impayé/blacklist) exclue.
+      // Si le jeu n'a AUCUNE colonne statut → on retombe sur le seul signal « non livré » (legacy).
       if (/incomplete/.test(st) && !/cancel/.test(st)) {
         qteIncomplete += nonLivre; caIncomplete += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersIncomplete.add(r[ni]);
-      } else {
+      } else if (!hasStatut || isCancelStatus(st)) {
         qteAnnulee += nonLivre; caAnnule += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
       }
@@ -1220,6 +1256,7 @@ function calcCancellations(rows, map) {
 function calcCancellationsDetail(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
+  const hasStatut = si !== undefined;
   const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
   const incompletEnt = { qte: 0, ca: 0 }, incompletMag = { qte: 0, ca: 0 };
   const byStore = {}, byProd = {}, byCanal = {}, byStatut = {};
@@ -1241,6 +1278,9 @@ function calcCancellationsDetail(rows, map) {
       const b = isEnt ? incompletEnt : incompletMag; b.qte += nonLivre; b.ca += caAnn;
       return;
     }
+    // Annulation = statut Stock/Client/Mags uniquement ; demande (fraude/impayé/blacklist) exclue
+    // (audit byStatut conservé au-dessus). Si aucune colonne statut → on garde sur non-livré (legacy).
+    if (hasStatut && !isCancelStatus(sl)) return;
     const bucket = isEnt ? entrepot : magasin;
     bucket.qte += nonLivre; bucket.ca += caAnn;
     if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
@@ -1626,7 +1666,7 @@ module.exports = {
   monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
-  isFullPriceLine, discountDepthOf,
+  isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, ttByCountry,

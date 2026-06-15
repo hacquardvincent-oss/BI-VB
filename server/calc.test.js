@@ -41,6 +41,26 @@ assert.strictEqual(mkt.glOMS, 30, 'GL.com OMS');
 assert.strictEqual(mkt.printemps, 50, 'Printemps OMS');
 assert.strictEqual(mkt.total, 80, 'Total marketplace (OMS seul)');
 
+// ── Marketplace Y2 : GL identifié par établissement, ventilé corner / SFS ────
+// (le corner = codes 674* hors 674SFS ; ne plus le perdre comme avant)
+const y2Hdrs = ['Etablissement ligne doc.', 'Commercial du doc.', 'Total TTC ligne', 'Code article', 'Référence interne doc.'];
+const y2Map2 = calc.autoMap(y2Hdrs, calc.Y2_ALIASES);
+const y2Rows2 = [
+  ['GL AC Haussmann', '674SFS', '100', 'A1', '005X'],       // ship-from-store
+  ['GL AC Haussmann', '674GUM01', '300', 'A2', '005Y'],      // corner (vendeur)
+  ['GL AC Haussmann', '674MAELLE01', '200', 'A3', '100Z'],   // corner (autre vendeur)
+  ['Place des tendances', '686001', '150', 'A4', '005W'],
+  ['Lulli Eshop', '610LULLI', '80', 'A5', '1000080'],        // réf NON 005 → doit compter quand même
+  ['GL AC Haussmann', '674GUM01', '-50', 'A6', '005R'],      // retour (TTC<0) → exclu
+];
+const mkt2 = calc.calcMarketplace(rows, map, y2Rows2, y2Map2);
+assert.strictEqual(mkt2.glSFS, 100, 'GL ship-from-store (674SFS)');
+assert.strictEqual(mkt2.glCorner, 500, 'GL corner (674* hors SFS, retour exclu)');
+assert.strictEqual(mkt2.glY2, 600, 'GL Y2 total = corner + SFS');
+assert.strictEqual(mkt2.glTotal, 630, 'GL total = dropshipping OMS (30) + Y2 (600)');
+assert.strictEqual(mkt2.pdt, 150, 'Place des Tendances');
+assert.strictEqual(mkt2.lulli, 80, 'Lulli compté par établissement (réf non-005 incluse)');
+
 const pays = calc.calcByCountry(rows, map);
 // hors marketplace : France (row1, 100€, 1 cmd, 1 pièce) et Royaume-Uni (row2, 80€, 1 cmd, 2 pièces)
 assert.strictEqual(pays.length, 2, 'nombre de pays (hors mkt)');
@@ -104,6 +124,47 @@ assert.strictEqual(can.qteCmd, 4, 'qté commandée');
 assert.strictEqual(can.commandesImpactees, 1, 'commandes impactées (C1)');
 assert.strictEqual(can.caAnnuleEstime, 130, 'CA annulé estimé (50 + 80)');
 assert.ok(Math.abs(can.tauxPieces - 0.5) < 1e-9, 'taux annulation pièces');
+
+// ── Statuts d'annulation : Stock/Client/Mags comptés, fraude/impayé exclus ───
+assert.strictEqual(calc.isCancelStatus('Annulé Stock'), true, 'Annulé Stock compté');
+assert.strictEqual(calc.isCancelStatus('Annulé par le Client'), true, 'Annulé par le Client compté');
+assert.strictEqual(calc.isCancelStatus('Annulé Mags'), true, 'Annulé Mags compté');
+assert.strictEqual(calc.isCancelStatus('CancelledCustomer'), true, 'CancelledCustomer (API) compté');
+assert.strictEqual(calc.isCancelStatus('CancelledInternal'), true, 'CancelledInternal (API) compté');
+assert.strictEqual(calc.isCancelStatus('CancelledBlacklistFraud'), false, 'fraude exclue');
+assert.strictEqual(calc.isCancelStatus('Annulé Impayé'), false, 'impayé exclu');
+assert.strictEqual(calc.isCancelStatus('Préparation'), false, 'préparation = pas une annulation');
+// avec colonne Statut : la ligne fraude (non-livré>0) est EXCLUE du taux, le client est comptée
+const cHdrs2 = ['Prix de vente paye', 'quantites commandees', 'Quantite non livre', 'Numeros', 'Type Paiement', 'Statut commande'];
+const cMap2 = calc.autoMap(cHdrs2, calc.OMS_ALIASES);
+const cRows2 = [
+  ['100', '1', '1', 'D1', 'Carte Bancaire', 'Annulé par le Client'],  // compté
+  ['80', '1', '1', 'D2', 'Carte Bancaire', 'Annulé Stock'],           // compté
+  ['60', '1', '1', 'D3', 'Carte Bancaire', 'Annulé Impayé'],          // EXCLU (demande)
+  ['40', '1', '0', 'D4', 'Carte Bancaire', 'Préparation'],            // pas non-livré
+];
+const can2 = calc.calcCancellations(cRows2, cMap2);
+assert.strictEqual(can2.commandesImpactees, 2, 'D1 (client) + D2 (stock) comptées, D3 (impayé) exclue');
+assert.strictEqual(can2.caAnnuleEstime, 180, 'CA annulé = 100 + 80 (impayé exclu)');
+
+// ── Taux d'annulation marketplace par canal (GL.com / Printemps) ─────────────
+const mcHdrs = ['Prix de vente paye', 'quantites commandees', 'Quantite non livre', 'Numeros', 'Type Paiement', 'Statut commande'];
+const mcMap = calc.autoMap(mcHdrs, calc.OMS_ALIASES);
+const mcRows = [
+  ['100', '1', '1', 'G1', 'GL.com', 'Annulé Stock'],     // GL annulée
+  ['90', '1', '0', 'G2', 'GL.com', 'Préparation'],        // GL ok
+  ['80', '1', '0', 'G3', 'GL.com', 'Expédiée'],           // GL ok
+  ['70', '1', '1', 'P1', 'Printemps', 'Annulé par le Client'], // Printemps annulée
+  ['60', '1', '0', 'P2', 'Printemps', 'Préparation'],     // Printemps ok
+  ['50', '1', '1', 'E1', 'Carte Bancaire', 'Annulé Stock'], // EShop → hors marketplace
+];
+const mc = calc.calcMarketplaceCancelRefund(mcRows, mcMap, [], {});
+const gl = mc.cancellations.byChannel.find(x => x.ch === 'GL.com');
+const pr = mc.cancellations.byChannel.find(x => x.ch === 'Printemps');
+assert.ok(Math.abs(gl.taux - 1 / 3) < 1e-9, 'taux annul. GL.com = 1/3 commandes');
+assert.strictEqual(gl.commandes, 3, 'GL.com : 3 commandes au dénominateur');
+assert.ok(Math.abs(pr.taux - 1 / 2) < 1e-9, 'taux annul. Printemps = 1/2 commandes');
+assert.ok(!mc.cancellations.byChannel.some(x => x.ch === 'Carte Bancaire'), 'EShop exclu du taux marketplace');
 
 // ── Retours ──────────────────────────────────────────────────────────────────
 const rHdrs = ['Date Creation', 'Montant Rembourse', 'Nb Colisages Rembourses', 'Numero de Retour', 'Raison', 'Ref Ext', 'Pays livraison', 'Destination du retour'];
