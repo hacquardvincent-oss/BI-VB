@@ -182,6 +182,24 @@ assert.strictEqual(ret.reasons[0].reason, 'Taille', 'raison #1 par montant');
 assert.strictEqual(ret.reasons[0].montant, 130, 'montant raison Taille');
 assert.strictEqual(ret.reasons[0].qte, 2, 'pièces retournées pour raison Taille (1+1)');
 
+// ── Motifs de retour catégorisés (taille / qualité / préférence) + sens taille ─
+const rrHdrs = ['Montant Rembourse', 'Nb Colisages Rembourses', 'Raison', 'Ref Ext'];
+const rrMap = calc.autoMap(rrHdrs, calc.RET_ALIASES);
+const rrRows = [
+  ['100', '1', "L'article est trop petit", 'REFA'],
+  ['80', '1', "L'article est trop grand", 'REFA'],
+  ['60', '2', "L'article ne me plait pas", 'REFB'],
+  ['50', '1', "L'article est défectueux", 'REFB'],
+];
+const rr = calc.calcReturnReasons(rrRows, rrMap, { REFA: 'Robes', REFB: 'Sacs' });
+const tc = rr.categories.find(c => c.cat === 'Taille / coupe');
+assert.strictEqual(tc.qte, 2, 'catégorie taille/coupe = 2 pièces (trop petit + trop grand)');
+assert.strictEqual(rr.fit.petit.qte, 1, 'trop petit = 1');
+assert.strictEqual(rr.fit.grand.qte, 1, 'trop grand = 1');
+assert.ok(rr.categories.find(c => c.cat === 'Qualité / conformité'), 'catégorie qualité présente (défectueux)');
+const robes = rr.byFamille.find(f => f.famille === 'Robes');
+assert.strictEqual(robes.tailleQte, 2, 'Robes : 2 pièces retournées pour motif taille');
+
 // ── Saison (référentiel) ─────────────────────────────────────────────────────
 const refHdrs = ['Ref. Externe', 'Saison', 'Regroupement'];
 const refDs = { hdrs: refHdrs, rows: [['REFA', '25E', 'Robes'], ['REFB', '24H', 'Sacs']], map: calc.autoMap(refHdrs, calc.REF_ALIASES) };

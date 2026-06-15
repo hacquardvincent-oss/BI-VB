@@ -264,9 +264,14 @@ au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
   `byCanal` (qui a annulé quoi), **`byStatut`** (audit Cancelled vs ShippedIncomplete, comparaison au pivot OMS).
 
 ### Retours — distinct des annulations (APRÈS livraison)
-`calcReturns` (caRetourne, qte, nbRetours, `reasons`, `countries`, `destinations`). `topReturnedProducts` (retprod, top 10
-+ raisons par produit). `returnsByRef`/`salesByRef`/`productProfitability` (caNet = caVendu − caRetourné, tauxRetour =
-qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
+`calcReturns` (caRetourne, qte, nbRetours, `reasons` [avec `qte` par raison], `countries`, `destinations`). `topReturnedProducts`
+(retprod, top 10 + raisons par produit). `returnsByRef`/`salesByRef`/`productProfitability` (caNet = caVendu − caRetourné,
+tauxRetour = qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
+**`calcReturnReasons(retRows, retMap, refMap)`** (carte `returnreasons`, thème AN) : catégorise les motifs en **Taille/coupe**
+(~60 % du CA retourné), **Qualité/conformité**, **Préférence/multi-taille** ; `fit` = trop petit vs trop grand (sens de
+l'écart de taille) ; `byFamille` = écart de taille par famille (réf→famille) → action guide des tailles / fiches produit.
+Source = export retours uploadé (colonne « Raison » détaillée + « Taille »). Carte retours : deltas en **inversé** (une
+baisse de retours = vert).
 
 ### Marketplace
 - **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours)
