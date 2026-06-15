@@ -290,7 +290,7 @@ const daysBetween = (a, b) => { const pa = a.split('-').map(Number), pb = b.spli
 
 // guard : ne garde que les commandes dont la date de CRÉATION est dans [from,to] (sécurité delta).
 async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) {
-  const oms = [], ret = [], ids = new Set(); let n = 0;
+  const oms = [], ret = [], ids = new Set(), eanMap = {}; let n = 0;
   const limit = parseInt(process.env.WSHOP_PAGE || '1000', 10) || 1000;
   const inPeriod = o => {
     if (!guard) return true;
@@ -308,6 +308,16 @@ async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) 
       n++;
       for (const ro of orderToRows(o)) oms.push(OMS_HDRS.map(h => (ro[h] == null ? '' : String(ro[h]))));
       for (const rr of orderRetRowObjs(o)) ret.push(RET_HDRS.map(h => (rr[h] == null ? '' : String(rr[h]))));
+      // Index ean → { référence externe, désignation } : sert à enrichir les retours /returns/get
+      // (dont l'item ne porte QUE l'ean) avec la réf coloris + la désignation produit.
+      (Array.isArray(o.orderItems) ? o.orderItems : []).forEach(it => {
+        const ean = (it.ean || '').toString().trim(); if (!ean || eanMap[ean]) return;
+        const title = (it.title || it.name || '').toString().trim();
+        const color = (it.color || it.colour || '').toString().trim();
+        const des = (color && title && !title.toLowerCase().includes(color.toLowerCase())) ? `${title} - ${color}` : (title || '');
+        const ref = (it.reference || '').toString().trim();
+        eanMap[ean] = { ref: ref || ean, des: des || ref || ean };
+      });
     }
     if (onCount) onCount(n);
   };
@@ -330,7 +340,7 @@ async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) 
     }
   };
   await collectChunk(fromISO, toISO);
-  return { oms, ret, count: n, ids };
+  return { oms, ret, count: n, ids, eanMap };
 }
 
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
@@ -388,9 +398,10 @@ async function refresh(opts = {}, cb = {}) {
     // Retours niveau produit (top produits retournés) via /returns/get — best-effort.
     try {
       if (cb.phase) cb.phase('Retours produits…');
+      const eanMap = Object.assign({}, (N1 && N1.eanMap) || {}, (N && N.eanMap) || {}); // N prioritaire
       const rN = await fetchReturnsRange(from, to);
-      store.setDataset('retprod', 'N', returnsProductDataset(rN));
-      if (N1) { const rN1 = await fetchReturnsRange(cfrom, cto); store.setDataset('retprod', 'N1', returnsProductDataset(rN1)); }
+      store.setDataset('retprod', 'N', returnsProductDataset(rN, eanMap));
+      if (N1) { const rN1 = await fetchReturnsRange(cfrom, cto); store.setDataset('retprod', 'N1', returnsProductDataset(rN1, eanMap)); }
     } catch (e) { /* best-effort */ }
   }
   return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length, alerts };
@@ -814,7 +825,7 @@ function returnReasonLabel(code, comment) {
 // Retours niveau produit (pour le top produits retournés + motifs) : une ligne par article retourné.
 // ⚠️ L'item /returns/get ne porte PAS le titre (seulement l'ean) → on ne jette plus la ligne faute de
 // désignation (on retombe sur l'ean). Date = closedAt (= DATE DE VALIDATION du retour). reason = code mappé.
-function returnsProductDataset(returns) {
+function returnsProductDataset(returns, eanMap = {}) {
   const rows = [];
   returns.forEach(rt => {
     const rawDate = (rt.closedAt || rt.validatedAt || rt.date || rt.returnDate || rt.requestedAt || rt.createdAt || '').toString();
@@ -824,19 +835,21 @@ function returnsProductDataset(returns) {
     const commentRet = (rt.comment || '').toString();
     (rt.orderItems || []).forEach(it => {
       if (it.refund === false) return; // uniquement les lignes effectivement remboursées
-      const title = (it.title || it.name || '').toString().trim();
-      const color = (it.color || it.colour || '').toString().trim();
       const ean = (it.ean || '').toString().trim();
-      const des = (color && title && !title.toLowerCase().includes(color.toLowerCase())) ? `${title} - ${color}` : (title || ean);
-      if (!des) return; // ni titre ni ean → ligne inexploitable
+      // L'item /returns/get ne porte que l'ean → on résout réf coloris + désignation via l'index OMS.
+      const map = (ean && eanMap[ean]) || {};
+      const title = (it.title || it.name || '').toString().trim();
+      const ref = map.ref || (it.reference || '').toString().trim() || ean;
+      const des = map.des || title || ean;
+      if (!des && !ref) return;
       const q = parseInt(it.quantity) || 0;
       const unit = toNum(it.originalDiscountedUnitPrice) || toNum(it.originalUnitPrice) || toNum(it.compareAtPrice);
       const code = (it.reason != null && it.reason !== '') ? it.reason : reasonRet;
       const reason = returnReasonLabel(code, it.comment || commentRet);
-      rows.push([date, des, String(q), (unit * q).toFixed(2), reason]);
+      rows.push([date, des, String(q), (unit * q).toFixed(2), reason, ref]);
     });
   });
-  return { hdrs: ['Date validation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+  return { hdrs: ['Date validation', 'Designation', 'Nb retournes', 'Montant', 'Raison', 'Ref. externe'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4, ref_ext: 5 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
 // Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
 async function fetchBackInStock(fromISO, toISO) {

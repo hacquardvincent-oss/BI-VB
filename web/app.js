@@ -947,14 +947,11 @@ function renderReport(rep) {
       ['Engagement', fPct(g.engRateTotal), g.engRateTotal, g1 && g1.engRateTotal],
       ['Revenu GA', fEur(g.totalRevenue), g.totalRevenue, g1 && g1.totalRevenue],
     ].map(([l, v, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${v} ${n1 ? delta(n, n1) : ''}</div></div>`).join('');
-    const b1 = {}; ((g1 && g1.byCanal) || []).forEach(x => { b1[x.canal] = x; });
-    const canaux = [...g.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 12)
-      .map(x => { const p = b1[x.canal] || {}; return `<tr><td>${esc(x.canal)}</td><td>${fInt(sN(x.sessions))}</td><td>${p.sessions ? delta(sN(x.sessions), sN1(p.sessions)) : '—'}</td><td>${fPct(x.engRate)}</td><td>${fEur(x.revenue)}</td><td>${p.revenue ? delta(x.revenue, p.revenue) : '—'}</td></tr>`; }).join('');
-    const totRow = `<tr style="font-weight:700"><td>TOTAL</td><td>${fInt(totSessN)}</td><td>${cleanN1 ? delta(totSessN, cleanN1) : '—'}</td><td>${fPct(g.engRateTotal)}</td><td>${fEur(g.totalRevenue)}</td><td>${g1 ? delta(g.totalRevenue, g1.totalRevenue) : '—'}</td></tr>`;
+    // Le détail PAR CANAL est volontairement retiré d'ici : le « Récap par type de canal » (canaltype)
+    // vient juste après les KPI, puis « Efficacité par canal » (channels) porte le détail canal par canal.
     gaCard = `<div class="card"><h3>Trafic (Google Analytics) — N vs N-1</h3>
-      <div class="kgrid" style="margin-bottom:10px">${strip}</div>
-      <table><thead><tr><th>Canal</th><th>Sessions</th><th>Δ</th><th>Engagement</th><th>Revenu</th><th>Δ</th></tr></thead><tbody>${canaux}${totRow}</tbody></table>
-      ${reconciled ? `<div class="note">ℹ️ Sessions <b>alignées sur le total plateforme</b> (jeu <code>gasess</code> date×pays, = celui du Bilan). La ventilation par canal (rapport GA multi-dimensions) sur-compterait sinon (${fInt(g.totalSessions)} brut) → les sessions par canal sont mises à l'échelle des proportions GA.</div>` : ''}</div>`;
+      <div class="kgrid">${strip}</div>
+      ${reconciled ? `<div class="note" style="margin-top:8px">ℹ️ Sessions <b>alignées sur le total plateforme</b> (jeu <code>gasess</code> date×pays, = celui du Bilan). La ventilation par canal sur-compterait sinon (${fInt(g.totalSessions)} brut) → les sessions par canal (cartes suivantes) sont mises à l'échelle des proportions GA.</div>` : ''}</div>`;
   }
 
   const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€');
@@ -1000,8 +997,7 @@ function renderReport(rep) {
          <button class="pb gran" data-gran="day">Jour</button>
          <button class="pb gran" data-gran="week">Semaine</button></div>
        <div style="height:240px"><canvas id="dailyChart"></canvas></div>
-       <h3 style="margin-top:14px">Trafic & taux d'ajout panier</h3><div style="height:190px"><canvas id="trafChart"></canvas></div>
-       <h3 style="margin-top:14px">Taux de transformation</h3><div style="height:160px"><canvas id="ttChart"></canvas></div></div>`
+       <h3 style="margin-top:14px">Trafic, taux d'ajout panier & taux de transformation</h3><div style="height:200px"><canvas id="trafChart"></canvas></div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -1457,7 +1453,17 @@ function renderReport(rep) {
       <tbody>${mkRows.map(r => `<tr${r.total ? ' style="font-weight:700"' : ''}><td${r.sub ? ' style="padding-left:22px;color:var(--t2);font-size:12px"' : ''}>${r.sub ? '└ ' : ''}${r.label}</td><td>${fEur(r.n)}</td><td>${fEur(r.n1)}</td><td>${delta(r.n, r.n1)}</td></tr>`).join('')}</tbody></table>
       <div class="note">Galeries Lafayette ventilé en sous-canaux : <b>dropshipping</b> (WSHOP, type GL.com), <b>corner GL Haussmann</b> et <b>ship-from-store</b> (Y2). Enseignes Y2 identifiées par établissement (corner + SFS inclus). Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
-  const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
+  const famArr = rep.famille || [];
+  const famTotN = famArr.reduce((s, f) => s + (f.n || 0), 0), famTotN1 = famArr.reduce((s, f) => s + (f.n1 || 0), 0);
+  const famTotRow = `<tr style="font-weight:700"><td>TOTAL CA (référencé)</td><td>${fEur(famTotN)}</td><td>${famTotN1 ? fEur(famTotN1) : '—'}</td><td>${famTotN1 ? delta(famTotN, famTotN1) : '—'}</td></tr>`;
+  const unref = rep.familleUnref || { items: [], total: 0, count: 0 };
+  const unrefRow = unref.count ? `<tr id="unrefToggle" style="cursor:pointer"><td style="color:var(--r)">⚠️ Produits non référencés <span style="font-size:10px">(cliquer pour la liste)</span></td><td style="color:var(--r)">${fEur(unref.total)}</td><td colspan="2" style="color:var(--t3);font-size:11px">${fInt(unref.count)} réf. à ajouter au référentiel</td></tr>` : '';
+  const unrefList = unref.count ? `<div id="unrefList" class="hidden" style="margin-top:8px">
+      <div class="note">Ces références EShop ne sont rattachées à <b>aucune famille</b> (absentes du référentiel produit versionné sur GitHub). Ajoute-les au référentiel pour qu'elles entrent dans le CA par famille. <button class="btn" id="unrefCopy">📋 Copier (réf + désignation)</button></div>
+      <table style="font-size:11px"><thead><tr><th>Réf. externe (coloris)</th><th>Désignation produit</th><th>CA</th><th>Qté</th></tr></thead><tbody>${unref.items.slice(0, 300).map(p => `<tr><td>${esc(p.ref)}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 48))}</td><td>${fEur(p.ca)}</td><td>${fInt(p.qte)}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div>
+      <table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}${famTotRow}${unrefRow}</tbody></table>
+      ${unrefList}</div>` : '';
   // International : performance par famille pour le top 5 pays
   let fampaysCard = '';
   if (rep.familleParPays && rep.familleParPays.length) {
@@ -2264,6 +2270,17 @@ function buildBilan(rep) {
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
+  // Produits non référencés : ligne cliquable → déplie la liste + bouton « copier » (réf + désignation).
+  const ut = document.getElementById('unrefToggle');
+  if (ut) ut.addEventListener('click', () => { const l = document.getElementById('unrefList'); if (l) l.classList.toggle('hidden'); });
+  const uc = document.getElementById('unrefCopy');
+  if (uc) uc.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    const items = (LAST_REP && LAST_REP.familleUnref && LAST_REP.familleUnref.items) || [];
+    const txt = items.map(p => `${p.ref}\t${p.des}`).join('\n');
+    try { await navigator.clipboard.writeText(txt); const o = uc.textContent; uc.textContent = '✓ Copié'; setTimeout(() => { uc.textContent = o; }, 1500); }
+    catch (e) { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'width:100%;height:140px;margin-top:6px'; uc.parentNode.appendChild(ta); ta.select(); }
+  });
   const out = () => document.getElementById('bilanIASynth');
   // Copier le contexte pour Claude.ai — 0 € d'API (repli textarea si presse-papier bloqué)
   const cp = document.getElementById('bilanCopy');
@@ -2717,12 +2734,6 @@ function renderDailyChart(rep) {
     { type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#1B9E6A', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
   ], { x: xax, y: { position: 'left', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
   else if (_charts.trafChart) { _charts.trafChart.destroy(); }
-  // TT N vs N-1
-  if (ttN) mk('ttChart', [
-    { type: 'line', label: 'TT N', data: ttN, borderColor: '#1B9E6A', backgroundColor: 'rgba(27,158,106,.1)', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true, fill: true },
-    { type: 'line', label: 'TT N-1', data: ttN1, borderColor: '#9CA1AB', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-  ], { x: xax, y: { ticks: { color: '#1B9E6A', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(20,22,28,.06)' } } }, true);
-  else if (_charts.ttChart) { _charts.ttChart.destroy(); }
 }
 
 // GA4 API
