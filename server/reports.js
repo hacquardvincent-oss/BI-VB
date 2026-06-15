@@ -492,7 +492,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const src1 = noN1 ? null : (omsN1 || omsN), map1 = omsN1 ? mapN1 : omsN.map;
     const rows1 = src1 ? calc.filterOutstore(calc.filterDim(calc.filterRows(src1.rows, map1, isoShiftDays(tlStart, -364), isoShiftDays(tlEnd, -364), false), map1, dim), map1) : [];
     const byDate1 = {}; calc.dailySeries(rows1, map1, gaN1f, sessByDayN1).forEach(e => { byDate1[e.date] = e; });
-    return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, emailVol: eN.by[d.date] || 0, emailVolN1: eN1.by[dShift] || 0, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null }; });
+    return serie.map(d => { const dShift = isoShiftDays(d.date, -364); const e1 = byDate1[dShift]; return { ...d, email: (eN.by[d.date] || 0) >= eN.thr, emailN1: (eN1.by[dShift] || 0) >= eN1.thr, emailVol: eN.by[d.date] || 0, emailVolN1: eN1.by[dShift] || 0, caN1: e1 ? e1.ca : null, ttN1: e1 ? e1.tt : null, addN1: e1 ? e1.addRate : null, sessN1: e1 ? e1.sessions : null }; });
   })();
   // 2e suivi temporel : CA N/N-1 (repris de la timeline) + sessions des meilleures campagnes N & N-1.
   const timeline2 = (timeline && timeline.length) ? (() => {
@@ -547,16 +547,20 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   }
 
   // ── Retours ──
+  // Le taux/dénombrement des retours est daté sur la DATE DE VALIDATION du retour (et non la date de
+  // création) quand l'export la fournit (`date_valid`) → on l'utilise comme date de filtrage.
+  const retDateMap = ds => (ds && ds.map && ds.map.date_valid !== undefined) ? Object.assign({}, ds.map, { date: ds.map.date_valid }) : (ds ? ds.map : {});
   let returns = null;
   if (retN) {
-    const retRowsN = calc.filterDim(calc.filterRows(retN.rows, retN.map, from, to, isAll), retN.map, dim);
+    const retMapNf = retDateMap(retN);
+    const retRowsN = calc.filterDim(calc.filterRows(retN.rows, retMapNf, from, to, isAll), retN.map, dim);
     const rN = calc.calcReturns(retRowsN, retN.map);
     let rN1 = null;
     if (retN1) {
-      const retRowsN1 = calc.filterDim(isAll ? retN1.rows : calc.filterRows(retN1.rows, retN1.map, cf, ct, false), retN1.map, dim);
+      const retRowsN1 = calc.filterDim(isAll ? retN1.rows : calc.filterRows(retN1.rows, retDateMap(retN1), cf, ct, false), retN1.map, dim);
       rN1 = calc.calcReturns(retRowsN1, retN1.map);
     } else if (!isAll && !noN1) {
-      const rr = calc.filterDim(calc.filterRows(retN.rows, retN.map, cf, ct, false), retN.map, dim);
+      const rr = calc.filterDim(calc.filterRows(retN.rows, retMapNf, cf, ct, false), retN.map, dim);
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
@@ -583,7 +587,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
   // ── Analyses produits (Lot B) ──
   const salesRef = calc.salesByRef(rowsN, omsN.map);
-  const retRowsForProd = retN ? calc.filterDim(calc.filterRows(retN.rows, retN.map, from, to, isAll), retN.map, dim) : [];
+  const retRowsForProd = retN ? calc.filterDim(calc.filterRows(retN.rows, retDateMap(retN), from, to, isAll), retN.map, dim) : [];
   const retRef = retN ? calc.returnsByRef(retRowsForProd, retN.map) : {};
   const prof = calc.productProfitability(salesRef, retRef);
   const produits = {
@@ -593,6 +597,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     topVendus: prof.slice().sort((a, b) => b.caVendu - a.caVendu).slice(0, 10),
     topRetournes: retN ? prof.filter(p => p.caRetourne > 0).sort((a, b) => b.caRetourne - a.caRetourne).slice(0, 10) : [],
   };
+  // Produits au TAUX de retour le plus élevé (qté retournée ÷ qté vendue), seuil mini de ventes pour le sens.
+  // Issu de la jointure ret×ventes par référence → fonctionne avec l'export retours détaillé uploadé.
+  if (returns) returns.topRateProducts = prof.filter(p => p.qteVendue >= 3 && p.qteRetournee > 0).sort((a, b) => b.tauxRetour - a.tauxRetour).slice(0, 12);
 
   // ── Comparaison de saison (Implantation E26=N vs E25=N-1) ──
   // salesRef est indexé par Ref. externe (= RC) sur les ventes EShop de la période.
