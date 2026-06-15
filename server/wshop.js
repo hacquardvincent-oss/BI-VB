@@ -657,9 +657,11 @@ router.get('/ping', requireAuth, async (req, res) => {
     const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
     const arrOf = r => (r && r.__err) ? null : (Array.isArray(r) ? r : (r && (r.data || r.results || r.returns)) || []);
     const safeKeys = obj => Object.keys(obj || {}).filter(k => !PII.test(k));
-    const [retR, bisR] = await Promise.all([
+    const [retR, bisR, invR, bisAlt] = await Promise.all([
       wt(apiPost('/api/v1/returns/get', rWin), 22000, 'returns'),
       wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bWin), 12000, 'bis'),
+      wt(apiPost('/api/v1/inventory/get', { in_stock: true, page: 1, limit: 20 }), 15000, 'inventory'),
+      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', { page: 1, limit: 20 }), 12000, 'bis-noargs'),
     ]);
     // Retours détaillés : existe-t-il un champ MOTIF renseigné (au niveau retour ET au niveau article) ?
     if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err + ' (endpoint /returns/get lent ; l\'import complet le récupère en tâche de fond, sans ce timeout)';
@@ -685,12 +687,30 @@ router.get('/ping', requireAuth, async (req, res) => {
     if (bisR && bisR.__err) out.probeBackInStock = 'KO: ' + bisR.__err;
     else {
       const ba = arrOf(bisR) || [];
-      const b0 = ba[0] || null;
+      const baAlt = arrOf(bisAlt) || [];
+      const b0 = ba[0] || baAlt[0] || null;
       out.probeBackInStock = {
         count: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
-        keys: b0 ? safeKeys(b0) : '(0 abonnement sur 90 j → pas de demande « prévenez-moi », ou module non activé)',
+        // Variante SANS date ni exclude_anonymized_customer → si elle ramène des lignes alors que la
+        // requête datée renvoie 0, le 0 vient du filtre (date ou exclusion des clients anonymisés).
+        countSansFiltre: (bisAlt && bisAlt.__err) ? ('KO: ' + bisAlt.__err) : baAlt.length,
+        keys: b0 ? safeKeys(b0) : '(0 abonnement → voir countSansFiltre)',
         itemKeys: (b0 && b0.item) ? safeKeys(b0.item) : '(pas de sous-objet item)',
-        statutsDistinct: [...new Set(ba.map(s => (s.status || '(vide)')))].slice(0, 10),
+        statutsDistinct: [...new Set([...ba, ...baAlt].map(s => (s.status || '(vide)')))].slice(0, 10),
+      };
+    }
+    // Stock (inventory) : l'API porte-t-elle le détail PAR MAGASIN (comme l'export) ou juste l'agrégat ?
+    if (invR && invR.__err) out.probeInventory = 'KO: ' + invR.__err;
+    else {
+      const ia = arrOf(invR) || [];
+      const i0 = ia[0] || null;
+      const keys = i0 ? safeKeys(i0) : [];
+      const STORE = /(store|magasin|mag|warehouse|entrepot|location|site|boutique|stock_location)/i;
+      out.probeInventory = {
+        count: ia.length,
+        keys: i0 ? keys : '(0 ligne inventaire)',
+        detailMagasin: Array.isArray(keys) ? (keys.some(k => STORE.test(k)) ? 'OUI — champs magasin/localisation présents' : 'NON — agrégé (pas de champ magasin)') : '—',
+        exemple: i0 ? (() => { const o = {}; keys.forEach(k => { const v = i0[k]; if (typeof v === 'number' || (typeof v === 'string' && v.length <= 40)) o[k] = v; }); return o; })() : null,
       };
     }
   } catch (e) { out.probeReturns = out.probeReturns || ('erreur sonde: ' + e.message); }
