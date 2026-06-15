@@ -652,7 +652,10 @@ router.get('/ping', requireAuth, async (req, res) => {
     const rFrom = new Date(); rFrom.setDate(rFrom.getDate() - 7);
     const bFrom = new Date(); bFrom.setDate(bFrom.getDate() - 90);
     const rWin = { begin: `${iso(rFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50 };
-    const bWin = { begin: `${iso(bFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50, exclude_anonymized_customer: true };
+    // back-in-stock : l'API attend des DATES (YYYY-MM-DD) → bWin = date-only (correctif). bAlt = ancien
+    // format datetime, pour CONFIRMER que c'était la cause du 0.
+    const bWin = { begin: iso(bFrom), end: iso(to), page: 1, limit: 50 };
+    const bAltWin = { begin: `${iso(bFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50 };
     const wt = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
     const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
     const arrOf = r => (r && r.__err) ? null : (Array.isArray(r) ? r : (r && (r.data || r.results || r.returns)) || []);
@@ -661,7 +664,7 @@ router.get('/ping', requireAuth, async (req, res) => {
       wt(apiPost('/api/v1/returns/get', rWin), 22000, 'returns'),
       wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bWin), 12000, 'bis'),
       wt(apiPost('/api/v1/inventory/get', { in_stock: true, page: 1, limit: 20 }), 15000, 'inventory'),
-      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', { page: 1, limit: 20 }), 12000, 'bis-noargs'),
+      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bAltWin), 12000, 'bis-datetime'),
     ]);
     // Retours détaillés : existe-t-il un champ MOTIF renseigné (au niveau retour ET au niveau article) ?
     if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err + ' (endpoint /returns/get lent ; l\'import complet le récupère en tâche de fond, sans ce timeout)';
@@ -671,16 +674,18 @@ router.get('/ping', requireAuth, async (req, res) => {
       const items0 = (r0 && Array.isArray(r0.orderItems)) ? r0.orderItems : [];
       const reasonFields = ['reason', 'returnReason', 'motif', 'comment', 'returnMotive', 'cause', 'refundType'];
       const found = {};
+      const bumpV = (f, v) => { const m = (found[f] = found[f] || {}); m[v] = (m[v] || 0) + 1; };
       ra.forEach(rt => {
-        reasonFields.forEach(f => { const v = (rt && rt[f] != null) ? String(rt[f]).trim() : ''; if (v) (found[f] = found[f] || new Set()).add(v); });
-        (Array.isArray(rt.orderItems) ? rt.orderItems : []).forEach(it => reasonFields.forEach(f => { const v = (it && it[f] != null) ? String(it[f]).trim() : ''; if (v) (found['item.' + f] = found['item.' + f] || new Set()).add(v); }));
+        reasonFields.forEach(f => { const v = (rt && rt[f] != null) ? String(rt[f]).trim() : ''; if (v) bumpV(f, v); });
+        (Array.isArray(rt.orderItems) ? rt.orderItems : []).forEach(it => reasonFields.forEach(f => { const v = (it && it[f] != null) ? String(it[f]).trim() : ''; if (v) bumpV('item.' + f, v); }));
       });
-      const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = { distinct: found[k].size, exemples: [...found[k]].slice(0, 8) }; });
+      // Répartition code → nb (triée) → permet de corréler les CODES de l'API aux libellés de l'export.
+      const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = Object.entries(found[k]).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([val, n]) => `${val} ×${n}`); });
       out.probeReturns = {
         count: ra.length, fenetre: `${iso(rFrom)} → ${iso(to)}`,
         returnKeys: r0 ? safeKeys(r0) : '(0 retour sur 7 j — élargir la fenêtre ?)',
         itemKeys: items0[0] ? safeKeys(items0[0]) : '(aucun orderItem)',
-        motifsTrouves: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné → l\'API ne porte que le type de remboursement, pas de motif détaillé (taille/qualité).',
+        motifsRepartition: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné.',
       };
     }
     // Alertes stock : les abonnements back-in-stock existent-ils sur 90 j ?
@@ -690,11 +695,11 @@ router.get('/ping', requireAuth, async (req, res) => {
       const baAlt = arrOf(bisAlt) || [];
       const b0 = ba[0] || baAlt[0] || null;
       out.probeBackInStock = {
-        count: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
-        // Variante SANS date ni exclude_anonymized_customer → si elle ramène des lignes alors que la
-        // requête datée renvoie 0, le 0 vient du filtre (date ou exclusion des clients anonymisés).
-        countSansFiltre: (bisAlt && bisAlt.__err) ? ('KO: ' + bisAlt.__err) : baAlt.length,
-        keys: b0 ? safeKeys(b0) : '(0 abonnement → voir countSansFiltre)',
+        countDateOnly: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
+        // Comparaison format DATE (YYYY-MM-DD, correctif) vs DATETIME (ancien) → si date-only ramène des
+        // lignes et datetime 0, c'était bien le format de date la cause du 0.
+        countDatetime: (bisAlt && bisAlt.__err) ? ('KO: ' + bisAlt.__err) : baAlt.length,
+        keys: b0 ? safeKeys(b0) : '(0 abonnement)',
         itemKeys: (b0 && b0.item) ? safeKeys(b0.item) : '(pas de sous-objet item)',
         statutsDistinct: [...new Set([...ba, ...baAlt].map(s => (s.status || '(vide)')))].slice(0, 10),
       };
@@ -794,34 +799,52 @@ function returnsDataset(returns, eanToRef) {
   const rows = Object.entries(by).map(([ref, v]) => [ref, String(v.qte), v.montant.toFixed(2)]);
   return { hdrs: ['Ref. externe', 'Nb colisages rembourses', 'Montant rembourse'], rows, map: { ref_ext: 0, qte: 1, montant: 2 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
-// Retours niveau produit (pour le top produits retournés) : une ligne par article retourné,
-// avec date (filtrable par période), désignation (titre + coloris), quantité, montant et raison.
+// Motifs de retour WSHOP : l'API /returns/get renvoie un CODE numérique (configuré côté marchand),
+// pas un libellé. Mapping code → libellé, surchargeable via l'env WSHOP_RETURN_REASONS (JSON,
+// ex. {"1":"Trop petit","8":"Trop grand"}). À défaut, on garde le code (« Motif n°X ») + le commentaire.
+let RETURN_REASON_LABELS = {};
+try { RETURN_REASON_LABELS = JSON.parse(process.env.WSHOP_RETURN_REASONS || '{}') || {}; } catch (e) { RETURN_REASON_LABELS = {}; }
+function returnReasonLabel(code, comment) {
+  const c = String(code == null ? '' : code).trim();
+  if (c && RETURN_REASON_LABELS[c]) return RETURN_REASON_LABELS[c];
+  const cm = (comment || '').toString().trim();
+  if (c) return cm ? `Motif n°${c} — ${cm.slice(0, 40)}` : `Motif n°${c}`;
+  return cm || '(non précisé)';
+}
+// Retours niveau produit (pour le top produits retournés + motifs) : une ligne par article retourné.
+// ⚠️ L'item /returns/get ne porte PAS le titre (seulement l'ean) → on ne jette plus la ligne faute de
+// désignation (on retombe sur l'ean). Date = closedAt (= DATE DE VALIDATION du retour). reason = code mappé.
 function returnsProductDataset(returns) {
   const rows = [];
   returns.forEach(rt => {
-    const reasonRet = (rt.reason || rt.returnReason || rt.motif || rt.comment || '').toString().trim();
-    const rawDate = (rt.date || rt.returnDate || rt.createdAt || rt.created_at || '').toString();
+    const rawDate = (rt.closedAt || rt.validatedAt || rt.date || rt.returnDate || rt.requestedAt || rt.createdAt || '').toString();
     const m = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
     const date = m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+    const reasonRet = rt.reason != null ? rt.reason : '';
+    const commentRet = (rt.comment || '').toString();
     (rt.orderItems || []).forEach(it => {
       if (it.refund === false) return; // uniquement les lignes effectivement remboursées
       const title = (it.title || it.name || '').toString().trim();
       const color = (it.color || it.colour || '').toString().trim();
-      const des = color && !title.toLowerCase().includes(color.toLowerCase()) ? `${title} - ${color}` : title;
-      if (!des) return;
+      const ean = (it.ean || '').toString().trim();
+      const des = (color && title && !title.toLowerCase().includes(color.toLowerCase())) ? `${title} - ${color}` : (title || ean);
+      if (!des) return; // ni titre ni ean → ligne inexploitable
       const q = parseInt(it.quantity) || 0;
       const unit = toNum(it.originalDiscountedUnitPrice) || toNum(it.originalUnitPrice) || toNum(it.compareAtPrice);
-      const reason = (it.returnReason || it.reason || reasonRet || '').toString().trim() || '(non précisé)';
+      const code = (it.reason != null && it.reason !== '') ? it.reason : reasonRet;
+      const reason = returnReasonLabel(code, it.comment || commentRet);
       rows.push([date, des, String(q), (unit * q).toFixed(2), reason]);
     });
   });
-  return { hdrs: ['Date creation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
+  return { hdrs: ['Date validation', 'Designation', 'Nb retournes', 'Montant', 'Raison'], rows, map: { date: 0, des: 1, qte: 2, montant: 3, raison: 4 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
 // Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
 async function fetchBackInStock(fromISO, toISO) {
-  const out = []; let page = 1; const limit = 1000;
+  // ⚠️ L'API attend des DATES (YYYY-MM-DD), pas des datetime → on tronque (un datetime renvoyait 0).
+  const begin = (fromISO || '').toString().slice(0, 10), end = (toISO || '').toString().slice(0, 10);
+  const out = []; let page = 1; const limit = 1000; // max API = 1000
   for (let i = 0; i < 300; i++) {
-    const resp = await apiPost('/api/v1/back-in-stock-subscriptions/get', { begin: fromISO, end: toISO, page, limit, exclude_anonymized_customer: true });
+    const resp = await apiPost('/api/v1/back-in-stock-subscriptions/get', { begin, end, page, limit });
     const arr = Array.isArray(resp) ? resp : ((resp && resp.data) || []);
     out.push(...arr);
     if (arr.length < limit) break;
