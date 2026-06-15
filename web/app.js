@@ -38,7 +38,7 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
@@ -104,7 +104,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -120,7 +120,7 @@ const THEME_OF = {
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
-  annulations: 'AN', retours: 'AN',
+  annulations: 'AN', retours: 'AN', returnreasons: 'AN',
   stockalerts: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
@@ -143,7 +143,7 @@ const CARD_LABELS = {
   kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
-  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', stockalerts: 'Alertes stock',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', stockalerts: 'Alertes stock',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
@@ -151,8 +151,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -1074,6 +1074,34 @@ function renderReport(rep) {
       <div class="note"><b>Après livraison</b> : le client renvoie/se fait rembourser. Taux de retour = CA retourné / CA EShop de la période. Top produits retournés = source produit (/returns/get), filtré sur la période. Distinct des annulations (non-expéditions) ci-dessus.</div></div>`;
   }
 
+  // Motifs de retour & taille (merch) : catégorisation + sens d'écart de taille par famille
+  let returnReasonsCard = '';
+  const ran = rep.returns && rep.returns.analysis;
+  if (ran && ran.categories && ran.categories.length) {
+    const catRows = ran.categories.map(c => `<tr><td>${esc(c.cat)}</td><td>${fInt(c.qte)}</td><td>${fEur(c.montant)}</td><td>${fPct(c.share)}</td></tr>`).join('');
+    const p = ran.fit.petit, g = ran.fit.grand;
+    const fitMsg = (p.qte || g.qte)
+      ? (p.qte > g.qte
+        ? `Les articles taillent plutôt <b>petit</b> : ${fInt(p.qte)} retours « trop petit » vs ${fInt(g.qte)} « trop grand » → revoir le guide des tailles à la hausse / préciser les fiches produit.`
+        : (g.qte > p.qte
+          ? `Les articles taillent plutôt <b>grand</b> : ${fInt(g.qte)} « trop grand » vs ${fInt(p.qte)} « trop petit » → revoir le guide des tailles à la baisse.`
+          : `Équilibre trop petit / trop grand (${fInt(p.qte)} vs ${fInt(g.qte)}).`))
+      : 'Pas de motif lié à la taille détecté sur la période.';
+    const famRows = (ran.byFamille || []).map(f => `<tr><td>${esc(f.famille)}</td><td>${fInt(f.qte)}</td><td>${fEur(f.montant)}</td><td>${fInt(f.tailleQte)}</td><td>${fInt(f.petit)} / ${fInt(f.grand)}</td><td>${f.sens === 'taille petit' ? '⬆️ taille petit' : (f.sens === 'taille grand' ? '⬇️ taille grand' : '—')}</td></tr>`).join('');
+    returnReasonsCard = `<div class="card"><h3>👕 Motifs de retour & taille (EShop, hors marketplace)</h3>
+      <div class="kgrid">
+        <div class="kc"><div class="l">Part taille / coupe</div><div class="v">${fPct(ran.tailleShare)}</div><div style="font-size:11px">du CA retourné</div></div>
+        <div class="kc"><div class="l">Trop petit</div><div class="v">${fInt(p.qte)}</div><div style="font-size:11px">${fEur(p.montant)}</div></div>
+        <div class="kc"><div class="l">Trop grand</div><div class="v">${fInt(g.qte)}</div><div style="font-size:11px">${fEur(g.montant)}</div></div>
+      </div>
+      <div class="note" style="margin-top:8px">${fitMsg}</div>
+      <h3 style="margin-top:12px">Catégories de motif</h3>
+      <table><thead><tr><th>Catégorie</th><th>Pièces</th><th>CA retourné</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table>
+      ${famRows ? `<h3 style="margin-top:12px">Familles avec écart de taille (à corriger côté guide/fiches)</h3>
+      <table><thead><tr><th>Famille</th><th>Pièces</th><th>CA retourné</th><th>dont taille</th><th>Petit / grand</th><th>Sens</th></tr></thead><tbody>${famRows}</tbody></table>` : ''}
+      <div class="note">Motif catégorisé depuis l'export retours (colonne « Raison »). <b>Sens</b> : « taille petit » = surtout des « trop petit » → l'article taille petit. La <b>taille</b> est le levier n°1 des retours → guide des tailles & fiches produit.</div></div>`;
+  }
+
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
@@ -1645,7 +1673,7 @@ function renderReport(rep) {
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
-    retours: returnsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    retours: returnsCard, returnreasons: returnReasonsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard, metaads: metaadsCard, metasocial: metasocialCard,

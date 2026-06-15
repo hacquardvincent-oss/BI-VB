@@ -174,6 +174,7 @@ const RET_ALIASES = {
   dest: ['destination du retour'],
   statut: ['statut ret'],
   libelle: ['libelle'],
+  taille: ['taille'],
 };
 // Export de stock (saison) : référence + quantité disponible
 const STOCK_ALIASES = {
@@ -1334,6 +1335,62 @@ function calcReturns(rows, map) {
   };
 }
 
+// ── Motifs de retour : catégorisation (taille / qualité / préférence) + sens d'écart taille ──
+// Source : dataset 'ret' (export retours WSHOP, colonne « Raison » détaillée). La taille pèse ~60 %
+// des retours → croiser par famille indique où revoir le guide des tailles / les fiches produit.
+function returnReasonCategory(reason) {
+  const s = (reason || '').toLowerCase();
+  if (/trop (petit|grand|long|court)|taille|coupe/.test(s)) return 'Taille / coupe';
+  if (/defectu|défectu|qualit|differe|différe|descriptif|image|pas le bon|conform/.test(s)) return 'Qualité / conformité';
+  if (/plait|plaît|2 tailles|deux tailles|volontairement/.test(s)) return 'Préférence / multi-taille';
+  return 'Autre';
+}
+function returnFitDir(reason) {
+  const s = (reason || '').toLowerCase();
+  if (/trop petit/.test(s)) return 'petit';   // l'article taille petit → le client reprend plus grand
+  if (/trop grand/.test(s)) return 'grand';   // l'article taille grand
+  if (/trop long|trop court/.test(s)) return 'long';
+  return null;
+}
+function calcReturnReasons(retRows, retMap, refMap) {
+  if (!retRows || !retRows.length) return null;
+  const mi = retMap.montant, qi = retMap.qte, ri = retMap.raison, refi = retMap.ref_ext;
+  if (ri === undefined) return null;
+  const r2 = x => Math.round(x * 100) / 100;
+  let totQte = 0, totMontant = 0;
+  const cats = {}, fit = { petit: { qte: 0, montant: 0 }, grand: { qte: 0, montant: 0 }, long: { qte: 0, montant: 0 } };
+  const famAgg = {};
+  retRows.forEach(r => {
+    const montant = fN(r[mi]);
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const reason = ((ri !== undefined ? (r[ri] || '').trim() : '')) || '(non précisé)';
+    totQte += q; totMontant += montant;
+    const cat = returnReasonCategory(reason);
+    const ce = cats[cat] || (cats[cat] = { qte: 0, montant: 0 }); ce.qte += q; ce.montant += montant;
+    const dir = returnFitDir(reason);
+    if (dir) { fit[dir].qte += q; fit[dir].montant += montant; }
+    if (refMap) {
+      const ref = (refi !== undefined ? (r[refi] || '').trim() : '');
+      const fam = (ref && refMap[ref]) || '(sans famille)';
+      const fe = famAgg[fam] || (famAgg[fam] = { famille: fam, qte: 0, montant: 0, taille: 0, petit: 0, grand: 0 });
+      fe.qte += q; fe.montant += montant;
+      if (cat === 'Taille / coupe') fe.taille += q;
+      if (dir === 'petit') fe.petit += q; else if (dir === 'grand') fe.grand += q;
+    }
+  });
+  const categories = Object.entries(cats).map(([cat, v]) => ({ cat, qte: v.qte, montant: r2(v.montant), share: totMontant > 0 ? v.montant / totMontant : 0 })).sort((a, b) => b.montant - a.montant);
+  const byFamille = Object.values(famAgg).filter(f => f.famille !== '(sans famille)')
+    .map(f => ({ famille: f.famille, qte: f.qte, montant: r2(f.montant), tailleQte: f.taille, petit: f.petit, grand: f.grand, sens: f.petit > f.grand ? 'taille petit' : (f.grand > f.petit ? 'taille grand' : '—') }))
+    .sort((a, b) => b.montant - a.montant).slice(0, 12);
+  return {
+    total: { qte: totQte, montant: r2(totMontant) },
+    categories,
+    fit: { petit: { qte: fit.petit.qte, montant: r2(fit.petit.montant) }, grand: { qte: fit.grand.qte, montant: r2(fit.grand.montant) }, long: { qte: fit.long.qte, montant: r2(fit.long.montant) } },
+    tailleShare: totMontant > 0 && cats['Taille / coupe'] ? cats['Taille / coupe'].montant / totMontant : 0,
+    byFamille,
+  };
+}
+
 // Top produits retournés (dataset 'retprod' : 1 ligne / article retourné, filtrable par date).
 function topReturnedProducts(rows, map, top = 10) {
   const di = map.des, qi = map.qte, mi = map.montant, ri = map.raison;
@@ -1661,7 +1718,7 @@ module.exports = {
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
-  buildSeasonMap, calcBySeason, calcCancellations, calcReturns, topReturnedProducts,
+  buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

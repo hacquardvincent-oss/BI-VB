@@ -552,6 +552,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
+    // Analyse des motifs de retour (catégorisation taille/qualité/préférence + sens d'écart taille par famille).
+    returns.analysis = calc.calcReturnReasons(retRowsN, retN.map, refMap);
     // ROAS NET (CA net de retours ÷ dépense pub) — intègre les retours, contrairement au ROAS brut.
     const caNetN = kpiEShopN.ca - (rN && rN.caRetourne || 0);
     const caNetN1 = kpiEShopN1 ? (kpiEShopN1.ca - (rN1 && rN1.caRetourne || 0)) : null;
