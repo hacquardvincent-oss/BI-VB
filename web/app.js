@@ -68,7 +68,7 @@ const MODULES = {
     icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
     intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'timeline', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'pays', 'ttpays', 'fampays'],
+    layout: ['kpi', 'ca', 'timeline', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'zonecompare', 'pays', 'ttpays', 'fampays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
@@ -104,7 +104,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -125,7 +125,7 @@ const THEME_OF = {
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
-  pays: 'IN', ttpays: 'IN', fampays: 'IN',
+  zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP',
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
@@ -145,14 +145,14 @@ const CARD_LABELS = {
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
-  campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
+  campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -654,11 +654,26 @@ function comparable364(ymd) {
   d.setUTCDate(d.getUTCDate() - 364);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
+// N-1 « même jour calendaire l'an dernier » (gère les années bissextiles : 29/02 → 28/02).
+function sameDayLastYear(ymd) {
+  if (!ymd) return '';
+  const p = ymd.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0] - 1, p[1] - 1, p[2]));
+  if (d.getUTCMonth() !== p[1] - 1) d.setUTCDate(0); // 29/02 inexistant l'an dernier → dernier jour de février (28)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
 // Recalcule les champs N-1 à partir des champs N (déclenché quand l'utilisateur saisit N).
+// 1 seul jour → même jour calendaire l'an dernier (bissextile géré) ; une plage (ex. semaine
+// lun→dim) → −364 j (52 semaines pile) = même semaine, mêmes jours de la semaine.
 function syncComparable() {
   const nf = document.getElementById('dNfrom').value, nt = document.getElementById('dNto').value;
-  if (nf) document.getElementById('dCfrom').value = comparable364(nf);
-  if (nt) document.getElementById('dCto').value = comparable364(nt);
+  if (nf && nt && nf === nt) {
+    const d = sameDayLastYear(nf);
+    document.getElementById('dCfrom').value = d; document.getElementById('dCto').value = d;
+  } else {
+    if (nf) document.getElementById('dCfrom').value = comparable364(nf);
+    if (nt) document.getElementById('dCto').value = comparable364(nt);
+  }
   refreshN1Display();
 }
 // Résumé lisible de la période N-1 (lecture seule, mode auto).
@@ -1229,6 +1244,35 @@ function renderReport(rep) {
     return `<tr><td>${esc(p.pays)}</td><td>${fInt(p.sessions)}</td><td>${fInt(p.commandes)}</td><td>${p.tt != null ? fPct(p.tt) : '—'}</td><td>${p.ttN1 != null ? fPct(p.ttN1) : '—'}</td><td class="${dTT != null && dTT < 0 ? 'dn' : (dTT > 0 ? 'up' : '')}">${dTT != null ? sgn(dTT) : '—'}</td><td>${fEur(p.ca)}</td><td>${p.caN1 != null ? delta(p.ca, p.caN1) : '<span class="na">—</span>'}</td></tr>`;
   }).join('');
   const ttPaysCard = ttRows ? `<div class="card"><h3>Taux de transformation par pays — N vs N-1</h3><table><thead><tr><th>Pays</th><th>Sessions</th><th>Commandes</th><th>TT N</th><th>TT N-1</th><th>Δ TT</th><th>CA</th><th>Δ CA</th></tr></thead><tbody>${ttRows}</tbody></table><div class="note">Sessions GA4 × commandes OMS (noms pays normalisés FR/EN). Un TT vide = pays non rapproché entre les deux sources. Δ TT en rouge = le marché convertit moins bien que l'an dernier.</div></div>` : '';
+  // FR vs International — comparatif N vs N-1 (CA, commandes, panier, sessions, TT, paniers, engagement, familles)
+  let zoneCompareCard = '';
+  const zc = rep.zoneCompare;
+  if (zc && zc.n && (zc.n.fr || zc.n.inter)) {
+    const n1 = zc.n1 || {};
+    const cellPair = (cur, prev, fmt, inv) => `<td>${cur != null ? fmt(cur) : '—'}</td><td>${(cur != null && prev != null) ? (inv ? deltaInv(cur, prev) : delta(cur, prev)) : '—'}</td>`;
+    const metrics = [
+      ['CA', z => z.ca, fEur, false], ['Commandes', z => z.commandes, fInt, false],
+      ['Panier moyen', z => z.pm, fEur, false], ['Sessions', z => z.sessions, fInt, false],
+      ['Taux de transfo', z => z.tt, fPct, false], ['Ajouts panier', z => z.carts, fInt, false],
+      ['Taux d\'engagement', z => z.engRate, fPct, false],
+    ];
+    const get = (pack, zone, acc) => (pack && pack[zone]) ? acc(pack[zone]) : null;
+    const body = metrics.map(([l, acc, fmt, inv]) =>
+      `<tr><td>${l}</td>${cellPair(get(zc.n, 'fr', acc), get(n1, 'fr', acc), fmt, inv)}${cellPair(get(zc.n, 'inter', acc), get(n1, 'inter', acc), fmt, inv)}</tr>`).join('');
+    // CA par famille — France vs International (top par CA total des deux zones), vs N-1
+    const famObj = (pack, zone) => (pack && pack[zone] && pack[zone].familles) || {};
+    const frF = famObj(zc.n, 'fr'), inF = famObj(zc.n, 'inter'), frF1 = famObj(n1, 'fr'), inF1 = famObj(n1, 'inter');
+    const fams = [...new Set([...Object.keys(frF), ...Object.keys(inF)])]
+      .map(f => ({ f, fr: frF[f] || 0, inter: inF[f] || 0, fr1: frF1[f] || 0, in1: inF1[f] || 0, tot: (frF[f] || 0) + (inF[f] || 0) }))
+      .filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot).slice(0, 10);
+    const famRows = fams.map(x => `<tr><td title="${esc(x.f)}">${esc((x.f || '').slice(0, 32))}</td><td>${fEur(x.fr)}</td><td>${delta(x.fr, x.fr1)}</td><td>${fEur(x.inter)}</td><td>${delta(x.inter, x.in1)}</td></tr>`).join('');
+    const famTable = famRows ? `<h3 style="margin-top:14px">CA par famille — France vs International</h3>
+      <table><thead><tr><th>Famille</th><th>France</th><th>vs N-1</th><th>Inter</th><th>vs N-1</th></tr></thead><tbody>${famRows}</tbody></table>` : '';
+    zoneCompareCard = `<div class="card"><h3>🌍 France vs International — comparatif N vs N-1</h3>
+      <table><thead><tr><th>Métrique</th><th>France N</th><th>vs N-1</th><th>International N</th><th>vs N-1</th></tr></thead><tbody>${body}</tbody></table>
+      ${famTable}
+      <div class="note">Périmètre EShop (hors marketplace). Sessions, ajouts panier et engagement = GA4 par pays (seuillage de confidentialité → split indicatif). TT = commandes ÷ sessions de la zone. Comparaison N vs N-1 sur la même période décalée.</div></div>`;
+  }
   // Pages d'atterrissage × conversion (N vs N-1)
   const landRows = (rep.landingPages || []).map(p => {
     const dc = pc(p.convRate, p.convRateN1);
@@ -1723,7 +1767,7 @@ function renderReport(rep) {
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
-    pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
+    zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
@@ -2160,10 +2204,7 @@ function buildBilan(rep) {
   };
   const per = p => p ? ` · ${esc(p.from)} → ${esc(p.to)}` : '';
   const mainCard = renderScorecard(`🎯 Bilan période${per(rep.meta)}`, mainPack, true, rep.significance);
-  const sigs = bilanSignals(rep);
-  const sigHtml = sigs.length
-    ? `<div class="bilan-sigs">${sigs.slice(0, 6).map(s => `<div class="sig ${s.tone}"><span>${s.icon}</span><div>${s.txt}</div></div>`).join('')}</div>`
-    : (rep.meta.hasN1 ? '' : '<div class="note">Renseigne une période N-1 pour activer les signaux comparés.</div>');
+  // Les leviers (plan d'action) ne sont plus affichés ici : ils sont regroupés dans le bloc « 🧭 Plan d'action » (carte actionplan).
   const copyBtn = `<button class="btn" id="bilanCopy">📋 Copier le contexte pour Claude.ai</button>`;
   const iaBtn = RECO_OK ? `<button class="btn blue" id="bilanIA">🧠 Synthèse IA</button>` : '';
   const iaNote = RECO_OK
@@ -2175,7 +2216,7 @@ function buildBilan(rep) {
   let consentNote = '';
   if (cs && cs.n) consentNote = `<div class="note" style="margin-top:6px">🍪 Sessions ajustées du consentement — N : ${Math.round(cs.n * 100)}% d'acceptation (${fInt(cs.sessionsRawN)} GA → <b>${fInt(k.sessions)}</b> réelles)${cs.n1 && cs.sessionsRawN1 != null ? ` · N-1 : ${Math.round(cs.n1 * 100)}% (${fInt(cs.sessionsRawN1)} → ${fInt(k1 && k1.sessions)})` : ''}. Le taux de transfo est recalculé sur cette base.</div>`;
   return `<div class="card bilan" id="sec-bilan"><h3>🎯 Bilan — ${esc(dimLabel)}${rep.meta.hasN1 ? '' : ' · <span class="na">pas de comparatif N-1</span>'}</h3>
-    ${mainCard}${consentNote}${sigHtml}${ia}</div>`;
+    ${mainCard}${consentNote}${ia}</div>`;
 }
 // Boutons du bilan : « Copier le contexte » (gratuit, via abonnement) et « Synthèse IA » (API).
 function wireBilan() {
@@ -3008,8 +3049,8 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
 // saisie manuelle (les changements de N ne l'écrasent plus). Le bouton « ≈ −364 j » recale.
 ['dCfrom', 'dCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { N1_MANUAL = true; }); });
 { const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); syncComparable(); }); }
-// Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande) → repasse en auto.
-document.getElementById('n1Default').addEventListener('click', () => { N1_MANUAL = false; syncComparable(); });
+// Bouton « ≈ −364 j » (legacy, peut être absent : N-1 est désormais auto) → garde-fou.
+{ const nd = document.getElementById('n1Default'); if (nd) nd.addEventListener('click', () => { N1_MANUAL = false; syncComparable(); }); }
 // Comparaison N-1 : « N vs N-1 » (défaut) ou « N seule » (pas besoin des données de l'année précédente).
 document.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-cmp]').forEach(x => x.classList.remove('on'));
@@ -3046,6 +3087,20 @@ document.getElementById('countrySel').addEventListener('change', e => {
   }
   loadReport();
 });
+// Volets repliables du panneau de paramétrage (Type d'analyse / Période / Chargement) → allège la lecture.
+// L'état (replié/ouvert) est mémorisé par carte dans le localStorage.
+function wireSetupFolds() {
+  document.querySelectorAll('.setup-card .ch-toggle').forEach(h => {
+    const card = h.closest('.setup-card'); if (!card || h._wired) return; h._wired = true;
+    const key = 'fold_' + card.id;
+    if (localStorage.getItem(key) === '1') card.classList.add('collapsed');
+    h.addEventListener('click', () => {
+      const collapsed = card.classList.toggle('collapsed');
+      try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) { /* quota/privé */ }
+    });
+  });
+}
+wireSetupFolds();
 // Remplit la liste des pays — ACCUMULÉE (pour rester complète même quand on filtre sur un pays).
 let ALL_COUNTRIES = [];
 function fillCountrySelect(rep) {
