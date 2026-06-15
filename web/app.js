@@ -654,11 +654,26 @@ function comparable364(ymd) {
   d.setUTCDate(d.getUTCDate() - 364);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
+// N-1 « même jour calendaire l'an dernier » (gère les années bissextiles : 29/02 → 28/02).
+function sameDayLastYear(ymd) {
+  if (!ymd) return '';
+  const p = ymd.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0] - 1, p[1] - 1, p[2]));
+  if (d.getUTCMonth() !== p[1] - 1) d.setUTCDate(0); // 29/02 inexistant l'an dernier → dernier jour de février (28)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
 // Recalcule les champs N-1 à partir des champs N (déclenché quand l'utilisateur saisit N).
+// 1 seul jour → même jour calendaire l'an dernier (bissextile géré) ; une plage (ex. semaine
+// lun→dim) → −364 j (52 semaines pile) = même semaine, mêmes jours de la semaine.
 function syncComparable() {
   const nf = document.getElementById('dNfrom').value, nt = document.getElementById('dNto').value;
-  if (nf) document.getElementById('dCfrom').value = comparable364(nf);
-  if (nt) document.getElementById('dCto').value = comparable364(nt);
+  if (nf && nt && nf === nt) {
+    const d = sameDayLastYear(nf);
+    document.getElementById('dCfrom').value = d; document.getElementById('dCto').value = d;
+  } else {
+    if (nf) document.getElementById('dCfrom').value = comparable364(nf);
+    if (nt) document.getElementById('dCto').value = comparable364(nt);
+  }
   refreshN1Display();
 }
 // Résumé lisible de la période N-1 (lecture seule, mode auto).
@@ -3008,8 +3023,8 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
 // saisie manuelle (les changements de N ne l'écrasent plus). Le bouton « ≈ −364 j » recale.
 ['dCfrom', 'dCto'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { N1_MANUAL = true; }); });
 { const e = document.getElementById('n1Edit'); if (e) e.addEventListener('click', ev => { ev.preventDefault(); setN1Manual(true); syncComparable(); }); }
-// Bouton « ≈ −364 j » : recale N-1 sur le comparable jour-pour-jour (à la demande) → repasse en auto.
-document.getElementById('n1Default').addEventListener('click', () => { N1_MANUAL = false; syncComparable(); });
+// Bouton « ≈ −364 j » (legacy, peut être absent : N-1 est désormais auto) → garde-fou.
+{ const nd = document.getElementById('n1Default'); if (nd) nd.addEventListener('click', () => { N1_MANUAL = false; syncComparable(); }); }
 // Comparaison N-1 : « N vs N-1 » (défaut) ou « N seule » (pas besoin des données de l'année précédente).
 document.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('[data-cmp]').forEach(x => x.classList.remove('on'));
@@ -3046,6 +3061,20 @@ document.getElementById('countrySel').addEventListener('change', e => {
   }
   loadReport();
 });
+// Volets repliables du panneau de paramétrage (Type d'analyse / Période / Chargement) → allège la lecture.
+// L'état (replié/ouvert) est mémorisé par carte dans le localStorage.
+function wireSetupFolds() {
+  document.querySelectorAll('.setup-card .ch-toggle').forEach(h => {
+    const card = h.closest('.setup-card'); if (!card || h._wired) return; h._wired = true;
+    const key = 'fold_' + card.id;
+    if (localStorage.getItem(key) === '1') card.classList.add('collapsed');
+    h.addEventListener('click', () => {
+      const collapsed = card.classList.toggle('collapsed');
+      try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) { /* quota/privé */ }
+    });
+  });
+}
+wireSetupFolds();
 // Remplit la liste des pays — ACCUMULÉE (pour rester complète même quand on filtre sur un pays).
 let ALL_COUNTRIES = [];
 function fillCountrySelect(rep) {
