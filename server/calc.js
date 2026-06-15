@@ -497,17 +497,18 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
   const mktLabel = t => { const s = (t || '').toLowerCase(); if (s.includes('gl.com')) return 'GL.com'; if (s.includes('printemps')) return 'Printemps'; if (s.includes('la redoute')) return 'La Redoute'; if (s.includes('24s')) return '24S'; return t || 'Marketplace'; };
   const cancel = {}; let cancelQte = 0, cancelCA = 0;
   const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type, si = omsMap.statut;
+  const hasStatut = si !== undefined;
   if (qni !== undefined) {
     (omsRows || []).forEach(r => {
       const type = (r[ti] || '').trim();
       if (!isMkt(type)) return;
       const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
       if (nonLivre <= 0) return;
-      // Annulation = statut Stock/Client/Mags (ou absent) ; on exclut demande (fraude/impayé) et
-      // expédition incomplète (ShippedIncomplete = expédiée, juste partielle).
-      const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
+      // Annulation = statut Stock/Client/Mags + non livré > 0 uniquement ; on exclut demande
+      // (fraude/impayé) et expédition incomplète (ShippedIncomplete = expédiée, juste partielle).
+      const st = (hasStatut ? (r[si] || '').toString().toLowerCase() : '');
       if (/incomplete/.test(st) && !/cancel/.test(st)) return;
-      if (st !== '' && !isCancelStatus(st)) return;
+      if (hasStatut && !isCancelStatus(st)) return;
       const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
       const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
       const ch = mktLabel(type);
@@ -1198,6 +1199,7 @@ function isCancelStatus(st) {
 function calcCancellations(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, ni = map.num, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
+  const hasStatut = si !== undefined;
   let qteAnnulee = 0, qteCmd = 0, caAnnule = 0, caPaye = 0;
   let qteIncomplete = 0, caIncomplete = 0;
   const ordersImpacted = new Set(), allOrders = new Set(), ordersIncomplete = new Set();
@@ -1209,14 +1211,15 @@ function calcCancellations(rows, map) {
     qteCmd += cmd; caPaye += prix;
     if (ni !== undefined && r[ni]) allOrders.add(r[ni]);
     if (nonLivre > 0) {
-      const st = (si !== undefined ? (r[si] || '').toString().toLowerCase() : '');
+      const st = (hasStatut ? (r[si] || '').toString().toLowerCase() : '');
       const unit = cmd > 0 ? prix / cmd : prix;          // CA non livré estimé (prorata du prix payé)
-      // Expédition incomplète = comptée à part. Annulation = statut Stock/Client/Mags (ou statut
-      // absent) ; les annulations « demande » (fraude/impayé/blacklist) sont EXCLUES du taux.
+      // Annulation = statut Annulé Stock / Client / Mags (isCancelStatus) + non livré > 0, ET RIEN
+      // D'AUTRE. Expédition incomplète comptée à part ; demande (fraude/impayé/blacklist) exclue.
+      // Si le jeu n'a AUCUNE colonne statut → on retombe sur le seul signal « non livré » (legacy).
       if (/incomplete/.test(st) && !/cancel/.test(st)) {
         qteIncomplete += nonLivre; caIncomplete += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersIncomplete.add(r[ni]);
-      } else if (st === '' || isCancelStatus(st)) {
+      } else if (!hasStatut || isCancelStatus(st)) {
         qteAnnulee += nonLivre; caAnnule += unit * nonLivre;
         if (ni !== undefined && r[ni]) ordersImpacted.add(r[ni]);
       }
@@ -1241,6 +1244,7 @@ function calcCancellations(rows, map) {
 function calcCancellationsDetail(rows, map) {
   const pi = map.prix, qi = map.qte, qni = map.qte_non_livre, mi = map.mag, di = map.des, ti = map.type, si = map.statut;
   if (qni === undefined) return null;
+  const hasStatut = si !== undefined;
   const entrepot = { qte: 0, ca: 0 }, magasin = { qte: 0, ca: 0 };
   const incompletEnt = { qte: 0, ca: 0 }, incompletMag = { qte: 0, ca: 0 };
   const byStore = {}, byProd = {}, byCanal = {}, byStatut = {};
@@ -1262,8 +1266,9 @@ function calcCancellationsDetail(rows, map) {
       const b = isEnt ? incompletEnt : incompletMag; b.qte += nonLivre; b.ca += caAnn;
       return;
     }
-    // Annulation demande (fraude/impayé/blacklist) : exclue du détail des annulations (audit byStatut conservé).
-    if (sl !== '' && st !== '(statut absent)' && !isCancelStatus(sl)) return;
+    // Annulation = statut Stock/Client/Mags uniquement ; demande (fraude/impayé/blacklist) exclue
+    // (audit byStatut conservé au-dessus). Si aucune colonne statut → on garde sur non-livré (legacy).
+    if (hasStatut && !isCancelStatus(sl)) return;
     const bucket = isEnt ? entrepot : magasin;
     bucket.qte += nonLivre; bucket.ca += caAnn;
     if (!isEnt && mag) { const e = byStore[mag] || (byStore[mag] = { mag, qte: 0, ca: 0 }); e.qte += nonLivre; e.ca += caAnn; }
