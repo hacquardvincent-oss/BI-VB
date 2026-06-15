@@ -559,10 +559,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const caNetN1 = kpiEShopN1 ? (kpiEShopN1.ca - (rN1 && rN1.caRetourne || 0)) : null;
     if (ads) ads.roasNet = { n: roasOf(adsCalcN.cost, caNetN), n1: (adsCalcN1 && caNetN1 != null) ? roasOf(adsCalcN1.cost, caNetN1) : null };
     if (metaAds) metaAds.roasNet = { n: roasOf(metaCalcN.cost, caNetN), n1: (metaCalcN1 && caNetN1 != null) ? roasOf(metaCalcN1.cost, caNetN1) : null };
+    // Géographie & moyen de paiement des retours (taux par marché via jointure aux ventes EShop).
+    returns.geo = calc.calcReturnGeo(retRowsN, retN.map, rowsN, omsN.map);
     // Top produits retournés (source produit /returns/get, filtré sur la période).
     if (retProdN) {
       const rpRows = calc.filterRows(retProdN.rows, retProdN.map, from, to, isAll);
       returns.topProduits = calc.topReturnedProducts(rpRows, retProdN.map, 10);
+      // Détail produit enrichi : taux de retour (qté retournée / qté vendue EShop) + motif dominant.
+      returns.topProduitsDetail = calc.returnProductsDetail(rpRows, retProdN.map, topNobj, 12);
     }
   }
 

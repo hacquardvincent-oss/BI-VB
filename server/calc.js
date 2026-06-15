@@ -168,6 +168,7 @@ const RET_ALIASES = {
   montant_ht: ['montant ht'],
   qte: ['nb colisages rembourses', 'nb colisages'],
   numret: ['numero de retour', 'numero retour'],
+  num: ['numeros', 'numero commande', 'numero de commande'],
   raison: ['raison'],
   ref_ext: ['ref ext', 'ref. externe', 'ref externe'],
   pays: ['pays livraison'],
@@ -1410,6 +1411,64 @@ function topReturnedProducts(rows, map, top = 10) {
   }).sort((a, b) => b.qte - a.qte).slice(0, top);
 }
 
+// ── Retours : géographie & moyen de paiement (taux par marché) ──────────────
+// Source : dataset 'ret' (montant + pays + Numeros) joint aux ventes OMS EShop (hors mkt) de la
+// même période/prisme. Le taux de retour par marché = CA retourné(pays) / CA vendu(pays). Le moyen
+// de paiement du retour est rattaché à la commande d'origine via le n° de commande (Numeros).
+function calcReturnGeo(retRows, retMap, omsRows, omsMap) {
+  if (!retRows || !retRows.length) return null;
+  const r2 = x => Math.round(x * 100) / 100;
+  const mi = retMap.montant, qi = retMap.qte, pi = retMap.pays, ni = retMap.num;
+  // Ventes EShop (hors marketplace) par pays et par moyen de paiement + index commande→paiement.
+  const oPi = omsMap.pays, oNi = omsMap.num, oTi = omsMap.type, oPri = omsMap.prix;
+  const salesByPays = {}, salesByPay = {}, orderPay = {};
+  (omsRows || []).forEach(r => {
+    const type = (oTi !== undefined ? (r[oTi] || '').trim() : '');
+    if (isMkt(type)) return;
+    const ca = fN(r[oPri]);
+    const pays = normCountry(oPi !== undefined ? r[oPi] : '') || '(inconnu)';
+    salesByPays[pays] = (salesByPays[pays] || 0) + ca;
+    const pay = type || '(inconnu)';
+    salesByPay[pay] = (salesByPay[pay] || 0) + ca;
+    if (oNi !== undefined) { const num = (r[oNi] || '').toString().trim(); if (num) orderPay[num] = pay; }
+  });
+  const byPays = {}, byPay = {};
+  let totMontant = 0, totMatched = 0;
+  retRows.forEach(r => {
+    const montant = fN(r[mi]);
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    totMontant += montant;
+    const pays = normCountry(pi !== undefined ? r[pi] : '') || '(inconnu)';
+    const pe = byPays[pays] || (byPays[pays] = { montant: 0, qte: 0 }); pe.montant += montant; pe.qte += q;
+    const num = ni !== undefined ? (r[ni] || '').toString().trim() : '';
+    const pay = (num && orderPay[num]) || '(non rattaché)';
+    if (pay !== '(non rattaché)') totMatched += montant;
+    const ye = byPay[pay] || (byPay[pay] = { montant: 0, qte: 0 }); ye.montant += montant; ye.qte += q;
+  });
+  const pays = Object.entries(byPays).map(([pays, v]) => ({
+    pays, montant: r2(v.montant), qte: v.qte, caVente: r2(salesByPays[pays] || 0),
+    taux: salesByPays[pays] > 0 ? v.montant / salesByPays[pays] : null,
+  })).sort((a, b) => b.montant - a.montant);
+  const paiement = Object.entries(byPay).map(([type, v]) => ({
+    type, montant: r2(v.montant), qte: v.qte, caVente: r2(salesByPay[type] || 0),
+    taux: salesByPay[type] > 0 ? v.montant / salesByPay[type] : null,
+  })).sort((a, b) => b.montant - a.montant);
+  return { pays, paiement, total: r2(totMontant), matchShare: totMontant > 0 ? totMatched / totMontant : 0 };
+}
+
+// ── Produits les plus retournés + taux de retour par produit ────────────────
+// Source : dataset 'retprod' (1 ligne/article retourné, avec « Raison ») pour le top + le motif
+// dominant ; ventes EShop par désignation (buildTopProdMap) pour le taux de retour (qté retournée /
+// qté vendue). Complète la carte Retours en isolant les produits problématiques (taux + motif).
+function returnProductsDetail(rpRows, rpMap, salesByDes, top = 12) {
+  const base = topReturnedProducts(rpRows, rpMap, top);
+  const r2 = x => Math.round(x * 100) / 100;
+  return base.map(p => {
+    const s = (salesByDes && salesByDes[p.des]) || { ca: 0, qte: 0 };
+    return { ...p, caVendu: r2(s.ca), qteVendue: s.qte, taux: s.qte > 0 ? p.qte / s.qte : null };
+  });
+}
+
 // ── Produits : écart vs N-1 (à reconquérir) ─────────────────────────────────
 // byN / byN1 = maps {désignation: {ca, qte}} issues de buildTopProdMap
 function productGap(byN, byN1, top = 10) {
@@ -1719,6 +1778,7 @@ module.exports = {
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
+  calcReturnGeo, returnProductsDetail,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

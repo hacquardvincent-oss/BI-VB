@@ -38,7 +38,7 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
@@ -104,7 +104,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -120,7 +120,7 @@ const THEME_OF = {
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
-  annulations: 'AN', retours: 'AN', returnreasons: 'AN',
+  annulations: 'AN', retours: 'AN', returnreasons: 'AN', returngeo: 'AN', returnprod: 'AN',
   stockalerts: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
@@ -143,7 +143,7 @@ const CARD_LABELS = {
   kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
-  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', stockalerts: 'Alertes stock',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
@@ -151,8 +151,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -1102,6 +1102,37 @@ function renderReport(rep) {
       <div class="note">Motif catégorisé depuis l'export retours (colonne « Raison »). <b>Sens</b> : « taille petit » = surtout des « trop petit » → l'article taille petit. La <b>taille</b> est le levier n°1 des retours → guide des tailles & fiches produit.</div></div>`;
   }
 
+  // Retours par marché & moyen de paiement (taux de retour par pays / par paiement)
+  let returnGeoCard = '';
+  const rgeo = rep.returns && rep.returns.geo;
+  if (rgeo && ((rgeo.pays && rgeo.pays.length) || (rgeo.paiement && rgeo.paiement.length))) {
+    const tc = s => (s || '').replace(/\b\w/g, c => c.toUpperCase());
+    const paysRows = (rgeo.pays || []).slice(0, 12).map(p => `<tr><td>${esc(tc(p.pays))}</td><td>${fEur(p.montant)}</td><td>${fInt(p.qte)}</td><td>${fEur(p.caVente)}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td></tr>`).join('');
+    const payRows = (rgeo.paiement || []).slice(0, 10).map(p => `<tr><td>${esc(p.type)}</td><td>${fEur(p.montant)}</td><td>${fInt(p.qte)}</td><td>${fEur(p.caVente)}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td></tr>`).join('');
+    const worst = (rgeo.pays || []).filter(p => p.taux != null && p.caVente > 1000).sort((a, b) => b.taux - a.taux)[0];
+    const worstMsg = worst ? `Marché au taux de retour le plus élevé : <b>${esc(tc(worst.pays))}</b> à ${fPct(worst.taux)} (${fEur(worst.montant)} retournés sur ${fEur(worst.caVente)} vendus) → vérifier livraison, fiches produit & guide des tailles sur ce marché.` : '';
+    returnGeoCard = `<div class="card"><h3>🌍 Retours par marché & moyen de paiement (EShop, hors marketplace)</h3>
+      <div class="grid cols2">
+        <div><h3>Par pays de livraison</h3><table><thead><tr><th>Pays</th><th>CA retourné</th><th>Pièces</th><th>CA vendu</th><th>Taux retour</th></tr></thead><tbody>${paysRows}</tbody></table></div>
+        <div><h3>Par moyen de paiement</h3><table><thead><tr><th>Paiement</th><th>CA retourné</th><th>Pièces</th><th>CA vendu</th><th>Taux retour</th></tr></thead><tbody>${payRows}</tbody></table></div>
+      </div>
+      ${worstMsg ? `<div class="note" style="margin-top:8px">${worstMsg}</div>` : ''}
+      <div class="note"><b>Taux de retour par marché</b> = CA retourné ÷ CA vendu (même période / prisme). Le moyen de paiement est rattaché à la commande d'origine via le n° de commande (${rgeo.matchShare != null ? fPct(rgeo.matchShare) + ' des retours rattachés' : 'jointure commande'}). Cible les marchés / parcours à fort retour.</div></div>`;
+  }
+
+  // Produits les plus retournés : top CA retourné + taux de retour produit + motif dominant
+  let returnProdCard = '';
+  const rpd = rep.returns && rep.returns.topProduitsDetail;
+  if (rpd && rpd.length) {
+    const rows = rpd.map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.montant)}</td><td>${p.qteVendue ? fInt(p.qteVendue) : '—'}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td><td style="font-size:11px">${esc(p.raison || '—')}</td></tr>`).join('');
+    const worst = rpd.filter(p => p.taux != null && p.qteVendue >= 5).sort((a, b) => b.taux - a.taux)[0];
+    const worstMsg = worst ? `Taux de retour le plus élevé : <b>${esc((worst.des || '').slice(0, 40))}</b> à ${fPct(worst.taux)} (${fInt(worst.qte)} retournées / ${fInt(worst.qteVendue)} vendues) — motif « ${esc(worst.raison || '—')} ».` : '';
+    returnProdCard = `<div class="card"><h3>📦 Produits les plus retournés (EShop, source produit /returns/get)</h3>
+      <table><thead><tr><th>#</th><th>Produit</th><th>Pièces ret.</th><th>CA retourné</th><th>Qté vendue</th><th>Taux retour</th><th>Motif dominant</th></tr></thead><tbody>${rows}</tbody></table>
+      ${worstMsg ? `<div class="note" style="margin-top:8px">${worstMsg}</div>` : ''}
+      <div class="note"><b>Taux de retour produit</b> = pièces retournées ÷ pièces vendues (EShop, même période). Trié par CA retourné. Le <b>motif dominant</b> vient de l'export retours produit → cible fiches / qualité / tailles sur les pires.</div></div>`;
+  }
+
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
   let stockAlertsCard = '';
   if (rep.stockAlerts && rep.stockAlerts.length) {
@@ -1673,7 +1704,7 @@ function renderReport(rep) {
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
-    retours: returnsCard, returnreasons: returnReasonsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard, metaads: metaadsCard, metasocial: metasocialCard,
