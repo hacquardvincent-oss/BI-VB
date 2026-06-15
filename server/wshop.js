@@ -646,18 +646,23 @@ router.get('/ping', requireAuth, async (req, res) => {
   // stock existent, ou si ces appels échouent en silence (ils sont best-effort à l'import). Anonymisé.
   try {
     const iso = d => d.toISOString().slice(0, 10);
-    const to = new Date(); const from = new Date(); from.setDate(from.getDate() - 30);
-    const beg = `${iso(from)} 00:00:00`, end = `${iso(to)} 23:59:59`;
+    const to = new Date();
+    // /returns/get est lent → fenêtre COURTE (7 j) + pagination + timeout généreux ; back-in-stock sur 90 j
+    // (les abonnements sont rares) pour vérifier si la source existe vraiment.
+    const rFrom = new Date(); rFrom.setDate(rFrom.getDate() - 7);
+    const bFrom = new Date(); bFrom.setDate(bFrom.getDate() - 90);
+    const rWin = { begin: `${iso(rFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50 };
+    const bWin = { begin: `${iso(bFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50, exclude_anonymized_customer: true };
     const wt = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
     const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
     const arrOf = r => (r && r.__err) ? null : (Array.isArray(r) ? r : (r && (r.data || r.results || r.returns)) || []);
     const safeKeys = obj => Object.keys(obj || {}).filter(k => !PII.test(k));
     const [retR, bisR] = await Promise.all([
-      wt(apiPost('/api/v1/returns/get', { begin: beg, end }), 8000, 'returns'),
-      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', { begin: beg, end, page: 1, limit: 50, exclude_anonymized_customer: true }), 8000, 'bis'),
+      wt(apiPost('/api/v1/returns/get', rWin), 22000, 'returns'),
+      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bWin), 12000, 'bis'),
     ]);
     // Retours détaillés : existe-t-il un champ MOTIF renseigné (au niveau retour ET au niveau article) ?
-    if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err;
+    if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err + ' (endpoint /returns/get lent ; l\'import complet le récupère en tâche de fond, sans ce timeout)';
     else {
       const ra = arrOf(retR) || [];
       const r0 = ra[0] || null;
@@ -670,20 +675,20 @@ router.get('/ping', requireAuth, async (req, res) => {
       });
       const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = { distinct: found[k].size, exemples: [...found[k]].slice(0, 8) }; });
       out.probeReturns = {
-        count: ra.length,
-        returnKeys: r0 ? safeKeys(r0) : '(0 retour sur 30 j)',
+        count: ra.length, fenetre: `${iso(rFrom)} → ${iso(to)}`,
+        returnKeys: r0 ? safeKeys(r0) : '(0 retour sur 7 j — élargir la fenêtre ?)',
         itemKeys: items0[0] ? safeKeys(items0[0]) : '(aucun orderItem)',
         motifsTrouves: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné → l\'API ne porte que le type de remboursement, pas de motif détaillé (taille/qualité).',
       };
     }
-    // Alertes stock : les abonnements back-in-stock existent-ils sur la fenêtre ?
+    // Alertes stock : les abonnements back-in-stock existent-ils sur 90 j ?
     if (bisR && bisR.__err) out.probeBackInStock = 'KO: ' + bisR.__err;
     else {
       const ba = arrOf(bisR) || [];
       const b0 = ba[0] || null;
       out.probeBackInStock = {
-        count: ba.length,
-        keys: b0 ? safeKeys(b0) : '(0 abonnement sur 30 j)',
+        count: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
+        keys: b0 ? safeKeys(b0) : '(0 abonnement sur 90 j → pas de demande « prévenez-moi », ou module non activé)',
         itemKeys: (b0 && b0.item) ? safeKeys(b0.item) : '(pas de sous-objet item)',
         statutsDistinct: [...new Set(ba.map(s => (s.status || '(vide)')))].slice(0, 10),
       };
