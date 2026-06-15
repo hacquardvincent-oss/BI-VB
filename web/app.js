@@ -38,7 +38,7 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
@@ -104,7 +104,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -120,7 +120,7 @@ const THEME_OF = {
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
-  annulations: 'AN', retours: 'AN', returnreasons: 'AN',
+  annulations: 'AN', retours: 'AN', returnreasons: 'AN', returngeo: 'AN', returnprod: 'AN',
   stockalerts: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
@@ -143,7 +143,7 @@ const CARD_LABELS = {
   kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
-  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', stockalerts: 'Alertes stock',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
@@ -151,8 +151,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -171,14 +171,22 @@ async function saveMyView(key, label, cards) {
 }
 async function deleteMyView(key) { delete MY_VIEWS[key]; try { await fetch('/api/myviews/' + encodeURIComponent(key), { method: 'DELETE' }); } catch (e) { /* ignore */ } }
 
+// Dédoublonne un layout : une clé de carte (string) n'apparaît qu'UNE fois ; les widgets (objets) sont
+// gardés tels quels. Source unique pour le rendu → un layout corrompu par un ancien drag se répare au chargement
+// (plus de section/ancre en double dans le sommaire), sans attendre un nouveau réordonnancement.
+function dedupLayout(arr) {
+  const seen = new Set(); const out = [];
+  (arr || []).forEach(k => { if (typeof k === 'string') { if (seen.has(k)) return; seen.add(k); } out.push(k); });
+  return out;
+}
 function getLayout(m) {
-  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? v.cards : ['kpi']; }
+  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? dedupLayout(v.cards) : ['kpi']; }
   if (m === 'full') {
     const ov = SERVER_LAYOUTS['full']; // ordre personnalisé (réordonnancement des sections) si présent
-    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return ov.concat(ALL_CARDS.filter(k => !seen.has(k))); }
+    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return dedupLayout(ov.concat(ALL_CARDS.filter(k => !seen.has(k)))); }
     return ALL_CARDS.slice();
   }
-  const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m);
+  const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? dedupLayout(a) : defaultLayout(m);
 }
 function isCustomLayout(m) { if (isMyView(m)) return true; const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
 // Vues éditables côté ADMIN (vues partagées ; « Full » contient toujours tout → non éditable).
@@ -1043,6 +1051,16 @@ function renderReport(rep) {
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 10).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte != null ? x.qte : x.count)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    // Motifs détaillés depuis la source produit (/returns/get) : le feed remboursement ('ret') ne donne que le TYPE.
+    const rd = rep.returns.reasonsDetail || [];
+    const rdUseful = rd.filter(x => x.reason && x.reason !== '(non précisé)');
+    const detailRows = rd.slice(0, 12).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    const typeLine = rt.reasons.map(x => `${esc(x.reason)} (${fInt(x.qte != null ? x.qte : x.count)})`).join(' · ');
+    const reasonsBlock = rdUseful.length
+      ? `<div><h3>Motifs de retour (détail — source produit /returns/get)</h3><table><thead><tr><th>Motif</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${detailRows}</tbody></table>
+        <div class="note" style="font-size:11px">Type de remboursement : ${typeLine}.</div></div>`
+      : `<div><h3>Type de remboursement (EShop, hors marketplace)</h3><table><thead><tr><th>Type</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table>
+        <div class="note" style="font-size:11px">⚠️ Le feed remboursement WSHOP ne porte que le <b>type</b> (remboursement manuel / retour client). Pour les <b>motifs détaillés</b> (taille, qualité…), faire un <b>import complet</b> (source produit /returns/get) ou uploader l'export retours détaillé.</div></div>`;
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
     const reasonsCell = x => (x.reasons && x.reasons.length)
@@ -1067,7 +1085,7 @@ function renderReport(rep) {
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
-        <div><h3>Raisons de retour (EShop, hors marketplace)</h3><table><thead><tr><th>Raison</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table></div>
+        ${reasonsBlock}
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
       ${reasonsVsTable}
@@ -1100,6 +1118,37 @@ function renderReport(rep) {
       ${famRows ? `<h3 style="margin-top:12px">Familles avec écart de taille (à corriger côté guide/fiches)</h3>
       <table><thead><tr><th>Famille</th><th>Pièces</th><th>CA retourné</th><th>dont taille</th><th>Petit / grand</th><th>Sens</th></tr></thead><tbody>${famRows}</tbody></table>` : ''}
       <div class="note">Motif catégorisé depuis l'export retours (colonne « Raison »). <b>Sens</b> : « taille petit » = surtout des « trop petit » → l'article taille petit. La <b>taille</b> est le levier n°1 des retours → guide des tailles & fiches produit.</div></div>`;
+  }
+
+  // Retours par marché & moyen de paiement (taux de retour par pays / par paiement)
+  let returnGeoCard = '';
+  const rgeo = rep.returns && rep.returns.geo;
+  if (rgeo && ((rgeo.pays && rgeo.pays.length) || (rgeo.paiement && rgeo.paiement.length))) {
+    const tc = s => (s || '').replace(/\b\w/g, c => c.toUpperCase());
+    const paysRows = (rgeo.pays || []).slice(0, 12).map(p => `<tr><td>${esc(tc(p.pays))}</td><td>${fEur(p.montant)}</td><td>${fInt(p.qte)}</td><td>${fEur(p.caVente)}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td></tr>`).join('');
+    const payRows = (rgeo.paiement || []).slice(0, 10).map(p => `<tr><td>${esc(p.type)}</td><td>${fEur(p.montant)}</td><td>${fInt(p.qte)}</td><td>${fEur(p.caVente)}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td></tr>`).join('');
+    const worst = (rgeo.pays || []).filter(p => p.taux != null && p.caVente > 1000).sort((a, b) => b.taux - a.taux)[0];
+    const worstMsg = worst ? `Marché au taux de retour le plus élevé : <b>${esc(tc(worst.pays))}</b> à ${fPct(worst.taux)} (${fEur(worst.montant)} retournés sur ${fEur(worst.caVente)} vendus) → vérifier livraison, fiches produit & guide des tailles sur ce marché.` : '';
+    returnGeoCard = `<div class="card"><h3>🌍 Retours par marché & moyen de paiement (EShop, hors marketplace)</h3>
+      <div class="grid cols2">
+        <div><h3>Par pays de livraison</h3><table><thead><tr><th>Pays</th><th>CA retourné</th><th>Pièces</th><th>CA vendu</th><th>Taux retour</th></tr></thead><tbody>${paysRows}</tbody></table></div>
+        <div><h3>Par moyen de paiement</h3><table><thead><tr><th>Paiement</th><th>CA retourné</th><th>Pièces</th><th>CA vendu</th><th>Taux retour</th></tr></thead><tbody>${payRows}</tbody></table></div>
+      </div>
+      ${worstMsg ? `<div class="note" style="margin-top:8px">${worstMsg}</div>` : ''}
+      <div class="note"><b>Taux de retour par marché</b> = CA retourné ÷ CA vendu (même période / prisme). Le moyen de paiement est rattaché à la commande d'origine via le n° de commande (${rgeo.matchShare != null ? fPct(rgeo.matchShare) + ' des retours rattachés' : 'jointure commande'}). Cible les marchés / parcours à fort retour.</div></div>`;
+  }
+
+  // Produits les plus retournés : top CA retourné + taux de retour produit + motif dominant
+  let returnProdCard = '';
+  const rpd = rep.returns && rep.returns.topProduitsDetail;
+  if (rpd && rpd.length) {
+    const rows = rpd.map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.montant)}</td><td>${p.qteVendue ? fInt(p.qteVendue) : '—'}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td><td style="font-size:11px">${esc(p.raison || '—')}</td></tr>`).join('');
+    const worst = rpd.filter(p => p.taux != null && p.qteVendue >= 5).sort((a, b) => b.taux - a.taux)[0];
+    const worstMsg = worst ? `Taux de retour le plus élevé : <b>${esc((worst.des || '').slice(0, 40))}</b> à ${fPct(worst.taux)} (${fInt(worst.qte)} retournées / ${fInt(worst.qteVendue)} vendues) — motif « ${esc(worst.raison || '—')} ».` : '';
+    returnProdCard = `<div class="card"><h3>📦 Produits les plus retournés (EShop, source produit /returns/get)</h3>
+      <table><thead><tr><th>#</th><th>Produit</th><th>Pièces ret.</th><th>CA retourné</th><th>Qté vendue</th><th>Taux retour</th><th>Motif dominant</th></tr></thead><tbody>${rows}</tbody></table>
+      ${worstMsg ? `<div class="note" style="margin-top:8px">${worstMsg}</div>` : ''}
+      <div class="note"><b>Taux de retour produit</b> = pièces retournées ÷ pièces vendues (EShop, même période). Trié par CA retourné. Le <b>motif dominant</b> vient de l'export retours produit → cible fiches / qualité / tailles sur les pires.</div></div>`;
   }
 
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
@@ -1673,7 +1722,7 @@ function renderReport(rep) {
     kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
-    retours: returnsCard, returnreasons: returnReasonsCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard, metaads: metaadsCard, metasocial: metasocialCard,
@@ -1690,12 +1739,16 @@ function renderReport(rep) {
   if (isCustomLayout(CURRENT_MODULE)) {
     // Vue personnalisée : on respecte l'ORDRE exact du layout (drag'n'drop), bannière au changement de thème.
     // Les items peuvent être des clés de cartes (string) ou des WIDGETS « from scratch » (objets).
-    let lastTheme = null; const out = [];
+    // Anti-doublon : on ne rend chaque carte / bannière (id=sec-<thème>) qu'UNE fois — protège contre un
+    // layout corrompu par un ancien réordonnancement (sinon section + ancre du sommaire apparaissaient en double).
+    let lastTheme = null; const out = []; const seenKeys = new Set(), seenThemes = new Set();
     layout.forEach(k => {
       if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html.replace('<div class="card', `<div data-wid="${esc(k.id)}" class="card`)); return; }
+      if (seenKeys.has(k)) return; seenKeys.add(k);
       const html = card(k); if (!html) return;
       const t = THEME_OF[k];
-      if (t && t !== lastTheme) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); lastTheme = t; }
+      if (t && t !== lastTheme && !seenThemes.has(t)) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); seenThemes.add(t); }
+      if (t) lastTheme = t;
       out.push(html);
     });
     body = out.join('\n');
@@ -1720,7 +1773,9 @@ function buildReportNav() {
   }
   if (window.innerWidth >= 1100) nav.classList.add('open'); // sticky en permanence : réaffiché à CHAQUE rendu (ex. après édition)
   const report = document.getElementById('report');
-  const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
+  const seenH = new Set();
+  const heads = (report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [])
+    .filter(h => { if (!h.id || seenH.has(h.id)) return false; seenH.add(h.id); return true; }); // jamais deux fois la même ancre
   const canEdit = canEditView();
   // Actions réduites aux pictos, en BAS du volet.
   const actions = `<div class="rn-actions">
@@ -1790,9 +1845,10 @@ async function applyNavOrder() {
     if (!themeItems[curT]) { themeItems[curT] = []; seq.push(curT); }
     themeItems[curT].push(k);                            // widgets & cartes sans thème suivent la section courante
   });
-  const finalThemes = order.filter(t => themeItems[t]).concat(seq.filter(t => !order.includes(t)));
-  const newLayout = leading.slice();
-  finalThemes.forEach(t => themeItems[t].forEach(k => newLayout.push(k)));
+  // dédoublonne les thèmes (un sommaire corrompu pouvait lister un thème 2× → cartes dupliquées à la persistance)
+  const finalThemes = [...new Set(order.filter(t => themeItems[t]).concat(seq.filter(t => !order.includes(t))))];
+  const newLayout = leading.slice(); const seenK = new Set(newLayout.filter(k => typeof k === 'string'));
+  finalThemes.forEach(t => themeItems[t].forEach(k => { if (typeof k === 'string') { if (seenK.has(k)) return; seenK.add(k); } newLayout.push(k); }));
   try { await persistLayout(CURRENT_MODULE, newLayout); loadReport(); }
   catch (e) { alert('Réordonnancement non enregistré : ' + (e.message || 'erreur')); loadReport(); }
 }
@@ -2813,6 +2869,13 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `Sonde « CancelledInternal » (comptée) : ${esc(JSON.stringify(j.probeCancelledInternal || '—'))}\n`
         + `Sonde « ShippedIncomplete » (comptée) : ${esc(JSON.stringify(j.probeShippedIncomplete || '—'))}\n`
         + `Sonde « CancelledCustomer » (EXCLUE) : ${esc(JSON.stringify(j.probeCancelledCustomer || '—'))}</pre>`;
+    }
+    if (j.probeReturns != null || j.probeBackInStock != null) {
+      html += `<div style="margin-top:8px"><b>Diagnostic retours détaillés & alertes stock</b> (source API, anonyme) :</div>`
+        + `<pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:4px;overflow-x:auto">`
+        + `↩️ /returns/get (motifs) :\n${esc(JSON.stringify(j.probeReturns || '—', null, 2))}\n\n`
+        + `🔔 /back-in-stock-subscriptions/get (alertes stock) :\n${esc(JSON.stringify(j.probeBackInStock || '—', null, 2))}</pre>`
+        + `<div class="note" style="font-size:11px">Si <b>motifsTrouves</b> ne liste que <code>refundType</code> → l'API ne porte pas de motif détaillé (taille/qualité) ; il faut uploader l'export retours détaillé. Si <b>count</b> = 0 ou <b>KO</b> → l'appel échoue/ne renvoie rien (ces jeux ne se peuplent qu'à l'<b>import complet</b>).</div>`;
     }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }

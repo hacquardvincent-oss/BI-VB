@@ -641,6 +641,54 @@ router.get('/ping', requireAuth, async (req, res) => {
       out.sampleOrderStatuses = { orderCustomerStatus: o0.orderCustomerStatus || '(vide)', orderStatus: o0.orderStatus || '(vide)', orderStoreStatus: o0.orderStoreStatus || '(vide)' };
     }
   } catch (e) { out.orders = 'KO — ' + e.message; out.ordersMs = Date.now() - t; }
+  // ── Sonde RETOURS DÉTAILLÉS (/returns/get) & ALERTES STOCK (back-in-stock) ──────────────
+  // But : dire si l'API porte réellement un MOTIF de retour (et sous quel nom) + si les abonnements
+  // stock existent, ou si ces appels échouent en silence (ils sont best-effort à l'import). Anonymisé.
+  try {
+    const iso = d => d.toISOString().slice(0, 10);
+    const to = new Date(); const from = new Date(); from.setDate(from.getDate() - 30);
+    const beg = `${iso(from)} 00:00:00`, end = `${iso(to)} 23:59:59`;
+    const wt = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
+    const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
+    const arrOf = r => (r && r.__err) ? null : (Array.isArray(r) ? r : (r && (r.data || r.results || r.returns)) || []);
+    const safeKeys = obj => Object.keys(obj || {}).filter(k => !PII.test(k));
+    const [retR, bisR] = await Promise.all([
+      wt(apiPost('/api/v1/returns/get', { begin: beg, end }), 8000, 'returns'),
+      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', { begin: beg, end, page: 1, limit: 50, exclude_anonymized_customer: true }), 8000, 'bis'),
+    ]);
+    // Retours détaillés : existe-t-il un champ MOTIF renseigné (au niveau retour ET au niveau article) ?
+    if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err;
+    else {
+      const ra = arrOf(retR) || [];
+      const r0 = ra[0] || null;
+      const items0 = (r0 && Array.isArray(r0.orderItems)) ? r0.orderItems : [];
+      const reasonFields = ['reason', 'returnReason', 'motif', 'comment', 'returnMotive', 'cause', 'refundType'];
+      const found = {};
+      ra.forEach(rt => {
+        reasonFields.forEach(f => { const v = (rt && rt[f] != null) ? String(rt[f]).trim() : ''; if (v) (found[f] = found[f] || new Set()).add(v); });
+        (Array.isArray(rt.orderItems) ? rt.orderItems : []).forEach(it => reasonFields.forEach(f => { const v = (it && it[f] != null) ? String(it[f]).trim() : ''; if (v) (found['item.' + f] = found['item.' + f] || new Set()).add(v); }));
+      });
+      const motifs = {}; Object.keys(found).forEach(k => { motifs[k] = { distinct: found[k].size, exemples: [...found[k]].slice(0, 8) }; });
+      out.probeReturns = {
+        count: ra.length,
+        returnKeys: r0 ? safeKeys(r0) : '(0 retour sur 30 j)',
+        itemKeys: items0[0] ? safeKeys(items0[0]) : '(aucun orderItem)',
+        motifsTrouves: Object.keys(motifs).length ? motifs : 'AUCUN champ motif renseigné → l\'API ne porte que le type de remboursement, pas de motif détaillé (taille/qualité).',
+      };
+    }
+    // Alertes stock : les abonnements back-in-stock existent-ils sur la fenêtre ?
+    if (bisR && bisR.__err) out.probeBackInStock = 'KO: ' + bisR.__err;
+    else {
+      const ba = arrOf(bisR) || [];
+      const b0 = ba[0] || null;
+      out.probeBackInStock = {
+        count: ba.length,
+        keys: b0 ? safeKeys(b0) : '(0 abonnement sur 30 j)',
+        itemKeys: (b0 && b0.item) ? safeKeys(b0.item) : '(pas de sous-objet item)',
+        statutsDistinct: [...new Set(ba.map(s => (s.status || '(vide)')))].slice(0, 10),
+      };
+    }
+  } catch (e) { out.probeReturns = out.probeReturns || ('erreur sonde: ' + e.message); }
   res.json(out);
 });
 
