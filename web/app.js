@@ -38,13 +38,13 @@ const MODULES = {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
     intro: 'Reporting de pilotage e-commerce : KPI, chiffre d’affaires, funnel de conversion, suivi temporel et efficacité du trafic.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts'],
+    layout: ['kpi', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'zonecompare', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts'],
   },
   acquisition: {
     icon: '📈', label: 'Acquisition (GA)', preset: 'all',
     intro: 'Analyse acquisition : canaux, campagnes UTM, cohérence campagne→landing, pages par source et pages d’atterrissage.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
-    layout: ['ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns'],
+    layout: ['ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns'],
   },
   saisonprod: {
     icon: '👗', label: 'Offre & Merchandising', preset: 'all',
@@ -110,13 +110,13 @@ const MODULES = {
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
+  P: '🎯 Pilotage 360', PA: '🧭 Plan d\'action', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'P', actionplan: 'P', variance: 'P', perimsynth: 'P',
+  kpi: 'P', actionplan: 'PA', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
@@ -140,7 +140,7 @@ function sectionize(layout) {
 
 // ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
 const CARD_LABELS = {
-  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Suivi temporel — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
@@ -183,7 +183,18 @@ function getLayout(m) {
   if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? dedupLayout(v.cards) : ['kpi']; }
   if (m === 'full') {
     const ov = SERVER_LAYOUTS['full']; // ordre personnalisé (réordonnancement des sections) si présent
-    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return dedupLayout(ov.concat(ALL_CARDS.filter(k => !seen.has(k)))); }
+    if (Array.isArray(ov) && ov.length) {
+      // Insère chaque carte ABSENTE (ex. nouvelle carte) juste après la dernière de SON thème dans le
+      // layout sauvegardé → elle apparaît dans sa section, pas reléguée en fin (sinon invisible).
+      const seen = new Set(ov.filter(x => typeof x === 'string'));
+      const out = ov.slice();
+      ALL_CARDS.filter(k => !seen.has(k)).forEach(k => {
+        const t = THEME_OF[k]; let idx = -1;
+        for (let i = out.length - 1; i >= 0; i--) { if (typeof out[i] === 'string' && THEME_OF[out[i]] === t) { idx = i; break; } }
+        if (idx >= 0) out.splice(idx + 1, 0, k); else out.push(k);
+      });
+      return dedupLayout(out);
+    }
     return ALL_CARDS.slice();
   }
   const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? dedupLayout(a) : defaultLayout(m);
@@ -679,9 +690,7 @@ function syncComparable() {
 // Résumé lisible de la période N-1 (lecture seule, mode auto).
 function refreshN1Display() {
   const lab = document.getElementById('n1Label'); if (!lab) return;
-  const f = document.getElementById('dCfrom').value, t = document.getElementById('dCto').value;
-  const fr = s => { if (!s) return ''; const p = s.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
-  lab.textContent = (f || t) ? `${fr(f)} → ${fr(t)}` : '−364 j (auto)';
+  lab.textContent = N1_MANUAL ? '✎ période N-1 personnalisée' : 'calculée automatiquement depuis N (modifiable)';
 }
 // Bascule N-1 auto (lecture seule) ↔ manuel (champs de dates).
 function setN1Manual(on) {
@@ -936,10 +945,10 @@ function renderReport(rep) {
   // Suivi temporel — vue 4 semaines (indépendante de la période) : CA/jour + TT + ajouts panier + emails
   const tlDays = (rep.timeline && rep.timeline.length) || 0;
   const timelineCard = tlDays > 1
-    ? `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
+    ? `<div class="card"><h3>📆 Récap — 4 dernières semaines</h3>
        <div style="height:260px"><canvas id="tlChart"></canvas></div>
-       <div class="note">Barres = CA/jour (foncé = N, clair = N-1) · courbes = taux de transfo (TT) et ajout panier (plein = N, pointillé = N-1) · ✉️ croix pleine = email N, croix fine = email N-1 (pic du canal Email GA4).</div></div>`
-    : `<div class="card"><h3>📆 Suivi temporel — 4 dernières semaines</h3>
+       <div class="note">Barres = CA/jour (foncé = N, clair = N-1) · courbes = sessions, taux de transfo (TT) et ajout panier (plein = N, pointillé = N-1) · ✉️ croix pleine = email N, croix fine = email N-1 (pic du canal Email GA4).</div></div>`
+    : `<div class="card"><h3>📆 Récap — 4 dernières semaines</h3>
        <div class="note">⚠️ Ce graphe affiche les <b>28 derniers jours</b> de l'OMS — or l'OMS chargé ne couvre que ${tlDays} jour(s). Lance « <b>Importer OMS depuis WSHOP</b> » sur une <b>période large</b> (ex. preset « 30 j » ou un mois) : les données s'accumulent et ce suivi (CA/jour + TT + ajouts panier + croix ✉️ email) s'affichera, quelle que soit la période d'analyse choisie ensuite.</div></div>`;
 
   // 2e suivi temporel : CA N/N-1 + sessions des meilleures campagnes d'acquisition (N & N-1)
@@ -1072,11 +1081,14 @@ function renderReport(rep) {
     const rdUseful = rd.filter(x => x.reason && x.reason !== '(non précisé)');
     const detailRows = rd.slice(0, 12).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const typeLine = rt.reasons.map(x => `${esc(x.reason)} (${fInt(x.qte != null ? x.qte : x.count)})`).join(' · ');
-    const reasonsBlock = rdUseful.length
-      ? `<div><h3>Motifs de retour (détail — source produit /returns/get)</h3><table><thead><tr><th>Motif</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${detailRows}</tbody></table>
-        <div class="note" style="font-size:11px">Type de remboursement : ${typeLine}.</div></div>`
+    // Le jeu 'ret' porte-t-il déjà des motifs DÉTAILLÉS ? (export retours détaillé uploadé : « trop petit »…)
+    // vs seulement le type WSHOP (remboursement manuel / retour client).
+    const retDetailed = rt.reasons.length > 2 || rt.reasons.some(x => /petit|grand|taille|coupe|qualit|defect|défect|conform|couleur|abim|abîm/i.test(x.reason || ''));
+    const reasonsBlock = (rdUseful.length || retDetailed)
+      ? `<div><h3>Motifs de retour (détail)</h3><table><thead><tr><th>Motif</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${rdUseful.length ? detailRows : reasons}</tbody></table>
+        <div class="note" style="font-size:11px">${rdUseful.length ? `Source produit /returns/get. Type de remboursement : ${typeLine}.` : 'Source : export retours détaillé (colonne « Raison »).'}</div></div>`
       : `<div><h3>Type de remboursement (EShop, hors marketplace)</h3><table><thead><tr><th>Type</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table>
-        <div class="note" style="font-size:11px">⚠️ Le feed remboursement WSHOP ne porte que le <b>type</b> (remboursement manuel / retour client). Pour les <b>motifs détaillés</b> (taille, qualité…), faire un <b>import complet</b> (source produit /returns/get) ou uploader l'export retours détaillé.</div></div>`;
+        <div class="note" style="font-size:11px">⚠️ Le feed remboursement WSHOP ne porte que le <b>type</b> (remboursement manuel / retour client). Pour les <b>motifs détaillés</b> (taille, qualité…), uploade l'<b>export retours détaillé</b> (source « Retours »), qui contient la colonne « Raison ».</div></div>`;
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
     const reasonsCell = x => (x.reasons && x.reasons.length)
@@ -1157,14 +1169,21 @@ function renderReport(rep) {
   // Produits les plus retournés : top CA retourné + taux de retour produit + motif dominant
   let returnProdCard = '';
   const rpd = rep.returns && rep.returns.topProduitsDetail;
-  if (rpd && rpd.length) {
-    const rows = rpd.map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.montant)}</td><td>${p.qteVendue ? fInt(p.qteVendue) : '—'}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td><td style="font-size:11px">${esc(p.raison || '—')}</td></tr>`).join('');
-    const worst = rpd.filter(p => p.taux != null && p.qteVendue >= 5).sort((a, b) => b.taux - a.taux)[0];
-    const worstMsg = worst ? `Taux de retour le plus élevé : <b>${esc((worst.des || '').slice(0, 40))}</b> à ${fPct(worst.taux)} (${fInt(worst.qte)} retournées / ${fInt(worst.qteVendue)} vendues) — motif « ${esc(worst.raison || '—')} ».` : '';
-    returnProdCard = `<div class="card"><h3>📦 Produits les plus retournés (EShop, source produit /returns/get)</h3>
-      <table><thead><tr><th>#</th><th>Produit</th><th>Pièces ret.</th><th>CA retourné</th><th>Qté vendue</th><th>Taux retour</th><th>Motif dominant</th></tr></thead><tbody>${rows}</tbody></table>
-      ${worstMsg ? `<div class="note" style="margin-top:8px">${worstMsg}</div>` : ''}
-      <div class="note"><b>Taux de retour produit</b> = pièces retournées ÷ pièces vendues (EShop, même période). Trié par CA retourné. Le <b>motif dominant</b> vient de l'export retours produit → cible fiches / qualité / tailles sur les pires.</div></div>`;
+  const rpr = (rep.returns && rep.returns.topRateProducts) || [];
+  // Classement par TAUX de retour le plus élevé (jointure retours × ventes par référence) — toujours dispo
+  // dès qu'un fichier Retours est chargé (l'export détaillé suffit, pas besoin de /returns/get).
+  const rateTable = rpr.length ? `<h3 style="margin-top:14px">⚠️ Taux de retour le plus élevé (par produit)</h3>
+      <table><thead><tr><th>#</th><th>Produit</th><th>Qté vendue</th><th>Qté retournée</th><th>Taux retour</th><th>CA net</th></tr></thead><tbody>${rpr.map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.produit)}">${esc((p.produit || '').slice(0, 40))}</td><td>${fInt(p.qteVendue)}</td><td>${fInt(p.qteRetournee)}</td><td class="${p.tauxRetour >= 0.3 ? 'dn' : ''}">${fPct(p.tauxRetour)}</td><td>${fEur(p.caNet)}</td></tr>`).join('')}</tbody></table>
+      <div class="note">Taux = pièces retournées ÷ pièces vendues (≥ 3 ventes). Rouge ≥ 30 % = produit à surveiller (taille / qualité / visuel).</div>` : '';
+  if ((rpd && rpd.length) || rateTable) {
+    const detailTable = (rpd && rpd.length) ? (() => {
+      const rows = rpd.map((p, i) => `<tr><td>${i + 1}</td><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 40))}</td><td>${fInt(p.qte)}</td><td>${fEur(p.montant)}</td><td>${p.qteVendue ? fInt(p.qteVendue) : '—'}</td><td>${p.taux != null ? fPct(p.taux) : '—'}</td><td style="font-size:11px">${esc(p.raison || '—')}</td></tr>`).join('');
+      return `<h3>Top produits retournés (par CA, source produit /returns/get)</h3>
+      <table><thead><tr><th>#</th><th>Produit</th><th>Pièces ret.</th><th>CA retourné</th><th>Qté vendue</th><th>Taux retour</th><th>Motif dominant</th></tr></thead><tbody>${rows}</tbody></table>`;
+    })() : '';
+    returnProdCard = `<div class="card"><h3>📦 Produits les plus retournés (EShop)</h3>
+      ${detailTable}${rateTable}
+      <div class="note">Le <b>taux de retour</b> est daté sur la <b>date de validation</b> du retour. Cible fiches / guide des tailles / qualité sur les pires.</div></div>`;
   }
 
   // Suivi des alertes stock (back-in-stock) : produits les plus attendus
@@ -1198,7 +1217,6 @@ function renderReport(rep) {
     }
     const manq = (P.manquants || []).map(m => `<tr><td>${esc(m.produit)}</td><td>${fEur(m.caN)}</td><td>${fEur(m.caN1)}</td><td class="dn">−${fEur(m.perte)}</td></tr>`).join('');
     produitsCard = `<div class="card"><h3>Top produits — N vs N-1</h3>
-      <div style="height:240px;margin-bottom:10px"><canvas id="prodChart"></canvas></div>
       <table><thead><tr><th>#</th><th>Produit (N)</th><th>CA N</th><th>Qté N</th><th>Produit (N-1)</th><th>CA N-1</th></tr></thead><tbody>${topRows}</tbody></table>
       ${manq ? `<h3 style="margin-top:14px">🎯 Produits à reconquérir (forts en N-1, en retrait en N)</h3>
         <table><thead><tr><th>Produit</th><th>CA N</th><th>CA N-1</th><th>CA perdu</th></tr></thead><tbody>${manq}</tbody></table>
@@ -2523,10 +2541,6 @@ function renderCharts(rep) {
   if (rep.famille && rep.famille.length) {
     growShrink('famChart', rep.famille.slice(0, 8).map(x => ({ label: x.fam, n: x.n, n1: x.n1 })));
   }
-  if (rep.produits && rep.produits.topN && rep.produits.topN.length) {
-    const p = rep.produits.topN.slice(0, 8);
-    mk('prodChart', { type: 'bar', data: { labels: p.map(x => cut(x.des, 22)), datasets: [{ data: p.map(x => Math.round(x.ca)), backgroundColor: 'rgba(168,133,74,.55)', borderColor: '#A8854A', borderWidth: 1, borderRadius: 3 }] }, options: barOpts });
-  }
 }
 
 // ── Suivi temporel : granularité heure/jour/semaine, N vs N-1 ───────────────
@@ -2560,6 +2574,9 @@ function renderTimelineChart(rep) {
   const ttN1 = tl.map(d => d.ttN1 != null ? +(d.ttN1 * 100).toFixed(2) : null);
   const atc = tl.map(d => d.addRate != null ? +(d.addRate * 100).toFixed(2) : null);
   const atcN1 = tl.map(d => d.addN1 != null ? +(d.addN1 * 100).toFixed(2) : null);
+  const sess = tl.map(d => d.sessions != null ? Math.round(d.sessions) : null);
+  const sessN1 = tl.map(d => d.sessN1 != null ? Math.round(d.sessN1) : null);
+  const hasSess = sess.some(v => v); const hasSessN1 = sessN1.some(v => v != null);
   const hasN1 = caN1.some(v => v != null);
   const maxCa = Math.max(1, ...ca, ...caN1.filter(v => v != null));
   const emailPts = tl.map(d => d.email ? maxCa * 1.06 : null);
@@ -2576,6 +2593,8 @@ function renderTimelineChart(rep) {
         ...(hasN1 ? [{ type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#1B9E6A', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
         { type: 'line', label: 'Ajouts panier % N', yAxisID: 'y1', data: atc, borderColor: '#9B8AA3', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
         ...(hasN1 ? [{ type: 'line', label: 'Ajouts panier % N-1', yAxisID: 'y1', data: atcN1, borderColor: '#9B8AA3', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
+        ...(hasSess ? [{ type: 'line', label: 'Sessions N', yAxisID: 'y2', data: sess, borderColor: '#6E7B8B', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }] : []),
+        ...(hasSessN1 ? [{ type: 'line', label: 'Sessions N-1', yAxisID: 'y2', data: sessN1, borderColor: '#6E7B8B', borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }] : []),
         { type: 'line', label: '✉️ Email N', yAxisID: 'y', data: emailPts, showLine: false, pointStyle: 'crossRot', pointRadius: 8, pointBorderColor: '#E2574D', pointBorderWidth: 2, borderColor: '#E2574D' },
         ...(hasEmailN1 ? [{ type: 'line', label: '✉️ Email N-1', yAxisID: 'y', data: emailN1Pts, showLine: false, pointStyle: 'cross', pointRadius: 8, pointBorderColor: 'rgba(226,87,77,.55)', pointBorderWidth: 2, borderColor: 'rgba(226,87,77,.55)' }] : []),
       ],
@@ -2587,6 +2606,7 @@ function renderTimelineChart(rep) {
         x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 14 }, grid: { color: 'rgba(20,22,28,.06)' } },
         y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
         y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } },
+        y2: { position: 'right', display: false, grid: { drawOnChartArea: false } },
       },
     },
   });

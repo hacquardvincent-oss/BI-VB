@@ -72,10 +72,12 @@
       <input type="date" id="dNfrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dNto" class="dt" style="flex:1;min-width:0">
     </div>
     <div id="n1Wrap">
-      <label class="setlabel" style="margin-top:7px">Période N-1 (comparaison, automatique)</label>
-      <div class="note" id="n1Label" style="margin:2px 0 0;font-weight:700;color:var(--t2)">−364 j (auto)</div>
-      <!-- N-1 calculé automatiquement (jour pour jour / semaine pour semaine, années bissextiles gérées) -->
-      <input type="hidden" id="dCfrom"><input type="hidden" id="dCto">
+      <label class="setlabel" style="margin-top:7px">Période N-1 (comparaison) — début → fin</label>
+      <div class="toolbar" style="gap:6px;flex-wrap:nowrap">
+        <input type="date" id="dCfrom" class="dt" style="flex:1;min-width:0"><span style="color:var(--t3)">→</span><input type="date" id="dCto" class="dt" style="flex:1;min-width:0">
+      </div>
+      <div class="note" id="n1Label" style="margin-top:3px"></div>
+      <!-- N-1 = auto par défaut (jour pour jour / semaine pour semaine, bissextiles gérés) ; éditable pour comparer des périodes différentes. -->
     </div>
     <label class="setlabel">Filtre pays</label>
     <div class="toolbar" style="gap:5px">

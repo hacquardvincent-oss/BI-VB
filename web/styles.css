@@ -102,7 +102,7 @@ span.up:not(.sig),span.dn:not(.sig){padding:2px 8px;white-space:nowrap}
 .na{color:var(--t3);background:none}
 
 .toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.pb{font-size:13px;padding:6px 13px;border-radius:99px;border:1px solid transparent;background:transparent;color:var(--t2);cursor:pointer}
+.pb{font-size:13px;padding:6px 13px;border-radius:99px;border:1px solid transparent;background:transparent;color:var(--t2);cursor:pointer;white-space:nowrap}
 .pb:hover{background:var(--s2)}
 .pb.on{background:var(--inset2);color:var(--t);border-color:var(--br);font-weight:600}
 #hdr .pb.on{background:var(--t);color:#fff;border-color:var(--t)} /* nav d'en-tête = repère « vous êtes ici », garde le contraste */
