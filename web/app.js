@@ -1264,15 +1264,15 @@ function renderReport(rep) {
   let mktCRhtml = '';
   const mcr = rep.marketplace && rep.marketplace.cancelRefund;
   if (mcr && ((mcr.cancellations.byChannel.length) || (mcr.refunds.byChannel.length))) {
-    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
-      || '<tr><td colspan="3" style="color:var(--t3)">Aucune annulation</td></tr>';
+    const cRows = mcr.cancellations.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${x.taux != null ? fPct(x.taux) : '—'}</td><td>${fInt(x.qte)}</td><td>${fEur(x.ca)}</td></tr>`).join('')
+      || '<tr><td colspan="4" style="color:var(--t3)">Aucune annulation</td></tr>';
     const rRows = mcr.refunds.byChannel.map(x => `<tr><td>${esc(x.ch)}</td><td>${fInt(x.count)}</td><td class="dn">${fEur(x.ca)}</td></tr>`).join('')
       || '<tr><td colspan="3" style="color:var(--t3)">Aucun remboursement</td></tr>';
     mktCRhtml = `<div class="grid cols2" style="margin-top:12px">
-        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
+        <div><h3>Commandes annulées (non livrées)</h3><table><thead><tr><th>Enseigne</th><th>Taux annul.</th><th>Pièces</th><th>CA estimé</th></tr></thead><tbody>${cRows}</tbody></table></div>
         <div><h3>Remboursements / avoirs (Y2)</h3><table><thead><tr><th>Enseigne</th><th>Nb</th><th>Montant</th></tr></thead><tbody>${rRows}</tbody></table></div>
       </div>
-      <div class="note">Annulations = pièces marketplace non livrées (source WSHOP OMS, CA estimé au prorata). Remboursements = lignes Y2 à Total TTC négatif (retours/avoirs), exclues du CA marketplace ci-dessus.</div>`;
+      <div class="note">Taux d'annulation = commandes annulées (statut Annulé Stock / Client / Mags + non livré) ÷ commandes du canal. Calculable pour GL.com & Printemps (source OMS) ; pas pour le corner GL, PDT ni Lulli (Y2, sans statut). Remboursements = lignes Y2 à Total TTC négatif, exclues du CA marketplace ci-dessus.</div>`;
   }
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>

@@ -496,12 +496,17 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
   const round2 = x => Math.round(x * 100) / 100;
   const mktLabel = t => { const s = (t || '').toLowerCase(); if (s.includes('gl.com')) return 'GL.com'; if (s.includes('printemps')) return 'Printemps'; if (s.includes('la redoute')) return 'La Redoute'; if (s.includes('24s')) return '24S'; return t || 'Marketplace'; };
   const cancel = {}; let cancelQte = 0, cancelCA = 0;
-  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type, si = omsMap.statut;
+  const pi = omsMap.prix, qi = omsMap.qte, qni = omsMap.qte_non_livre, ti = omsMap.type, si = omsMap.statut, ni = omsMap.num;
   const hasStatut = si !== undefined;
   if (qni !== undefined) {
     (omsRows || []).forEach(r => {
       const type = (r[ti] || '').trim();
       if (!isMkt(type)) return;
+      const ch = mktLabel(type);
+      const order = (ni !== undefined && r[ni]) ? r[ni] : null;
+      // Dénominateur du taux : toutes les commandes du canal (pour GL.com / Printemps = OMS).
+      const e = cancel[ch] || (cancel[ch] = { qte: 0, ca: 0, orders: new Set(), allOrders: new Set() });
+      if (order) e.allOrders.add(order);
       const nonLivre = parseInt((r[qni] || '0').toString().replace(/\s/g, '')) || 0;
       if (nonLivre <= 0) return;
       // Annulation = statut Stock/Client/Mags + non livré > 0 uniquement ; on exclut demande
@@ -511,9 +516,8 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
       if (hasStatut && !isCancelStatus(st)) return;
       const cmd = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
       const unit = cmd > 0 ? fN(r[pi]) / cmd : fN(r[pi]);
-      const ch = mktLabel(type);
-      const e = cancel[ch] || (cancel[ch] = { qte: 0, ca: 0 });
       e.qte += nonLivre; e.ca += unit * nonLivre;
+      if (order) e.orders.add(order);
       cancelQte += nonLivre; cancelCA += unit * nonLivre;
     });
   }
@@ -530,7 +534,15 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
     });
   }
   return {
-    cancellations: { byChannel: Object.entries(cancel).map(([ch, v]) => ({ ch, qte: v.qte, ca: round2(v.ca) })).sort((a, b) => b.qte - a.qte), totalQte: cancelQte, totalCA: round2(cancelCA) },
+    // Taux d'annulation par marketplace OMS (GL.com / Printemps) = commandes annulées ÷ commandes
+    // du canal. Affiché dans la carte CA Marketplace. (Y2 : pas de statut/non-livré → pas de taux.)
+    cancellations: {
+      byChannel: Object.entries(cancel).map(([ch, v]) => ({
+        ch, qte: v.qte, ca: round2(v.ca), commandes: v.allOrders.size, commandesAnnulees: v.orders.size,
+        taux: v.allOrders.size > 0 ? v.orders.size / v.allOrders.size : null,
+      })).sort((a, b) => b.qte - a.qte),
+      totalQte: cancelQte, totalCA: round2(cancelCA),
+    },
     refunds: { byChannel: Object.entries(refund).map(([ch, v]) => ({ ch, ca: round2(v.ca), count: v.count })).sort((a, b) => a.ca - b.ca), totalCA: round2(refundCA), count: refundCount },
   };
 }

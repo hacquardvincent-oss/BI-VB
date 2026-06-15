@@ -278,6 +278,9 @@ qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
   de corner GL) et `lulli` exigeait `ref 005…` (perdait ~37 K€ de ventes Lulli à réf `1000…`). Carte : GL en 3
   sous-lignes (dropshipping WSHOP / corner Y2 / SFS Y2).
 - **`calcMarketplaceCancelRefund`** : annulations OMS (lignes mkt non livrées par enseigne) + remboursements Y2 (**`ttc < 0`**).
+  `byChannel` porte aussi le **taux d'annulation par marketplace OMS** (`commandesAnnulees ÷ commandes` = GL.com / Printemps ;
+  affiché **uniquement dans la carte CA Marketplace**, colonne « Taux annul. »). **Y2 (corner GL, PDT, Lulli) → pas de taux**
+  (ni statut ni non-livré dans Y2). EShop reste son propre taux (scorecard + dashboard annulations), pas ici.
 - **`calcCrossChannel`** (`ccAccumulate`, `omsChannelOf`=EShop/GL/Printemps, `y2ChannelOf`=PDT/Lulli/GL) :
   `channels` (ordre `EShop,GL,Printemps,PDT,Lulli`), `familles` (famille×canal), `topByMarketplace` (top 5/enseigne),
   **`arbitrage`** (produit fort sur un canal/faible sur l'autre ; seuil 300€ & 15% ; **on ne SOMME jamais EShop+mkt**),

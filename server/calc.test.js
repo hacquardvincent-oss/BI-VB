@@ -147,6 +147,25 @@ const can2 = calc.calcCancellations(cRows2, cMap2);
 assert.strictEqual(can2.commandesImpactees, 2, 'D1 (client) + D2 (stock) comptées, D3 (impayé) exclue');
 assert.strictEqual(can2.caAnnuleEstime, 180, 'CA annulé = 100 + 80 (impayé exclu)');
 
+// ── Taux d'annulation marketplace par canal (GL.com / Printemps) ─────────────
+const mcHdrs = ['Prix de vente paye', 'quantites commandees', 'Quantite non livre', 'Numeros', 'Type Paiement', 'Statut commande'];
+const mcMap = calc.autoMap(mcHdrs, calc.OMS_ALIASES);
+const mcRows = [
+  ['100', '1', '1', 'G1', 'GL.com', 'Annulé Stock'],     // GL annulée
+  ['90', '1', '0', 'G2', 'GL.com', 'Préparation'],        // GL ok
+  ['80', '1', '0', 'G3', 'GL.com', 'Expédiée'],           // GL ok
+  ['70', '1', '1', 'P1', 'Printemps', 'Annulé par le Client'], // Printemps annulée
+  ['60', '1', '0', 'P2', 'Printemps', 'Préparation'],     // Printemps ok
+  ['50', '1', '1', 'E1', 'Carte Bancaire', 'Annulé Stock'], // EShop → hors marketplace
+];
+const mc = calc.calcMarketplaceCancelRefund(mcRows, mcMap, [], {});
+const gl = mc.cancellations.byChannel.find(x => x.ch === 'GL.com');
+const pr = mc.cancellations.byChannel.find(x => x.ch === 'Printemps');
+assert.ok(Math.abs(gl.taux - 1 / 3) < 1e-9, 'taux annul. GL.com = 1/3 commandes');
+assert.strictEqual(gl.commandes, 3, 'GL.com : 3 commandes au dénominateur');
+assert.ok(Math.abs(pr.taux - 1 / 2) < 1e-9, 'taux annul. Printemps = 1/2 commandes');
+assert.ok(!mc.cancellations.byChannel.some(x => x.ch === 'Carte Bancaire'), 'EShop exclu du taux marketplace');
+
 // ── Retours ──────────────────────────────────────────────────────────────────
 const rHdrs = ['Date Creation', 'Montant Rembourse', 'Nb Colisages Rembourses', 'Numero de Retour', 'Raison', 'Ref Ext', 'Pays livraison', 'Destination du retour'];
 const rMap = calc.autoMap(rHdrs, calc.RET_ALIASES);
