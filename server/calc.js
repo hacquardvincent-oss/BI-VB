@@ -656,6 +656,45 @@ function gaSessionsByCountry(ga) {
   ga.rows.forEach(r => { const k = normCountry(r[ci]); by[k] = (by[k] || 0) + fGA(r[si]); });
   return by;
 }
+// GA : sessions / ajouts panier / sessions engagées agrégés par ZONE (France vs International).
+function gaMetricsByZone(ga) {
+  if (!ga || !ga.rows) return null;
+  const m = (ga.map && Object.keys(ga.map).length) ? ga.map : autoMap(ga.hdrs, GA_ALIASES);
+  const ci = m.country; if (ci === undefined) return null;
+  const si = m.sessions, ai = m.addcart, ei = m.eng_sessions;
+  const z = { fr: { sessions: 0, carts: 0, engaged: 0 }, inter: { sessions: 0, carts: 0, engaged: 0 } };
+  ga.rows.forEach(r => {
+    const t = (normCountry(r[ci]) === 'france') ? z.fr : z.inter;
+    if (si !== undefined) t.sessions += fGA(r[si]);
+    if (ai !== undefined) t.carts += fGA(r[ai]);
+    if (ei !== undefined) t.engaged += fGA(r[ei]);
+  });
+  return z;
+}
+// Comparatif FR vs International (N et N-1) : CA, commandes, panier, sessions, TT, ajouts panier,
+// engagement, CA par famille. base* = lignes OMS déjà filtrées PÉRIODE + Outstore, SANS filtre de dim
+// (la fonction sépare elle-même FR / Inter). Sessions/paniers/engagement = GA par pays (indicatif, seuillé).
+function calcZoneCompare(baseN, mapN, baseN1, mapN1, gaSessN, gaSessN1, gaN, gaN1, refMap) {
+  const r2 = x => Math.round(x * 100) / 100;
+  const sessZone = src => { const mm = gaSessionsByCountry(src); let fr = 0, inter = 0; if (mm) Object.entries(mm).forEach(([k, v]) => { if (k === 'france') fr += v; else inter += v; }); return { fr: Math.round(fr), inter: Math.round(inter) }; };
+  const zoneKPI = (base, map, zone, sessions, gaz) => {
+    if (!base) return null;
+    const rows = filterDim(base, map, zone);
+    const k = calcKPIEShop(rows, map, sessions);
+    const g = gaz ? gaz[zone] : null;
+    return {
+      ca: r2(k.ca), commandes: k.commandes, pieces: k.pieces, pm: r2(k.pm),
+      sessions: sessions || 0, tt: (sessions > 0) ? k.commandes / sessions : null,
+      carts: g ? Math.round(g.carts) : null, engaged: g ? Math.round(g.engaged) : null,
+      engRate: (g && g.sessions > 0) ? g.engaged / g.sessions : null,
+      familles: refMap ? calcCAFamille(rows, map, refMap) : null,
+    };
+  };
+  const gaZN = gaMetricsByZone(gaN), gaZN1 = gaMetricsByZone(gaN1);
+  const sN = sessZone(gaSessN), sN1 = sessZone(gaSessN1);
+  const build = (base, map, s, gaz) => base ? { fr: zoneKPI(base, map, 'fr', s.fr, gaz), inter: zoneKPI(base, map, 'inter', s.inter, gaz) } : null;
+  return { n: build(baseN, mapN, sN, gaZN), n1: build(baseN1, mapN1, sN1, gaZN1) };
+}
 // paysArr = sortie de calcByCountry ; ga = jeu GA principal (avec colonne Pays)
 function ttByCountry(paysArr, ga, top = 10) {
   const sess = gaSessionsByCountry(ga); if (!sess) return null;
@@ -1852,7 +1891,7 @@ module.exports = {
   isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
-  normCountry, gaSessionsByCountry, ttByCountry,
+  normCountry, gaSessionsByCountry, gaMetricsByZone, calcZoneCompare, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,
   y2Ref, calcCrossChannel,
 };

@@ -155,6 +155,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     paysN1arr = calc.calcByCountry(rowsN1, mapN1);
   }
 
+  // ── Comparatif FR vs International (N vs N-1) : sessions, TT, paniers, engagement, CA, CA/famille ──
+  // base = lignes OMS période + Outstore, SANS filtre dim (la fonction sépare FR / Inter elle-même).
+  const baseZN = calc.filterOutstore(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map);
+  let baseZN1 = null, baseZMapN1 = mapN1;
+  if (omsN1 && omsN1.rows) baseZN1 = calc.filterOutstore(calc.filterRows(omsN1.rows, mapN1, cf, ct, false), mapN1);
+  else if (!isAll && !noN1) { baseZN1 = calc.filterOutstore(calc.filterRows(omsN.rows, omsN.map, cf, ct, false), omsN.map); baseZMapN1 = omsN.map; }
+  const zoneCompare = calc.calcZoneCompare(baseZN, omsN.map, baseZN1, baseZMapN1, gaSessN, gaSessN1, gaN, gaN1, refMap);
+
   // CA par pays fusionné N / N-1
   const paysMap = {};
   paysNarr.forEach(p => { paysMap[p.pays] = { pays: p.pays, n: p, n1: null }; });
@@ -758,7 +766,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     hourly,
     gaFunnel,
     ttPays,
-    sessionsByZone,
+    sessionsByZone, zoneCompare,
     landingPages,
     itemFunnel,
     topPages,
