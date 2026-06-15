@@ -104,7 +104,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'channels', 'canaltype', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -645,7 +645,38 @@ function fillDateInputs(meta) {
   if (!meta) return;
   const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
   set('dNfrom', meta.from); set('dNto', meta.to); set('dCfrom', meta.cf); set('dCto', meta.ct);
-  refreshN1Display();
+  syncNPicker(); syncN1Picker(); refreshN1Display();
+}
+// ── Calendriers « range » (1 widget début→fin) via flatpickr ────────────────────────────
+// Synchronisent les champs ISO cachés (dNfrom/dNto/dCfrom/dCto) lus par tout le reste du code.
+let _fpN = null, _fpN1 = null, _fpN1Prog = false;
+function isoOf(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function _setHidden(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+function _dObj(iso) { return iso ? new Date(iso + 'T00:00:00') : null; }
+function syncNPicker() { const f = document.getElementById('dNfrom').value, t = document.getElementById('dNto').value; if (_fpN && f && t) _fpN.setDate([_dObj(f), _dObj(t)], false); }
+function syncN1Picker() { const cf = document.getElementById('dCfrom').value, ct = document.getElementById('dCto').value; if (_fpN1 && cf && ct) { _fpN1Prog = true; _fpN1.setDate([_dObj(cf), _dObj(ct)], false); _fpN1Prog = false; } }
+function initRangePickers() {
+  if (typeof flatpickr === 'undefined' || _fpN) return;
+  const loc = (flatpickr.l10ns && flatpickr.l10ns.fr) ? flatpickr.l10ns.fr : undefined;
+  const base = { mode: 'range', dateFormat: 'd/m/Y', locale: loc, rangeSeparator: ' → ', clickOpens: true };
+  _fpN = flatpickr('#nRange', Object.assign({}, base, {
+    onChange: sel => {
+      if (sel.length < 2) return;
+      _setHidden('dNfrom', isoOf(sel[0])); _setHidden('dNto', isoOf(sel[1]));
+      document.getElementById('datesAll').classList.remove('on');
+      document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
+      if (!N1_MANUAL) { syncComparable(); syncN1Picker(); }
+    },
+  }));
+  _fpN1 = flatpickr('#n1Range', Object.assign({}, base, {
+    onChange: sel => {
+      if (_fpN1Prog || sel.length < 2) return;   // ignore les MAJ programmatiques (auto depuis N)
+      N1_MANUAL = true;                            // saisie manuelle d'une période N-1 différente
+      _setHidden('dCfrom', isoOf(sel[0])); _setHidden('dCto', isoOf(sel[1]));
+      refreshN1Display();
+    },
+  }));
+  syncNPicker(); syncN1Picker();
 }
 // Période actuellement saisie dans les calendriers (N début/fin + N-1 début/fin)
 function currentPeriod() {
@@ -685,7 +716,7 @@ function syncComparable() {
     if (nf) document.getElementById('dCfrom').value = comparable364(nf);
     if (nt) document.getElementById('dCto').value = comparable364(nt);
   }
-  refreshN1Display();
+  syncN1Picker(); refreshN1Display();
 }
 // Résumé lisible de la période N-1 (lecture seule, mode auto).
 function refreshN1Display() {
@@ -1208,19 +1239,14 @@ function renderReport(rep) {
   const P = rep.produits;
   let produitsCard = '', rentaCard = '';
   if (P) {
-    const tN = P.topN || [], tN1 = P.topN1 || [];
-    const n = Math.max(tN.length, tN1.length);
-    let topRows = '';
-    for (let i = 0; i < n; i++) {
-      const a = tN[i], b = tN1[i];
-      topRows += `<tr><td>${i + 1}</td><td>${a ? esc(a.des) : ''}</td><td>${a ? fEur(a.ca) : ''}</td><td>${a ? fInt(a.qte) : ''}</td><td style="color:var(--t3)">${b ? esc(b.des) : ''}</td><td>${b ? fEur(b.ca) : ''}</td></tr>`;
-    }
+    const tN = (P.topN || []).slice(0, 10);
+    const topRows = tN.map((a, i) => `<tr><td>${i + 1}</td><td>${esc(a.des)}</td><td>${fEur(a.ca)}</td><td>${fInt(a.qte)}</td></tr>`).join('');
     const manq = (P.manquants || []).map(m => `<tr><td>${esc(m.produit)}</td><td>${fEur(m.caN)}</td><td>${fEur(m.caN1)}</td><td class="dn">−${fEur(m.perte)}</td></tr>`).join('');
-    produitsCard = `<div class="card"><h3>Top produits — N vs N-1</h3>
-      <table><thead><tr><th>#</th><th>Produit (N)</th><th>CA N</th><th>Qté N</th><th>Produit (N-1)</th><th>CA N-1</th></tr></thead><tbody>${topRows}</tbody></table>
+    produitsCard = `<div class="card"><h3>Top produits N (meilleures ventes de la période)</h3>
+      <table><thead><tr><th>#</th><th>Produit</th><th>CA N</th><th>Qté N</th></tr></thead><tbody>${topRows}</tbody></table>
       ${manq ? `<h3 style="margin-top:14px">🎯 Produits à reconquérir (forts en N-1, en retrait en N)</h3>
         <table><thead><tr><th>Produit</th><th>CA N</th><th>CA N-1</th><th>CA perdu</th></tr></thead><tbody>${manq}</tbody></table>
-        <div class="note">Trié par CA perdu vs N-1 : ce sont les leviers prioritaires pour égaler/battre N-1.</div>` : ''}</div>`;
+        <div class="note">Différence avec le tableau ci-dessus : le <b>Top produits N</b> liste vos meilleures ventes <b>cette année</b> ; les <b>produits à reconquérir</b> sont ceux qui <b>cartonnaient l'an dernier</b> mais que vous ne vendez plus (CA perdu vs N-1) → vos leviers prioritaires pour rattraper N-1.</div>` : ''}</div>`;
 
     const vend = (P.topVendus || []).map(p => `<tr><td>${esc(p.produit)}</td><td>${fEur(p.caVendu)}</td><td>${fInt(p.qteVendue)}</td></tr>`).join('');
     const ret = (P.topRetournes || []).map(p => `<tr><td>${esc(p.produit)}</td><td>${fEur(p.caRetourne)}</td><td>${fInt(p.qteRetournee)}</td><td class="${p.tauxRetour >= 0.3 ? 'dn' : ''}">${fPct(p.tauxRetour)}</td><td>${fEur(p.caNet)}</td></tr>`).join('');
@@ -2687,6 +2713,8 @@ function renderDailyChart(rep) {
     { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#6E7B8B', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
     { type: 'line', label: 'Ajout panier % N', yAxisID: 'y1', data: addN, borderColor: '#9B8AA3', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
     { type: 'line', label: 'Ajout panier % N-1', yAxisID: 'y1', data: addN1, borderColor: '#9B8AA3', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
+    { type: 'line', label: 'TT % N', yAxisID: 'y1', data: ttN, borderColor: '#1B9E6A', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
+    { type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#1B9E6A', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
   ], { x: xax, y: { position: 'left', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
   else if (_charts.trafChart) { _charts.trafChart.destroy(); }
   // TT N vs N-1
@@ -3058,6 +3086,7 @@ document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
   document.getElementById('datesAll').classList.remove('on');
   setN1Manual(false); // un raccourci rétablit la comparaison N-1 auto
+  syncNPicker(); syncN1Picker();
   applyCurrentPeriod(); loadReport();
 }));
 // Saisie manuelle de N : en mode AUTO, N-1 suit (−364 j) ; en mode manuel, on respecte la période N-1 saisie.
@@ -3086,6 +3115,7 @@ document.getElementById('datesAll').addEventListener('click', () => {
   document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
   document.getElementById('datesAll').classList.add('on');
   ['dNfrom', 'dNto', 'dCfrom', 'dCto'].forEach(id => { document.getElementById(id).value = ''; });
+  if (_fpN) _fpN.clear(); if (_fpN1) { _fpN1Prog = true; _fpN1.clear(); _fpN1Prog = false; }
   setN1Manual(false); // période complète → comparaison auto
   loadReport(); // le rapport renverra la plage complète et re-remplira les calendriers
 });
@@ -3121,6 +3151,7 @@ function wireSetupFolds() {
   });
 }
 wireSetupFolds();
+initRangePickers();
 // Remplit la liste des pays — ACCUMULÉE (pour rester complète même quand on filtre sur un pays).
 let ALL_COUNTRIES = [];
 function fillCountrySelect(rep) {

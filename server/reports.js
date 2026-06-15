@@ -17,6 +17,10 @@ async function loadDataset(source, period) {
 }
 
 const shiftYear = (iso, delta) => { if (!iso) return ''; const p = iso.split('-'); return `${+p[0] + delta}-${p[1]}-${p[2]}`; };
+const shiftDaysIso = (iso, days) => { if (!iso) return ''; return new Date(Date.parse(iso + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10); };
+// Comparable N-1 par défaut : 1 seul jour → même jour calendaire l'an dernier (bissextile géré) ;
+// une plage (ex. semaine lun→dim) → −364 j (52 semaines pile) = même semaine, mêmes jours de la semaine.
+const autoCompare = (from, to, which) => { const d = which === 'from' ? from : to; if (from && to && from === to) return shiftYear(d, -1); return shiftDaysIso(d, -364); };
 
 // Calcule from/to selon un preset, à partir des bornes du fichier OMS N
 function rangeForPreset(preset, dateMin, dateMax) {
@@ -79,7 +83,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // Période N (preset hérité, ou plage de dates explicite)
   if (preset || (!from && !to)) ({ from, to, isAll } = rangeForPreset(preset, omsN.dateMin, omsN.dateMax));
   // Période N-1 : plage explicite (sélecteur de dates) sinon décalage d'un an
-  const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
+  const cf = cfrom || autoCompare(from, to, 'from'), ct = cto || autoCompare(from, to, 'to');
 
   // Dimension Global / FR / International : filtre les jeux GA par pays (si dispo)
   const gaNf = calc.filterGADim(gaN, dim);
@@ -897,7 +901,7 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const retN = retMap(retDsN), retrN1 = retMap(retDsN1);
 
   if (!from || !to) { from = omsN.dateMin; to = omsN.dateMax; }
-  const cf = cfrom || shiftYear(from, -1), ct = cto || shiftYear(to, -1);
+  const cf = cfrom || autoCompare(from, to, 'from'), ct = cto || autoCompare(from, to, 'to');
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
 
