@@ -41,6 +41,26 @@ assert.strictEqual(mkt.glOMS, 30, 'GL.com OMS');
 assert.strictEqual(mkt.printemps, 50, 'Printemps OMS');
 assert.strictEqual(mkt.total, 80, 'Total marketplace (OMS seul)');
 
+// ── Marketplace Y2 : GL identifié par établissement, ventilé corner / SFS ────
+// (le corner = codes 674* hors 674SFS ; ne plus le perdre comme avant)
+const y2Hdrs = ['Etablissement ligne doc.', 'Commercial du doc.', 'Total TTC ligne', 'Code article', 'Référence interne doc.'];
+const y2Map2 = calc.autoMap(y2Hdrs, calc.Y2_ALIASES);
+const y2Rows2 = [
+  ['GL AC Haussmann', '674SFS', '100', 'A1', '005X'],       // ship-from-store
+  ['GL AC Haussmann', '674GUM01', '300', 'A2', '005Y'],      // corner (vendeur)
+  ['GL AC Haussmann', '674MAELLE01', '200', 'A3', '100Z'],   // corner (autre vendeur)
+  ['Place des tendances', '686001', '150', 'A4', '005W'],
+  ['Lulli Eshop', '610LULLI', '80', 'A5', '1000080'],        // réf NON 005 → doit compter quand même
+  ['GL AC Haussmann', '674GUM01', '-50', 'A6', '005R'],      // retour (TTC<0) → exclu
+];
+const mkt2 = calc.calcMarketplace(rows, map, y2Rows2, y2Map2);
+assert.strictEqual(mkt2.glSFS, 100, 'GL ship-from-store (674SFS)');
+assert.strictEqual(mkt2.glCorner, 500, 'GL corner (674* hors SFS, retour exclu)');
+assert.strictEqual(mkt2.glY2, 600, 'GL Y2 total = corner + SFS');
+assert.strictEqual(mkt2.glTotal, 630, 'GL total = dropshipping OMS (30) + Y2 (600)');
+assert.strictEqual(mkt2.pdt, 150, 'Place des Tendances');
+assert.strictEqual(mkt2.lulli, 80, 'Lulli compté par établissement (réf non-005 incluse)');
+
 const pays = calc.calcByCountry(rows, map);
 // hors marketplace : France (row1, 100€, 1 cmd, 1 pièce) et Royaume-Uni (row2, 80€, 1 cmd, 2 pièces)
 assert.strictEqual(pays.length, 2, 'nombre de pays (hors mkt)');

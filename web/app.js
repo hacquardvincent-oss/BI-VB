@@ -836,10 +836,12 @@ function renderReport(rep) {
   const caBlocks = caRowsDef.map(([l, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${fEur(n)}</div><div style="font-size:11px">${delta(n, n1)}</div></div>`).join('');
 
   const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
-  // Sous-canaux Galeries Lafayette : dropshipping (WSHOP/OMS) vs ship-from-store corner (Y2).
+  // Sous-canaux Galeries Lafayette : dropshipping (WSHOP/OMS), corner (Y2, vendeurs 674*) et
+  // ship-from-store (Y2, 674SFS).
   const glSub = [
     { label: 'Dropshipping (WSHOP)', n: mk.glOMS, n1: mk1.glOMS || 0, sub: true },
-    { label: 'Ship-from-store / corner (Y2)', n: mk.glY2, n1: mk1.glY2 || 0, sub: true },
+    { label: 'Corner GL Haussmann (Y2)', n: mk.glCorner || 0, n1: mk1.glCorner || 0, sub: true },
+    { label: 'Ship-from-store (Y2)', n: mk.glSFS || 0, n1: mk1.glSFS || 0, sub: true },
   ].filter(r => r.n > 0 || r.n1 > 0);
   const mkRows = [
     { label: 'Galeries Lafayette', n: mk.glTotal, n1: mk1.glTotal || 0 },
@@ -1275,7 +1277,7 @@ function renderReport(rep) {
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map(r => `<tr${r.total ? ' style="font-weight:700"' : ''}><td${r.sub ? ' style="padding-left:22px;color:var(--t2);font-size:12px"' : ''}>${r.sub ? '└ ' : ''}${r.label}</td><td>${fEur(r.n)}</td><td>${fEur(r.n1)}</td><td>${delta(r.n, r.n1)}</td></tr>`).join('')}</tbody></table>
-      <div class="note">Galeries Lafayette ventilé en sous-canaux : <b>dropshipping</b> (commandes WSHOP, type de paiement GL.com) et <b>ship-from-store / corner</b> (Y2). Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
+      <div class="note">Galeries Lafayette ventilé en sous-canaux : <b>dropshipping</b> (WSHOP, type GL.com), <b>corner GL Haussmann</b> et <b>ship-from-store</b> (Y2). Enseignes Y2 identifiées par établissement (corner + SFS inclus). Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const familleCard = famRows ? `<div class="card"><h3>CA par famille</h3><div style="height:240px;margin-bottom:10px"><canvas id="famChart"></canvas></div><table><thead><tr><th>Famille</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
   // International : performance par famille pour le top 5 pays

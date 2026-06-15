@@ -468,21 +468,26 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
     if (type.includes('gl.com')) glOMS += prix;
     else if (type.includes('printemps')) printemps += prix;
   });
-  let glY2 = 0, pdt = 0, lulli = 0;
+  // Y2 : on identifie l'enseigne par l'ÉTABLISSEMENT (comme y2ChannelOf, source unique du
+  // cross-canal) — JAMAIS par un code commercial isolé (sinon on perd le corner GL et des
+  // ventes Lulli). Pour GL on ventile ensuite en sous-canaux : 674SFS = ship-from-store,
+  // tout autre code 674* = corner (vendeurs nommés du corner GL Haussmann).
+  let glCorner = 0, glSFS = 0, pdt = 0, lulli = 0;
   if (y2Rows && y2Map && y2Map.ttc !== undefined) {
-    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial, ri = y2Map.ref;
+    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[ti2]);
       if (ttc <= 0) return; // exclure les retours (valeurs négatives)
-      const etab = (r[ei] || '').toLowerCase();
-      const com = (r[ci] || '').toLowerCase();
-      const ref = (r[ri] || '').trim();
-      if (etab.includes('gl ac haussmann') && com.includes('674sfs')) glY2 += ttc;
-      else if (etab.includes('place des tendances') && com.includes('686001')) pdt += ttc;
-      else if (etab.includes('lulli') && com.includes('610lulli') && ref.startsWith('005')) lulli += ttc;
+      const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
+      if (ch === 'GL') {
+        const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase();
+        if (com.includes('sfs')) glSFS += ttc; else glCorner += ttc;
+      } else if (ch === 'PDT') pdt += ttc;
+      else if (ch === 'Lulli') lulli += ttc;
     });
   }
-  return { glOMS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
+  const glY2 = glCorner + glSFS;
+  return { glOMS, glCorner, glSFS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
 }
 
 // Détail des commandes annulées (WSHOP OMS : lignes marketplace non livrées) et remboursées

@@ -264,9 +264,14 @@ au signal sur du bruit statistique. 2ᵉ brique de la couche déterministe.
 qteRet/qteVendu). **Taux de retour = CA retourné / CA EShop période.**
 
 ### Marketplace
-- **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours) :
-  `glY2` (etab `gl ac haussmann` + commercial `674sfs`), `pdt` (`place des tendances` + `686001`),
-  `lulli` (`lulli` + `610lulli` + ref `005…`). `glTotal = glOMS+glY2`, `total` = somme des 5.
+- **`calcMarketplace`** : OMS par type (`gl.com`→glOMS, `printemps`→printemps) ; Y2 (**skip `ttc ≤ 0`** = retours)
+  identifié par **ÉTABLISSEMENT** (`y2ChannelOf`, source unique du cross-canal — **JAMAIS par un code commercial
+  isolé**, sinon on perd le corner GL et des ventes Lulli) : GL (`gl ac haussmann`/`haussmann`/`galeries`) ventilé
+  en sous-canaux **corner** (codes commerciaux `674*` des vendeurs) vs **ship-from-store** (`674sfs`) → `glCorner`,
+  `glSFS`, `glY2 = glCorner+glSFS` ; `pdt` (`place des tendances`) ; `lulli` (`lulli`). `glTotal = glOMS+glY2`,
+  `total` = somme des 5. ⚠️ **Anomalie résolue (cf §12)** : l'ancienne règle ne gardait que `674sfs` (perdait ~77 K€
+  de corner GL) et `lulli` exigeait `ref 005…` (perdait ~37 K€ de ventes Lulli à réf `1000…`). Carte : GL en 3
+  sous-lignes (dropshipping WSHOP / corner Y2 / SFS Y2).
 - **`calcMarketplaceCancelRefund`** : annulations OMS (lignes mkt non livrées par enseigne) + remboursements Y2 (**`ttc < 0`**).
 - **`calcCrossChannel`** (`ccAccumulate`, `omsChannelOf`=EShop/GL/Printemps, `y2ChannelOf`=PDT/Lulli/GL) :
   `channels` (ordre `EShop,GL,Printemps,PDT,Lulli`), `familles` (famille×canal), `topByMarketplace` (top 5/enseigne),
@@ -438,6 +443,7 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | **Sessions Bilan (35 487) < GA brut (42 728)** | `gasess` interroge GA4 avec la dim `country` → **seuillage de confidentialité GA4** masque les petits pays → la somme par pays SOUS-compte le total plateforme (~−17 %). | Jeu **`gatot`** (date SEULE, sans `country`) = total plateforme non seuillé → KPI sessions global du Bilan quand `dim=global` ; `gasess` reste pour FR/Inter (périmètre pays, forcément seuillé). **Exige un re-import GA4.** |
 | **TT / ajout panier vides** | TT calculé sur les sessions ventilées. | `dailySeries` accepte `sessByDay` issu de `gasess`. |
 | **CA marketplace famille négatif** | Lignes Y2 `Total TTC ≤ 0` (retours/avoirs) comptées. | Exclure `ttc ≤ 0` (`calcMarketplace`, `ccAccumulate`) ; `ttc < 0` = signal remboursement. |
+| **Marketplace GL & Lulli sous-comptés (~77 K€ + ~37 K€)** | `calcMarketplace` identifiait l'enseigne Y2 par un **code commercial isolé** : GL = `674sfs` SEUL (perdait tout le corner = vendeurs `674GUM01/674MAELLE01/…`), Lulli exigeait `ref 005…` (perdait les ventes à réf `1000…`). Incohérent avec `ccAccumulate`/`y2ChannelOf` (qui, eux, identifient par établissement → corrects). | Identifier par **établissement** (`y2ChannelOf`) comme le cross-canal ; GL ventilé en **corner** (`674*` hors SFS) vs **ship-from-store** (`674sfs`). Validé sur l'export Y2 réel (GL 101 818 € = corner 77 213 + SFS 24 605 ; Lulli 108 292 €). Carte : donut retiré, GL en 3 sous-lignes. |
 | **Suivi temporel « disparu »** | Période 1 jour → courbes 1 point invisibles. | Timeline **28 jours** indépendante + message si OMS trop court. |
 | **Test connexion / import en 504** | Appels WSHOP lents **en série** (auth + 5 sondes ≈ 8 s) ou échantillon 300 cmd. | **`Promise.all` (parallèle) + `Promise.race` (timeout 9 s)** → réponse partielle ; échantillons réduits. |
 | **Plein/Off « a changé »** | Pas un changement de règle : ré-import a rafraîchi les données. | RAS (démarque dans `originalDiscountedUnitPrice`). |
