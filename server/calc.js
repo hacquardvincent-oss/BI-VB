@@ -962,6 +962,25 @@ function calcCAFamille(rows, omsMap, refMap) {
   });
   return byFam;
 }
+// Produits NON RÉFÉRENCÉS : références EShop (hors mkt) absentes du référentiel produit → à ajouter
+// au référentiel. Renvoie la liste agrégée { ref, des, ca, qte } triée par CA + le total.
+function calcUnreferencedProducts(rows, omsMap, refMap) {
+  const pi = omsMap.prix, ti = omsMap.type, di = omsMap.des, qi = omsMap.qte;
+  const refIdx = omsMap.ref_ext !== undefined ? omsMap.ref_ext : omsMap._refExt;
+  if (refIdx === undefined) return { items: [], total: 0, count: 0 };
+  const hasRef = refMap && Object.keys(refMap).length > 0;
+  const by = {}; let total = 0;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const ref = (r[refIdx] || '').trim(); if (!ref) return;
+    if (hasRef && refMap[ref]) return;          // déjà référencé → on ignore
+    const ca = fN(r[pi]);
+    const e = by[ref] || (by[ref] = { ref, des: (di !== undefined ? (r[di] || '').trim() : ''), ca: 0, qte: 0 });
+    e.ca += ca; e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1; total += ca;
+  });
+  const items = Object.values(by).map(e => ({ ...e, ca: Math.round(e.ca * 100) / 100 })).sort((a, b) => b.ca - a.ca);
+  return { items, total: Math.round(total * 100) / 100, count: items.length };
+}
 
 // Full/Off price par famille (hors mkt) — { fam: { ca, caFP, caOP, qte } }
 // Off price = démarque détectée à l'écart payé vs catalogue (cf. isFullPriceLine).
@@ -1889,7 +1908,7 @@ module.exports = {
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
-  buildRefMap, calcCAFamille, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, gaMetricsByZone, calcZoneCompare, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,

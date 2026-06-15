@@ -644,6 +644,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       .map(f => ({ fam: f, n: famNobj[f] || 0, n1: famN1obj ? (famN1obj[f] || 0) : null }))
       .sort((a, b) => b.n - a.n);
   }
+  // Produits non référencés (réfs EShop absentes du référentiel) → liste cliquable « à ajouter au référentiel ».
+  const familleUnref = calc.calcUnreferencedProducts(rowsN, omsN.map, refMap);
 
   // CA + Quantité par famille (Pilotage 360) — fusion N / N-1
   let familleDetail = null;
@@ -737,7 +739,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     cancellations,
     significance,
     returns,
-    famille,
+    famille, familleUnref,
     topProduits: { n: topList(topNobj), n1: topN1obj ? topList(topN1obj) : null },
     topProduitsQte: { n: topListQte(topNobj), n1: topN1obj ? topListQte(topN1obj) : null },
     familleDetail,
