@@ -1721,12 +1721,16 @@ function renderReport(rep) {
   if (isCustomLayout(CURRENT_MODULE)) {
     // Vue personnalisée : on respecte l'ORDRE exact du layout (drag'n'drop), bannière au changement de thème.
     // Les items peuvent être des clés de cartes (string) ou des WIDGETS « from scratch » (objets).
-    let lastTheme = null; const out = [];
+    // Anti-doublon : on ne rend chaque carte / bannière (id=sec-<thème>) qu'UNE fois — protège contre un
+    // layout corrompu par un ancien réordonnancement (sinon section + ancre du sommaire apparaissaient en double).
+    let lastTheme = null; const out = []; const seenKeys = new Set(), seenThemes = new Set();
     layout.forEach(k => {
       if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html.replace('<div class="card', `<div data-wid="${esc(k.id)}" class="card`)); return; }
+      if (seenKeys.has(k)) return; seenKeys.add(k);
       const html = card(k); if (!html) return;
       const t = THEME_OF[k];
-      if (t && t !== lastTheme) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); lastTheme = t; }
+      if (t && t !== lastTheme && !seenThemes.has(t)) { out.push(`<div class="section-head" id="sec-${t}">${THEME_META[t] || ''}</div>`); seenThemes.add(t); }
+      if (t) lastTheme = t;
       out.push(html);
     });
     body = out.join('\n');
@@ -1751,7 +1755,9 @@ function buildReportNav() {
   }
   if (window.innerWidth >= 1100) nav.classList.add('open'); // sticky en permanence : réaffiché à CHAQUE rendu (ex. après édition)
   const report = document.getElementById('report');
-  const heads = report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [];
+  const seenH = new Set();
+  const heads = (report ? [...report.querySelectorAll('#sec-bilan, .section-head[id]')] : [])
+    .filter(h => { if (!h.id || seenH.has(h.id)) return false; seenH.add(h.id); return true; }); // jamais deux fois la même ancre
   const canEdit = canEditView();
   // Actions réduites aux pictos, en BAS du volet.
   const actions = `<div class="rn-actions">
@@ -1821,9 +1827,10 @@ async function applyNavOrder() {
     if (!themeItems[curT]) { themeItems[curT] = []; seq.push(curT); }
     themeItems[curT].push(k);                            // widgets & cartes sans thème suivent la section courante
   });
-  const finalThemes = order.filter(t => themeItems[t]).concat(seq.filter(t => !order.includes(t)));
-  const newLayout = leading.slice();
-  finalThemes.forEach(t => themeItems[t].forEach(k => newLayout.push(k)));
+  // dédoublonne les thèmes (un sommaire corrompu pouvait lister un thème 2× → cartes dupliquées à la persistance)
+  const finalThemes = [...new Set(order.filter(t => themeItems[t]).concat(seq.filter(t => !order.includes(t))))];
+  const newLayout = leading.slice(); const seenK = new Set(newLayout.filter(k => typeof k === 'string'));
+  finalThemes.forEach(t => themeItems[t].forEach(k => { if (typeof k === 'string') { if (seenK.has(k)) return; seenK.add(k); } newLayout.push(k); }));
   try { await persistLayout(CURRENT_MODULE, newLayout); loadReport(); }
   catch (e) { alert('Réordonnancement non enregistré : ' + (e.message || 'erreur')); loadReport(); }
 }
