@@ -2872,12 +2872,13 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `Sonde « ShippedIncomplete » (comptée) : ${esc(JSON.stringify(j.probeShippedIncomplete || '—'))}\n`
         + `Sonde « CancelledCustomer » (EXCLUE) : ${esc(JSON.stringify(j.probeCancelledCustomer || '—'))}</pre>`;
     }
-    if (j.probeReturns != null || j.probeBackInStock != null) {
-      html += `<div style="margin-top:8px"><b>Diagnostic retours détaillés & alertes stock</b> (source API, anonyme) :</div>`
+    if (j.probeReturns != null || j.probeBackInStock != null || j.probeInventory != null) {
+      html += `<div style="margin-top:8px"><b>Diagnostic API : retours · alertes stock · inventaire</b> (anonyme) :</div>`
         + `<pre style="white-space:pre-wrap;font-size:10px;background:var(--s2);border-radius:6px;padding:8px;margin-top:4px;overflow-x:auto">`
         + `↩️ /returns/get (motifs) :\n${esc(JSON.stringify(j.probeReturns || '—', null, 2))}\n\n`
-        + `🔔 /back-in-stock-subscriptions/get (alertes stock) :\n${esc(JSON.stringify(j.probeBackInStock || '—', null, 2))}</pre>`
-        + `<div class="note" style="font-size:11px">Si <b>motifsTrouves</b> ne liste que <code>refundType</code> → l'API ne porte pas de motif détaillé (taille/qualité) ; il faut uploader l'export retours détaillé. Si <b>count</b> = 0 ou <b>KO</b> → l'appel échoue/ne renvoie rien (ces jeux ne se peuplent qu'à l'<b>import complet</b>).</div>`;
+        + `🔔 /back-in-stock-subscriptions/get (alertes stock) :\n${esc(JSON.stringify(j.probeBackInStock || '—', null, 2))}\n\n`
+        + `📦 /inventory/get (stock) :\n${esc(JSON.stringify(j.probeInventory || '—', null, 2))}</pre>`
+        + `<div class="note" style="font-size:11px"><b>motifsTrouves</b> = champs motif réellement renseignés (si seulement <code>refundType</code> → pas de motif détaillé via l'API). <b>countSansFiltre</b> &gt; count → le 0 des alertes vient du filtre (date ou exclusion clients anonymisés). <b>detailMagasin</b> = OUI → l'inventaire API porte le stock par magasin (comme l'export).</div>`;
     }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
