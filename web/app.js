@@ -1041,7 +1041,7 @@ function renderReport(rep) {
       ['Taux de retour', fPct(rep.returns.tauxRetour), rep.returns.tauxRetour, tauxRetN1],
       ['Pièces retournées', fInt(rt.qte), rt.qte, rt1.qte],
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
-    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? delta(n, n1) : ''}</div></div>`).join('');
+    ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 10).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte != null ? x.qte : x.count)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
@@ -1060,7 +1060,7 @@ function renderReport(rep) {
         return { rsn, cn: a.count, cn1: b.count, mn: a.montant };
       }).sort((x, y) => y.cn - x.cn).slice(0, 10);
       reasonsVsTable = `<div style="margin-top:12px"><h3>Analyse des raisons de retour — N vs N-1</h3>
-        <table><thead><tr><th>Raison</th><th>Nb N</th><th>Nb N-1</th><th>Δ</th><th>Montant N</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r.rsn)}</td><td>${fInt(r.cn)}</td><td>${fInt(r.cn1)}</td><td>${delta(r.cn, r.cn1)}</td><td>${fEur(r.mn)}</td></tr>`).join('')}</tbody></table>
+        <table><thead><tr><th>Raison</th><th>Nb N</th><th>Nb N-1</th><th>Δ</th><th>Montant N</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r.rsn)}</td><td>${fInt(r.cn)}</td><td>${fInt(r.cn1)}</td><td>${deltaInv(r.cn, r.cn1)}</td><td>${fEur(r.mn)}</td></tr>`).join('')}</tbody></table>
         <div class="note">Évolution des motifs de retour vs N-1 → repérer une dégradation (taille, qualité, conformité) à corriger côté offre/fiches produit.</div></div>`;
     }
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
