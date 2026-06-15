@@ -2939,7 +2939,7 @@ document.getElementById('wshopping').addEventListener('click', async () => {
         + `↩️ /returns/get (motifs) :\n${esc(JSON.stringify(j.probeReturns || '—', null, 2))}\n\n`
         + `🔔 /back-in-stock-subscriptions/get (alertes stock) :\n${esc(JSON.stringify(j.probeBackInStock || '—', null, 2))}\n\n`
         + `📦 /inventory/get (stock) :\n${esc(JSON.stringify(j.probeInventory || '—', null, 2))}</pre>`
-        + `<div class="note" style="font-size:11px"><b>motifsRepartition</b> = codes de motif de retour × nb (l'API renvoie des CODES → à mapper en libellés via WSHOP_RETURN_REASONS). <b>countSansFiltre</b> &gt; count → le 0 des alertes vient du filtre. <b>detailMagasin</b> = OUI → inventaire par magasin dispo via l'API.</div>`;
+        + `<div class="note" style="font-size:11px"><b>motifsRepartition</b> = codes de motif de retour × nb (l'API renvoie des CODES → à mapper en libellés via WSHOP_RETURN_REASONS). <b>countDateOnly</b> &gt; <b>countDatetime</b> → le 0 des alertes venait du format de date (corrigé). <b>detailMagasin</b> = NON → inventaire API agrégé (par magasin = upload).</div>`;
     }
     note.innerHTML = html;
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }

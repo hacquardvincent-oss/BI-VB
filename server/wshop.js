@@ -652,7 +652,10 @@ router.get('/ping', requireAuth, async (req, res) => {
     const rFrom = new Date(); rFrom.setDate(rFrom.getDate() - 7);
     const bFrom = new Date(); bFrom.setDate(bFrom.getDate() - 90);
     const rWin = { begin: `${iso(rFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50 };
-    const bWin = { begin: `${iso(bFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50, exclude_anonymized_customer: true };
+    // back-in-stock : l'API attend des DATES (YYYY-MM-DD) → bWin = date-only (correctif). bAlt = ancien
+    // format datetime, pour CONFIRMER que c'était la cause du 0.
+    const bWin = { begin: iso(bFrom), end: iso(to), page: 1, limit: 50 };
+    const bAltWin = { begin: `${iso(bFrom)} 00:00:00`, end: `${iso(to)} 23:59:59`, page: 1, limit: 50 };
     const wt = (p, ms, label) => Promise.race([p.catch(e => ({ __err: e.message })), new Promise(r => setTimeout(() => r({ __err: `timeout ${ms}ms (${label})` }), ms))]);
     const PII = /(nom|name|prenom|firstname|lastname|email|mail|adresse|address|tel|phone|postal|zip|ville|city|client|customer|track|suivi|transaction|tva|vat|iban|siret)/i;
     const arrOf = r => (r && r.__err) ? null : (Array.isArray(r) ? r : (r && (r.data || r.results || r.returns)) || []);
@@ -661,7 +664,7 @@ router.get('/ping', requireAuth, async (req, res) => {
       wt(apiPost('/api/v1/returns/get', rWin), 22000, 'returns'),
       wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bWin), 12000, 'bis'),
       wt(apiPost('/api/v1/inventory/get', { in_stock: true, page: 1, limit: 20 }), 15000, 'inventory'),
-      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', { page: 1, limit: 20 }), 12000, 'bis-noargs'),
+      wt(apiPost('/api/v1/back-in-stock-subscriptions/get', bAltWin), 12000, 'bis-datetime'),
     ]);
     // Retours détaillés : existe-t-il un champ MOTIF renseigné (au niveau retour ET au niveau article) ?
     if (retR && retR.__err) out.probeReturns = 'KO: ' + retR.__err + ' (endpoint /returns/get lent ; l\'import complet le récupère en tâche de fond, sans ce timeout)';
@@ -692,11 +695,11 @@ router.get('/ping', requireAuth, async (req, res) => {
       const baAlt = arrOf(bisAlt) || [];
       const b0 = ba[0] || baAlt[0] || null;
       out.probeBackInStock = {
-        count: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
-        // Variante SANS date ni exclude_anonymized_customer → si elle ramène des lignes alors que la
-        // requête datée renvoie 0, le 0 vient du filtre (date ou exclusion des clients anonymisés).
-        countSansFiltre: (bisAlt && bisAlt.__err) ? ('KO: ' + bisAlt.__err) : baAlt.length,
-        keys: b0 ? safeKeys(b0) : '(0 abonnement → voir countSansFiltre)',
+        countDateOnly: ba.length, fenetre: `${iso(bFrom)} → ${iso(to)}`,
+        // Comparaison format DATE (YYYY-MM-DD, correctif) vs DATETIME (ancien) → si date-only ramène des
+        // lignes et datetime 0, c'était bien le format de date la cause du 0.
+        countDatetime: (bisAlt && bisAlt.__err) ? ('KO: ' + bisAlt.__err) : baAlt.length,
+        keys: b0 ? safeKeys(b0) : '(0 abonnement)',
         itemKeys: (b0 && b0.item) ? safeKeys(b0.item) : '(pas de sous-objet item)',
         statutsDistinct: [...new Set([...ba, ...baAlt].map(s => (s.status || '(vide)')))].slice(0, 10),
       };
@@ -837,9 +840,11 @@ function returnsProductDataset(returns) {
 }
 // Back-in-stock : abonnements « prévenez-moi quand dispo » = signal de demande sur les ruptures.
 async function fetchBackInStock(fromISO, toISO) {
-  const out = []; let page = 1; const limit = 1000;
+  // ⚠️ L'API attend des DATES (YYYY-MM-DD), pas des datetime → on tronque (un datetime renvoyait 0).
+  const begin = (fromISO || '').toString().slice(0, 10), end = (toISO || '').toString().slice(0, 10);
+  const out = []; let page = 1; const limit = 1000; // max API = 1000
   for (let i = 0; i < 300; i++) {
-    const resp = await apiPost('/api/v1/back-in-stock-subscriptions/get', { begin: fromISO, end: toISO, page, limit, exclude_anonymized_customer: true });
+    const resp = await apiPost('/api/v1/back-in-stock-subscriptions/get', { begin, end, page, limit });
     const arr = Array.isArray(resp) ? resp : ((resp && resp.data) || []);
     out.push(...arr);
     if (arr.length < limit) break;
