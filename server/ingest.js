@@ -25,7 +25,7 @@ function uploadSingle(req, res, next) {
   });
 }
 
-const SOURCES = ['oms', 'y2', 'ga', 'ads', 'metaads', 'ref', 'ret', 'impl', 'offre', 'saisonoms', 'saisony2', 'saisonref', 'saisonstock', 'saisonret'];
+const SOURCES = ['oms', 'y2', 'ga', 'ads', 'metaads', 'ref', 'ret', 'impl', 'offre', 'bis', 'saisonoms', 'saisony2', 'saisonref', 'saisonstock', 'saisonret'];
 const PERIODS = ['N', 'N1'];
 const ANONYMIZE = new Set(['oms', 'ret', 'saisonoms', 'saisonret']); // sources contenant du PII client
 // Sources de type OMS (mêmes colonnes/alias, index ref. externe, bornes de dates)
@@ -174,6 +174,27 @@ function ingestOmsProjected(source, period, buffer, filename, uploadedBy) {
   return { rows: outRows.length, columns: outHdrs.length, dateMin: min, dateMax: max, anonymized: ['colonnes non-OMS / client écartées'] };
 }
 
+// Alertes stock (back-in-stock) : export « prévenez-moi quand dispo » (1 ligne = 1 abonné, avec email).
+// On AGRÈGE par produit à l'ingestion → on ne stocke QUE le récap (Produit/Abonnements/En attente/
+// Dernier/Rayon/Saison). L'email n'est jamais mappé ni écrit → PII écartée by design (cf. ADR-005).
+// Sortie au format du jeu 'bis' WSHOP → carte « Alertes stock » alimentée à l'identique.
+function ingestBisProjected(source, period, buffer, filename, uploadedBy) {
+  const t = parseBuffer(buffer, filename, source); // {hdrs, rows} (lignes brutes, transitoires)
+  if (!t.hdrs.length) throw new Error('Fichier vide ou illisible');
+  const srcMap = calc.autoMap(t.hdrs, calc.BIS_ALIASES);
+  if (srcMap.ref_ext === undefined && srcMap.sous_cat === undefined && srcMap.couleur === undefined)
+    throw new Error('Colonnes alertes stock introuvables (attendu : Référence externe, Couleur, Taille, Rayon, Date Alerte, Date envoi mail…).');
+  const agg = calc.aggregateBackInStock(t.rows, srcMap); // email jamais lu
+  const outHdrs = ['Produit', 'Abonnements', 'En attente', 'Dernier', 'Rayon', 'Saison'];
+  const outRows = agg.map(a => [a.name, String(a.count), String(a.waiting), a.last, a.rayon || '', a.saison || '']);
+  store.setDataset(source, period, {
+    hdrs: outHdrs, rows: outRows, map: { name: 0, count: 1, waiting: 2, last: 3, rayon: 4, saison: 5 },
+    filename, row_count: outRows.length, date_min: null, date_max: null,
+    uploaded_by: uploadedBy || 'import', uploaded_at: new Date().toISOString(),
+  });
+  return { rows: outRows.length, columns: outHdrs.length, abonnements: t.rows.length, anonymized: ['« Mails Clients » (PII) écarté · agrégé par produit'] };
+}
+
 // Comparatif d'offre : UN seul fichier listant N et N-1 (colonne « Saison », ex. E26/E25).
 // On le scinde par saison → offre-N (saison la plus récente) et offre-N1 (la précédente),
 // puis on stocke chaque sous-listing via le pipeline offre standard.
@@ -217,7 +238,8 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
   try {
     // OMS de saison (gros volumes) : import projeté (mémoire réduite, PII écartées).
-    const fn = source === 'saisonoms' ? ingestOmsProjected : ingestBuffer;
+    // Alertes stock : agrégation par produit + anti-PII (email écarté).
+    const fn = source === 'saisonoms' ? ingestOmsProjected : source === 'bis' ? ingestBisProjected : ingestBuffer;
     const r = fn(source, period, req.file.buffer, req.file.originalname, req.session.username);
     res.json({ source, period, filename: req.file.originalname, ...r });
   } catch (e) {
@@ -242,4 +264,4 @@ router.delete('/:source/:period', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router, ingestBuffer, ingestOmsProjected, ingestOffreListing };
+module.exports = { router, ingestBuffer, ingestOmsProjected, ingestBisProjected, ingestOffreListing };
