@@ -509,7 +509,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   let stockAlerts = null;
   if (bisDs && bisDs.rows && bisDs.rows.length) {
     const mp = bisDs.map || {};
-    stockAlerts = bisDs.rows.map(r => ({ name: (r[mp.name] || '').toString(), count: parseInt(r[mp.count]) || 0, waiting: parseInt(r[mp.waiting]) || 0, last: (r[mp.last] || '').toString() }))
+    stockAlerts = bisDs.rows.map(r => ({ name: (r[mp.name] || '').toString(), count: parseInt(r[mp.count]) || 0, waiting: parseInt(r[mp.waiting]) || 0, last: (r[mp.last] || '').toString(), rayon: mp.rayon !== undefined ? (r[mp.rayon] || '').toString() : '', saison: mp.saison !== undefined ? (r[mp.saison] || '').toString() : '' }))
       .sort((a, b) => b.count - a.count).slice(0, 300); // borne large : la carte affiche le top 20, les KPIs totalisent l'ensemble
   }
 

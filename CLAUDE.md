@@ -189,7 +189,11 @@ Upload manuel possible (`metaads` dans `SOURCES`, ADS_ALIASES). ⏳ **SPLIO (CRM
 ---
 
 ## 4. Ingestion & anti-PII (`ingest.js`)
-`UPLOAD_MAX_MB` (300). `SOURCES = oms,y2,ga,ads,ref,ret,impl,saison*`. `ANONYMIZE = {oms,ret,saisonoms,saisonret}`.
+`UPLOAD_MAX_MB` (300). `SOURCES = oms,y2,ga,ads,ref,ret,impl,offre,bis,saison*`. `ANONYMIZE = {oms,ret,saisonoms,saisonret}`.
+**`bis` (alertes stock) — upload de secours si l'API back-in-stock renvoie 0** : `ingestBisProjected` lit l'export « prévenez-moi »
+(1 ligne = 1 abonné, colonne email **« Mails Clients »**), **agrège par référence externe** (par modèle-couleur, identique FR/EN →
+fusionne doublons de langue & tailles) via `calc.aggregateBackInStock` → jeu `bis` `{name,count,waiting,last,rayon,saison}` (même forme
+que l'API WSHOP → carte `stockalerts` à l'identique). **L'email n'est jamais mappé ni stocké** (anti-PII). `waiting` = « Date envoi mail » vide.
 **`OMS_CANON`** = colonnes canoniques conservées à l'import projeté (le reste, dont PII, jeté).
 **`PII_DENY` (ADR-005, privacy by design)** : `nom client, prenom client, prenom, email, mail, adresse, telephone,
 code postal, ville livraison, numero de suivi, id transaction, n tva, responsable`. `ingestOmsProjected` (saisonoms)

@@ -182,6 +182,24 @@ const STOCK_ALIASES = {
   ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref ext', 'reference', 'ref'],
   qte: ['stock', 'quantite stock', 'stock disponible', 'quantite disponible', 'disponible', 'quantite', 'qte', 'stock e-commerce', 'stock web', 'dispo'],
 };
+// Alertes stock / back-in-stock (export « prévenez-moi quand dispo ») — 1 ligne = 1 abonné.
+// La colonne email (« Mails Clients ») n'est PAS mappée → jamais lue (anti-PII by design).
+const BIS_ALIASES = {
+  ref_ext: ['reference externe', 'ref. externe', 'ref externe'],
+  ref_int: ['ref. interne', 'ref interne'],
+  couleur: ['couleur', 'color'],
+  taille: ['taille', 'size'],
+  ean: ['ean'],
+  provenance: ['provenance'],
+  langue: ['langue'],
+  date_alerte: ['date alerte', 'date d alerte', 'date de l alerte'],
+  date_envoi: ['date envoi mail', 'date envoi', 'date mail'],
+  boutique: ['boutique'],
+  super_boutique: ['super boutique'],
+  rayon: ['rayon'],
+  sous_cat: ['sous categorie'],
+  saison: ['saison'],
+};
 // Implantation (catalogue saison E-Store) — 1ère feuille du classeur
 const IMPL_ALIASES = {
   rc: ['rc'],
@@ -1392,6 +1410,35 @@ function calcReturnReasons(retRows, retMap, refMap) {
   };
 }
 
+// ── Alertes stock (back-in-stock) depuis un export par abonné ───────────────
+// 1 ligne = 1 demande « prévenez-moi quand dispo ». On agrège par SKU (réf × couleur × taille) :
+// abonnements (lignes), en attente (« Date envoi mail » vide = pas encore notifié), dernier (max
+// « Date Alerte »). L'email n'est jamais lu (non mappé). Sortie = même forme que le jeu 'bis' WSHOP
+// (map name/count/waiting/last) → consommée telle quelle par rep.stockAlerts + carte stockalerts.
+function aggregateBackInStock(rows, map) {
+  const refi = map.ref_ext, ci = map.couleur, ti = map.taille, dai = map.date_alerte, dei = map.date_envoi,
+    rai = map.rayon, sci = map.sous_cat, sai = map.saison;
+  const g = (r, i) => (i !== undefined && r[i] != null) ? r[i].toString().trim() : '';
+  // Date US M/D/YY ou M/D/YYYY → ISO YYYY-MM-DD (comparable/triable). Tolère D/M aussi via padding.
+  const toISO = s => { const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); if (!m) return ''; const yy = m[3].length === 2 ? '20' + m[3] : m[3]; return `${yy}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`; };
+  const by = {};
+  rows.forEach(r => {
+    const ref = g(r, refi), couleur = g(r, ci), taille = g(r, ti);
+    if (!ref && !couleur && !taille) return;
+    const sousCat = g(r, sci), rayon = g(r, rai), saison = g(r, sai);
+    // Clé = référence externe (par modèle-couleur, identique FR/EN → fusionne les doublons de langue
+    // et les tailles d'un même coloris). Repli sur couleur|taille si la réf manque.
+    const key = ref || `${couleur}|${taille}`;
+    const name = [sousCat || rayon, couleur].filter(Boolean).join(' ') || ref;
+    const e = by[key] || (by[key] = { name, ref, count: 0, waiting: 0, last: '', sizes: new Set(), rayon: rayon || sousCat, saison });
+    e.count += 1;
+    if (taille) e.sizes.add(taille);
+    if (!g(r, dei)) e.waiting += 1;               // pas de date d'envoi = client toujours en attente
+    const da = toISO(g(r, dai)); if (da && da > e.last) e.last = da;
+  });
+  return Object.values(by).map(e => ({ name: e.name, ref: e.ref, count: e.count, waiting: e.waiting, last: e.last, tailles: e.sizes.size, rayon: e.rayon, saison: e.saison })).sort((a, b) => b.count - a.count);
+}
+
 // Top produits retournés (dataset 'retprod' : 1 ligne / article retourné, filtrable par date).
 function topReturnedProducts(rows, map, top = 10) {
   const di = map.des, qi = map.qte, mi = map.montant, ri = map.raison;
@@ -1792,7 +1839,8 @@ function dateBounds(rows, map) {
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
   parseFrD, toISO, isoToD, dcmp, inRng,
-  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, OFFRE_ALIASES,
+  OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, BIS_ALIASES, OFFRE_ALIASES,
+  aggregateBackInStock,
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,

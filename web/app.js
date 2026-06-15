@@ -412,6 +412,7 @@ const SOURCES = [
   { key: 'y2', name: '🏪 Y2 (Marketplace)', periods: ['N', 'N1'] },
   { key: 'ads', name: '📣 Google Ads (export campagnes : coût/clics/conv.)', periods: ['N', 'N1'] },
   { key: 'offre', name: '🏷️ Offre / listing produits (analyse commerciale)', periods: ['N', 'N1'] },
+  { key: 'bis', name: '🔔 Alertes stock (export « prévenez-moi » — email écarté)', periods: ['N'] },
 ];
 
 async function me() {
@@ -1162,10 +1163,11 @@ function renderReport(rep) {
       <div class="kc"><div class="l">Produits en alerte</div><div class="v">${fInt(totProd)}</div></div>
       <div class="kc"><div class="l">Demandes (abonnements)</div><div class="v">${fInt(totAbo)}</div></div>
       <div class="kc"><div class="l">En attente (toujours en rupture)</div><div class="v">${fInt(totWait)}</div></div></div>`;
-    const ar = all.slice(0, 20).map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td><td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    const hasRayon = all.some(a => a.rayon);
+    const ar = all.slice(0, 20).map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td>${hasRayon ? `<td>${esc(a.rayon || '—')}</td>` : ''}<td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
     stockAlertsCard = `<div class="card"><h3>🔔 Produits les plus demandés en rupture (back-in-stock)</h3>${kpis}
-      <table style="margin-top:10px"><thead><tr><th>#</th><th>Produit</th><th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
-      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
+      <table style="margin-top:10px"><thead><tr><th>#</th><th>Produit</th>${hasRayon ? '<th>Rayon</th>' : ''}<th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
+      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP, ou export uploadé — email écarté) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
   }
 
   // Top produits N vs N-1 + reconquête
