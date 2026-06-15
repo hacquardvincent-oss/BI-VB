@@ -1469,6 +1469,24 @@ function returnProductsDetail(rpRows, rpMap, salesByDes, top = 12) {
   });
 }
 
+// Motifs de retour DÉTAILLÉS depuis la source produit (retprod, /returns/get) : agrège par raison.
+// Le dataset 'ret' (order-refund) ne porte que le type (manual/return) ; 'retprod' peut porter le vrai
+// motif (returnReason) → on l'utilise pour la ventilation des raisons quand il est disponible.
+function returnReasonAgg(rpRows, rpMap) {
+  if (!rpRows || !rpRows.length) return [];
+  const ri = rpMap.raison, qi = rpMap.qte, mi = rpMap.montant;
+  if (ri === undefined) return [];
+  const r2 = x => Math.round(x * 100) / 100;
+  const by = {};
+  rpRows.forEach(r => {
+    const reason = (r[ri] || '').toString().trim() || '(non précisé)';
+    const q = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    const e = by[reason] || (by[reason] = { reason, qte: 0, montant: 0 });
+    e.qte += q; e.montant += fN(r[mi]);
+  });
+  return Object.values(by).map(v => ({ reason: v.reason, qte: v.qte, montant: r2(v.montant) })).sort((a, b) => b.montant - a.montant);
+}
+
 // ── Produits : écart vs N-1 (à reconquérir) ─────────────────────────────────
 // byN / byN1 = maps {désignation: {ca, qte}} issues de buildTopProdMap
 function productGap(byN, byN1, top = 10) {
@@ -1778,7 +1796,7 @@ module.exports = {
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
-  calcReturnGeo, returnProductsDetail,
+  calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,

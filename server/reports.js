@@ -567,6 +567,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       returns.topProduits = calc.topReturnedProducts(rpRows, retProdN.map, 10);
       // Détail produit enrichi : taux de retour (qté retournée / qté vendue EShop) + motif dominant.
       returns.topProduitsDetail = calc.returnProductsDetail(rpRows, retProdN.map, topNobj, 12);
+      // Motifs DÉTAILLÉS (source produit) : le dataset 'ret' n'a que le type de remboursement (manual/return) ;
+      // 'retprod' peut porter le vrai motif → ventilation détaillée des raisons quand l'API la fournit.
+      returns.reasonsDetail = calc.returnReasonAgg(rpRows, retProdN.map);
     }
   }
 

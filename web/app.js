@@ -171,14 +171,22 @@ async function saveMyView(key, label, cards) {
 }
 async function deleteMyView(key) { delete MY_VIEWS[key]; try { await fetch('/api/myviews/' + encodeURIComponent(key), { method: 'DELETE' }); } catch (e) { /* ignore */ } }
 
+// Dédoublonne un layout : une clé de carte (string) n'apparaît qu'UNE fois ; les widgets (objets) sont
+// gardés tels quels. Source unique pour le rendu → un layout corrompu par un ancien drag se répare au chargement
+// (plus de section/ancre en double dans le sommaire), sans attendre un nouveau réordonnancement.
+function dedupLayout(arr) {
+  const seen = new Set(); const out = [];
+  (arr || []).forEach(k => { if (typeof k === 'string') { if (seen.has(k)) return; seen.add(k); } out.push(k); });
+  return out;
+}
 function getLayout(m) {
-  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? v.cards : ['kpi']; }
+  if (isMyView(m)) { const v = MY_VIEWS[myKey(m)]; return (v && Array.isArray(v.cards) && v.cards.length) ? dedupLayout(v.cards) : ['kpi']; }
   if (m === 'full') {
     const ov = SERVER_LAYOUTS['full']; // ordre personnalisé (réordonnancement des sections) si présent
-    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return ov.concat(ALL_CARDS.filter(k => !seen.has(k))); }
+    if (Array.isArray(ov) && ov.length) { const seen = new Set(ov.filter(x => typeof x === 'string')); return dedupLayout(ov.concat(ALL_CARDS.filter(k => !seen.has(k)))); }
     return ALL_CARDS.slice();
   }
-  const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? a : defaultLayout(m);
+  const a = SERVER_LAYOUTS[m]; return (Array.isArray(a) && a.length) ? dedupLayout(a) : defaultLayout(m);
 }
 function isCustomLayout(m) { if (isMyView(m)) return true; const a = SERVER_LAYOUTS[m]; return Array.isArray(a) && a.length > 0; }
 // Vues éditables côté ADMIN (vues partagées ; « Full » contient toujours tout → non éditable).
@@ -1043,6 +1051,16 @@ function renderReport(rep) {
       ['Nb retours', fInt(rt.nbRetours), rt.nbRetours, rt1.nbRetours],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
     const reasons = rt.reasons.slice(0, 10).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte != null ? x.qte : x.count)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    // Motifs détaillés depuis la source produit (/returns/get) : le feed remboursement ('ret') ne donne que le TYPE.
+    const rd = rep.returns.reasonsDetail || [];
+    const rdUseful = rd.filter(x => x.reason && x.reason !== '(non précisé)');
+    const detailRows = rd.slice(0, 12).map(x => `<tr><td>${esc(x.reason)}</td><td>${fInt(x.qte)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
+    const typeLine = rt.reasons.map(x => `${esc(x.reason)} (${fInt(x.qte != null ? x.qte : x.count)})`).join(' · ');
+    const reasonsBlock = rdUseful.length
+      ? `<div><h3>Motifs de retour (détail — source produit /returns/get)</h3><table><thead><tr><th>Motif</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${detailRows}</tbody></table>
+        <div class="note" style="font-size:11px">Type de remboursement : ${typeLine}.</div></div>`
+      : `<div><h3>Type de remboursement (EShop, hors marketplace)</h3><table><thead><tr><th>Type</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table>
+        <div class="note" style="font-size:11px">⚠️ Le feed remboursement WSHOP ne porte que le <b>type</b> (remboursement manuel / retour client). Pour les <b>motifs détaillés</b> (taille, qualité…), faire un <b>import complet</b> (source produit /returns/get) ou uploader l'export retours détaillé.</div></div>`;
     const dests = rt.destinations.slice(0, 6).map(x => `<tr><td>${esc(x.dest)}</td><td>${fEur(x.montant)}</td></tr>`).join('');
     const tp = rep.returns.topProduits || [];
     const reasonsCell = x => (x.reasons && x.reasons.length)
@@ -1067,7 +1085,7 @@ function renderReport(rep) {
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
-        <div><h3>Raisons de retour (EShop, hors marketplace)</h3><table><thead><tr><th>Raison</th><th>Pièces</th><th>CA retourné</th></tr></thead><tbody>${reasons}</tbody></table></div>
+        ${reasonsBlock}
         <div><h3>Destination du retour</h3><table><thead><tr><th>Destination</th><th>Montant</th></tr></thead><tbody>${dests}</tbody></table></div>
       </div>
       ${reasonsVsTable}
