@@ -28,9 +28,9 @@
     <div class="note">Dis-nous ce qui marche, ce qui coince, ou ce que tu aimerais voir. <b>Colle une capture (Ctrl/Cmd+V)</b> ou dépose une image — c'est le plus parlant. Tes retours orientent les prochaines évolutions.</div>
     <div style="margin-top:10px">
       <input id="fTitle" class="dt" style="width:100%" placeholder="Titre court (ex. « Le filtre pays ne se réinitialise pas »)" maxlength="200">
-      <textarea id="fBody" class="dt" style="width:100%;height:90px;margin-top:8px;resize:vertical" placeholder="Décris le contexte : sur quelle page / vue, ce que tu attendais, ce qui s'est passé…" maxlength="5000"></textarea>
+      <textarea id="fBody" class="dt" style="width:100%;height:90px;margin-top:8px;resize:vertical" placeholder="Décris le contexte : sur quelle page / vue, ce que tu attendais, ce qui s'est passé… (tu peux coller une capture ici avec Ctrl/Cmd+V)" maxlength="5000"></textarea>
       <div id="fDrop" tabindex="0" style="margin-top:8px;border:1px dashed var(--br);border-radius:10px;padding:14px;text-align:center;color:var(--t3);cursor:pointer;background:var(--s2)">
-        📎 Colle une capture (Ctrl/Cmd+V), dépose une image ici, ou <span style="text-decoration:underline">choisis un fichier</span>
+        📎 <b>Colle une capture (Ctrl/Cmd+V)</b> dans la description ou ici · ou dépose une image · ou <span style="text-decoration:underline">choisis un fichier</span>
         <input type="file" id="fFile" accept="image/*" multiple style="display:none">
       </div>
       <div id="fThumbs" class="toolbar" style="gap:8px;margin-top:8px;flex-wrap:wrap"></div>
@@ -42,6 +42,7 @@
   </div>
 
   <div class="note" id="dbWarn" style="margin:10px 2px"></div>
+  <div id="fFilter" class="toolbar" style="margin:6px 2px 2px;gap:6px;flex-wrap:wrap"></div>
   <div id="fList"></div>
 </div>
 

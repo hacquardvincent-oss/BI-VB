@@ -14,12 +14,13 @@ let NEXT_ID = 1;    // id auto en mode sans base
 
 const MAX_IMAGES = 6;
 const MAX_IMG_LEN = 4_000_000; // ~4 Mo / image (base64) — le front réduit déjà les captures
+const STATUSES = ['à traiter', 'en cours', 'traité']; // cycle de vie des tickets (géré par l'admin)
 
 async function hydrate() {
   if (!db.enabled) return;
   try {
-    const { rows } = await db.query('SELECT id, author, title, body, page, images, comments, created_at FROM feedback ORDER BY created_at DESC');
-    FB = rows.map(r => ({ id: r.id, author: r.author, title: r.title, body: r.body, page: r.page, images: r.images || [], comments: r.comments || [], created_at: r.created_at }));
+    const { rows } = await db.query('SELECT id, author, title, body, page, images, comments, status, created_at FROM feedback ORDER BY created_at DESC');
+    FB = rows.map(r => ({ id: r.id, author: r.author, title: r.title, body: r.body, page: r.page, images: r.images || [], comments: r.comments || [], status: r.status || 'à traiter', created_at: r.created_at }));
   } catch (e) { console.error('[feedback] hydrate KO:', e.message); }
 }
 
@@ -38,7 +39,7 @@ router.post('/', requireAuth, async (req, res) => {
   const images = sanitizeImages(b.images);
   if (!title && !body && !images.length) return res.status(400).json({ error: 'Retour vide (titre, description ou capture requis).' });
   const author = (req.session && req.session.username) || 'anonyme';
-  const item = { author, title, body, page, images, comments: [], created_at: new Date().toISOString() };
+  const item = { author, title, body, page, images, comments: [], status: 'à traiter', created_at: new Date().toISOString() };
   if (db.enabled) {
     try {
       const { rows } = await db.query(
@@ -62,6 +63,18 @@ router.post('/:id/comment', requireAuth, (req, res) => {
   fb.comments.push(c);
   if (db.enabled) db.query('UPDATE feedback SET comments = $1 WHERE id = $2', [JSON.stringify(fb.comments), id]).catch(e => console.error('[feedback] comment KO:', e.message));
   res.json(c);
+});
+
+// Changement de statut (à traiter / en cours / traité) — réservé aux administrateurs.
+router.patch('/:id/status', requireAuth, requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const fb = FB.find(x => x.id === id);
+  if (!fb) return res.status(404).json({ error: 'Retour introuvable' });
+  const status = (req.body && req.body.status || '').toString();
+  if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Statut invalide' });
+  fb.status = status;
+  if (db.enabled) db.query('UPDATE feedback SET status = $1 WHERE id = $2', [status, id]).catch(e => console.error('[feedback] status KO:', e.message));
+  res.json({ ok: true, status });
 });
 
 // Suppression d'un retour — réservée aux administrateurs (modération).
