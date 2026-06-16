@@ -42,7 +42,7 @@ assert.strictEqual(mkt.printemps, 50, 'Printemps OMS');
 assert.strictEqual(mkt.total, 80, 'Total marketplace (OMS seul)');
 
 // ── Marketplace Y2 : GL identifié par établissement, ventilé corner / SFS ────
-// (le corner = codes 674* hors 674SFS ; ne plus le perdre comme avant)
+// Règle métier : GL e-commerce = 674SFS UNIQUEMENT ; le corner (autres 674*) = retail → EXCLU du CA.
 const y2Hdrs = ['Etablissement ligne doc.', 'Commercial du doc.', 'Total TTC ligne', 'Code article', 'Référence interne doc.'];
 const y2Map2 = calc.autoMap(y2Hdrs, calc.Y2_ALIASES);
 const y2Rows2 = [
@@ -55,9 +55,9 @@ const y2Rows2 = [
 ];
 const mkt2 = calc.calcMarketplace(rows, map, y2Rows2, y2Map2);
 assert.strictEqual(mkt2.glSFS, 100, 'GL ship-from-store (674SFS)');
-assert.strictEqual(mkt2.glCorner, 500, 'GL corner (674* hors SFS, retour exclu)');
-assert.strictEqual(mkt2.glY2, 600, 'GL Y2 total = corner + SFS');
-assert.strictEqual(mkt2.glTotal, 630, 'GL total = dropshipping OMS (30) + Y2 (600)');
+assert.strictEqual(mkt2.glCorner, 500, 'GL corner (674* hors SFS, retour exclu) — suivi mais NON compté');
+assert.strictEqual(mkt2.glY2, 100, 'GL Y2 compté = 674SFS uniquement (corner retail exclu)');
+assert.strictEqual(mkt2.glTotal, 130, 'GL total = dropshipping OMS (30) + SFS Y2 (100)');
 assert.strictEqual(mkt2.pdt, 150, 'Place des Tendances');
 assert.strictEqual(mkt2.lulli, 80, 'Lulli compté par établissement (réf non-005 incluse)');
 

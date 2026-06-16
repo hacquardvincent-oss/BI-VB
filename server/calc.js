@@ -496,10 +496,9 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
     if (type.includes('gl.com')) glOMS += prix;
     else if (type.includes('printemps')) printemps += prix;
   });
-  // Y2 : on identifie l'enseigne par l'ÉTABLISSEMENT (comme y2ChannelOf, source unique du
-  // cross-canal) — JAMAIS par un code commercial isolé (sinon on perd le corner GL et des
-  // ventes Lulli). Pour GL on ventile ensuite en sous-canaux : 674SFS = ship-from-store,
-  // tout autre code 674* = corner (vendeurs nommés du corner GL Haussmann).
+  // Y2 : enseigne identifiée par l'ÉTABLISSEMENT (cf. y2ChannelOf). Pour GL Haussmann, SEUL le code
+  // commercial 674SFS (ship-from-store) = ventes e-commerce ; tous les autres codes 674*/… = le CORNER
+  // physique (vendeurs nommés) = RETAIL → exclu du CA marketplace e-commerce (choix métier, cf. §12).
   let glCorner = 0, glSFS = 0, pdt = 0, lulli = 0;
   if (y2Rows && y2Map && y2Map.ttc !== undefined) {
     const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
@@ -509,12 +508,12 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
       const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
       if (ch === 'GL') {
         const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase();
-        if (com.includes('sfs')) glSFS += ttc; else glCorner += ttc;
+        if (com.includes('sfs')) glSFS += ttc; else glCorner += ttc; // corner = retail (suivi à part, non compté)
       } else if (ch === 'PDT') pdt += ttc;
       else if (ch === 'Lulli') lulli += ttc;
     });
   }
-  const glY2 = glCorner + glSFS;
+  const glY2 = glSFS; // GL marketplace e-commerce = ship-from-store (674SFS) UNIQUEMENT ; corner exclu.
   return { glOMS, glCorner, glSFS, glY2, glTotal: glOMS + glY2, printemps, pdt, lulli, total: glOMS + glY2 + printemps + pdt + lulli };
 }
 
@@ -1796,11 +1795,14 @@ function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
       fN(r[pi]), parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1));
   }
   if (y2Rows && y2Map && y2Map.code !== undefined) {
-    const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab;
+    const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab, comi = y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[tci]);
       if (ttc <= 0) return; // exclure les retours (Total TTC ≤ 0) → pas de CA négatif par famille
-      add(y2Ref(r[ci], li !== undefined ? r[li] : ''), '', y2ChannelOf(ei !== undefined ? r[ei] : ''),
+      const etab = ei !== undefined ? r[ei] : '';
+      // GL : seul 674SFS = e-commerce ; le corner (autres codes) = retail → exclu du cross-canal.
+      if (y2ChannelOf(etab) === 'GL' && !(comi !== undefined ? r[comi] : '').toString().toLowerCase().includes('sfs')) return;
+      add(y2Ref(r[ci], li !== undefined ? r[li] : ''), '', y2ChannelOf(etab),
         ttc, q2 !== undefined ? (parseInt((r[q2] || '1').toString().replace(/\s/g, '')) || 1) : 1);
     });
   }
