@@ -146,6 +146,12 @@
       <div id="qualityBox" class="note" style="margin-top:8px">Analyse en cours…</div>
     </details>
 
+    <!-- Référentiel : rechargement à chaud (admin) après mise à jour sur GitHub + redéploiement -->
+    <div class="toolbar hidden" id="specsBox" style="margin-top:8px">
+      <button class="btn" id="reloadSpecs" title="Relit le référentiel produit + implantations versionnés (specs/) sans attendre un redéploiement complet">📚 Recharger le référentiel</button>
+      <span class="note" id="reloadSpecsNote" style="margin:0">Recharge le référentiel produit + implantations depuis les fichiers déployés.</span>
+    </div>
+
     <!-- Import manuel (replié par défaut) -->
     <div style="margin-top:10px;border-top:1px solid var(--br);padding-top:10px">
       <div id="filesToggle" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--t2)">📁 Import manuel de fichiers <span id="filesCaret">▸</span></div>

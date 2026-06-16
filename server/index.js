@@ -82,15 +82,24 @@ function loadSpecs() {
     ['impl', 'N', 'Implantation E26.xlsx'],
     ['impl', 'N1', 'Implantation E25.xlsx'],
   ];
+  const out = [];
   for (const [source, period, name] of files) {
     const p = path.join(dir, name);
     try {
-      if (!fs.existsSync(p)) { console.warn(`[specs] ${name} introuvable — ignoré`); continue; }
+      if (!fs.existsSync(p)) { console.warn(`[specs] ${name} introuvable — ignoré`); out.push({ name, source, period, error: 'introuvable' }); continue; }
       const r = ingest.ingestBuffer(source, period, fs.readFileSync(p), name, 'specs');
       console.log(`[specs] ${name} → ${source}-${period} : ${r.rows} lignes`);
-    } catch (e) { console.error(`[specs] ${name} KO :`, e.message); }
+      out.push({ name, source, period, rows: r.rows });
+    } catch (e) { console.error(`[specs] ${name} KO :`, e.message); out.push({ name, source, period, error: e.message }); }
   }
+  return out;
 }
+// Rechargement à chaud du référentiel + implantations versionnés (specs/) — sans redéploiement.
+// Réservé aux administrateurs. Relit les fichiers présents sur le disque déployé.
+app.post('/api/specs/reload', auth.requireAuth, auth.requireAdmin, (req, res) => {
+  try { res.json({ ok: true, loaded: loadSpecs() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // Démarrage : on OUVRE LE PORT D'ABORD (détection rapide par l'hébergeur), puis on
 // initialise la base + hydratation RAM + fichiers specs en arrière-plan. Évite le
