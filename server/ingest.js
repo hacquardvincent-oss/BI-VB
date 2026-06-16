@@ -83,6 +83,27 @@ function csvToAoa(text) {
   return lines.map(split);
 }
 
+// Répare les cellules XLSX dont la valeur cachée est absente (null/NaN) alors que la formule est une
+// CONSTANTE numérique — cas réel de l'export Y2 : la colonne « Date » est une formule = n° de série
+// Excel (ex. 46183) sans valeur calculée → le parseur lisait « 00/01/1900 ». On récupère la valeur ;
+// si la cellule s'affichait comme une date, on la reformate en JJ/MM/AAAA (sinon on garde le nombre).
+// N'affecte JAMAIS les cellules ayant déjà une valeur (ex. Total TTC).
+function repairFormulaCells(sheet) {
+  if (!sheet) return;
+  for (const addr in sheet) {
+    if (addr[0] === '!') continue;
+    const c = sheet[addr];
+    if (!c || c.t !== 'n') continue;
+    const missing = c.v == null || (typeof c.v === 'number' && Number.isNaN(c.v));
+    if (!missing || typeof c.f !== 'string' || !/^-?\d+(\.\d+)?$/.test(c.f.trim())) continue;
+    const v = Number(c.f.trim());
+    const wasDate = typeof c.w === 'string' && /^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}/.test(c.w);
+    c.v = v;
+    if (wasDate) { const d = XLSX.SSF.parse_date_code(v); c.w = d ? `${String(d.d).padStart(2, '0')}/${String(d.m).padStart(2, '0')}/${d.y}` : String(v); }
+    else delete c.w; // numérique → SheetJS reformatera depuis la valeur
+  }
+}
+
 function parseBuffer(buf, filename, source) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (source === 'ads' || source === 'metaads') {
@@ -97,6 +118,7 @@ function parseBuffer(buf, filename, source) {
     // sheets:0 → ne parse que la 1ère feuille (classeurs lourds multi-feuilles : perf)
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: 0 });
     const sheet = wb.Sheets[wb.SheetNames[0]];
+    repairFormulaCells(sheet); // récupère les valeurs perdues (formule = constante numérique, valeur cachée NaN/absente)
     if (source === 'ga') {
       return calc.parseGAcsv(XLSX.utils.sheet_to_csv(sheet, { FS: ',' }));
     }
