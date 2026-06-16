@@ -286,10 +286,11 @@ baisse de retours = vert).
   identifié par **ÉTABLISSEMENT** (`y2ChannelOf`, source unique du cross-canal — **JAMAIS par un code commercial
   isolé**, sinon on perd le corner GL et des ventes Lulli) : GL (`gl ac haussmann`/`haussmann`/`galeries`) ventilé
   en sous-canaux **corner** (codes commerciaux `674*` des vendeurs) vs **ship-from-store** (`674sfs`) → `glCorner`,
-  `glSFS`, `glY2 = glCorner+glSFS` ; `pdt` (`place des tendances`) ; `lulli` (`lulli`). `glTotal = glOMS+glY2`,
-  `total` = somme des 5. ⚠️ **Anomalie résolue (cf §12)** : l'ancienne règle ne gardait que `674sfs` (perdait ~77 K€
-  de corner GL) et `lulli` exigeait `ref 005…` (perdait ~37 K€ de ventes Lulli à réf `1000…`). Carte : GL en 3
-  sous-lignes (dropshipping WSHOP / corner Y2 / SFS Y2).
+  `glSFS`. ⭐ **RÈGLE MÉTIER FIGÉE (choix client, cf §12) : `glY2 = glSFS` (674SFS UNIQUEMENT)** — le **corner GL**
+  (autres codes `674*` = vendeurs physiques) est du **RETAIL → EXCLU** du CA marketplace e-commerce (`glCorner` reste
+  calculé pour info/affichage, mais N'EST PAS compté). `pdt` (`place des tendances`, code `686001`) ; `lulli` (`lulli`,
+  code `610LULLI`). `glTotal = glOMS+glSFS`, `total` = GL(SFS)+Printemps+PDT+Lulli. `ccAccumulate` exclut aussi le corner
+  GL du cross-canal. Carte : GL en 2 sous-lignes comptées (dropshipping WSHOP / SFS 674SFS) + note « corner exclu ».
 - **`calcMarketplaceCancelRefund`** : annulations OMS (lignes mkt non livrées par enseigne) + remboursements Y2 (**`ttc < 0`**).
   `byChannel` porte aussi le **taux d'annulation par marketplace OMS** (`commandesAnnulees ÷ commandes` = GL.com / Printemps ;
   affiché **uniquement dans la carte CA Marketplace**, colonne « Taux annul. »). **Y2 (corner GL, PDT, Lulli) → pas de taux**

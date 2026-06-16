@@ -904,12 +904,11 @@ function renderReport(rep) {
   const caBlocks = caRowsDef.map(([l, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${fEur(n)}</div><div style="font-size:11px">${delta(n, n1)}</div></div>`).join('');
 
   const mk = rep.marketplace.n, mk1 = rep.marketplace.n1 || {};
-  // Sous-canaux Galeries Lafayette : dropshipping (WSHOP/OMS), corner (Y2, vendeurs 674*) et
-  // ship-from-store (Y2, 674SFS).
+  // Sous-canaux Galeries Lafayette COMPTÉS : dropshipping (WSHOP/OMS) + ship-from-store e-commerce
+  // (Y2, code 674SFS). Le corner GL (autres codes 674* = vendeurs physiques) = RETAIL → exclu (cf. note).
   const glSub = [
     { label: 'Dropshipping (WSHOP)', n: mk.glOMS, n1: mk1.glOMS || 0, sub: true },
-    { label: 'Corner GL Haussmann (Y2)', n: mk.glCorner || 0, n1: mk1.glCorner || 0, sub: true },
-    { label: 'Ship-from-store (Y2)', n: mk.glSFS || 0, n1: mk1.glSFS || 0, sub: true },
+    { label: 'Ship-from-store (Y2, 674SFS)', n: mk.glSFS || 0, n1: mk1.glSFS || 0, sub: true },
   ].filter(r => r.n > 0 || r.n1 > 0);
   const mkRows = [
     { label: 'Galeries Lafayette', n: mk.glTotal, n1: mk1.glTotal || 0 },
@@ -1453,7 +1452,7 @@ function renderReport(rep) {
   const mktCard = `<div class="card"><h3>CA Marketplace</h3>
       <table><thead><tr><th>Canal</th><th>N</th><th>N-1</th><th>Δ</th></tr></thead>
       <tbody>${mkRows.map(r => `<tr${r.total ? ' style="font-weight:700"' : ''}><td${r.sub ? ' style="padding-left:22px;color:var(--t2);font-size:12px"' : ''}>${r.sub ? '└ ' : ''}${r.label}</td><td>${fEur(r.n)}</td><td>${fEur(r.n1)}</td><td>${delta(r.n, r.n1)}</td></tr>`).join('')}</tbody></table>
-      <div class="note">Galeries Lafayette ventilé en sous-canaux : <b>dropshipping</b> (WSHOP, type GL.com), <b>corner GL Haussmann</b> et <b>ship-from-store</b> (Y2). Enseignes Y2 identifiées par établissement (corner + SFS inclus). Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
+      <div class="note">Galeries Lafayette = <b>dropshipping</b> (WSHOP, type GL.com) + <b>ship-from-store e-commerce</b> (Y2, code commercial <b>674SFS</b>). Le <b>corner GL Haussmann</b> (autres codes 674* = vendeurs physiques) est du <b>retail, EXCLU</b> du CA marketplace${mk.glCorner > 0 ? ` (corner non compté sur la période : ${fEur(mk.glCorner)})` : ''}. Place des Tendances et Lulli proviennent de Y2.</div>${mktCRhtml}</div>`;
   const paysCard = paysRows ? `<div class="card"><h3>CA par pays</h3><div style="height:220px;margin-bottom:10px"><canvas id="paysChart"></canvas></div><table><thead><tr><th>Pays</th><th>CA</th><th>Δ vs N-1</th><th>Commandes</th><th>Panier moyen</th></tr></thead><tbody>${paysRows}</tbody></table></div>` : '';
   const famArr = rep.famille || [];
   const famTotN = famArr.reduce((s, f) => s + (f.n || 0), 0), famTotN1 = famArr.reduce((s, f) => s + (f.n1 || 0), 0);
