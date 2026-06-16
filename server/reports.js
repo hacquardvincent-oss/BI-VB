@@ -128,7 +128,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const sessionsN = (sessionsRawN != null && rateN) ? Math.round(sessionsRawN / rateN) : sessionsRawN;
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
-  const mktN = calc.calcMarketplace(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {});
+  // Y2 (marketplace fichier) filtré sur la PÉRIODE sélectionnée — SINON on sommait tout le fichier
+  // (PDT / Lulli / corner GL gonflés). La colonne « Date » de Y2 (Y2_ALIASES.date) sert au filtrage.
+  const y2RowsN = y2N ? calc.filterRows(y2N.rows, y2N.map, from, to, isAll) : [];
+  const mktN = calc.calcMarketplace(rowsN, omsN.map, y2RowsN, y2N ? y2N.map : {});
   const famNobj = calc.calcCAFamille(rowsN, omsN.map, refMap);
   const topNobj = calc.buildTopProdMap(rowsN, omsN.map);
   const paysNarr = calc.calcByCountry(rowsN, omsN.map);
@@ -153,7 +156,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const sessionsN1 = (sessionsRawN1 != null && rateN1) ? Math.round(sessionsRawN1 / rateN1) : sessionsRawN1;
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);
-    mktN1 = calc.calcMarketplace(rowsN1, mapN1, y2N1 ? y2N1.rows : (omsN1 ? [] : (y2N ? y2N.rows : [])), y2N1 ? y2N1.map : (y2N ? y2N.map : {}));
+    // Y2 N-1 filtré sur la période de comparaison (cf → ct) ; même fallback que la version précédente.
+    const y2RowsN1 = y2N1 ? calc.filterRows(y2N1.rows, y2N1.map, cf, ct, isAll)
+      : (omsN1 ? [] : (y2N ? calc.filterRows(y2N.rows, y2N.map, cf, ct, isAll) : []));
+    mktN1 = calc.calcMarketplace(rowsN1, mapN1, y2RowsN1, y2N1 ? y2N1.map : (y2N ? y2N.map : {}));
     famN1obj = calc.calcCAFamille(rowsN1, mapN1, refMap);
     topN1obj = calc.buildTopProdMap(rowsN1, mapN1);
     paysN1arr = calc.calcByCountry(rowsN1, mapN1);
@@ -630,10 +636,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // famByRef : RC → famille, depuis référentiel + implantation (saison courante prioritaire).
   const famByRef = Object.assign({}, refMap);
   if (implN) calc.implItems(implN).forEach(x => { if (x.rc && x.famille) famByRef[x.rc] = x.famille; });
+  // Y2 N-1 filtré pour le cross-canal (mêmes dates de comparaison) — null si pas de Y2 N-1.
+  const ccY2RowsN1 = y2N1 ? calc.filterRows(y2N1.rows, y2N1.map, cf, ct, isAll) : null;
   const crossChannel = (y2N || (omsN && omsN.rows)) ? calc.calcCrossChannel(
-    rowsN, omsN.map, y2N ? y2N.rows : null, y2N ? y2N.map : {},
+    rowsN, omsN.map, y2N ? y2RowsN : null, y2N ? y2N.map : {},
     famByRef,
-    rowsN1, mapN1, y2N1 ? y2N1.rows : null, y2N1 ? y2N1.map : {},
+    rowsN1, mapN1, ccY2RowsN1, y2N1 ? y2N1.map : {},
   ) : null;
 
   // Familles fusionnées N / N-1
@@ -731,7 +739,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     zoneFullOff: { n: calc.calcZoneFullOff(rowsN, omsN.map), n1: (rowsN1 && rowsN1.length) ? calc.calcZoneFullOff(rowsN1, mapN1) : null },
-    marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2N ? y2N.rows : [], y2N ? y2N.map : {}) },
+    marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2RowsN, y2N ? y2N.map : {}) },
     pays,
     saison,
     seasonCompare,
