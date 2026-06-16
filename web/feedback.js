@@ -2,6 +2,16 @@
 // Page Retours & idées : retours partagés (titre + description + captures + commentaires).
 let IS_ADMIN = false, ME = '';
 let PENDING = []; // captures en attente d'envoi (data URLs réduites)
+let ITEMS = [];   // tickets chargés (pour le bouton Copier)
+let FILTER = 'tous';
+const STATUSES = ['à traiter', 'en cours', 'traité'];
+const STATUS_COLORS = { 'à traiter': ['#E2574D', '#FDEEEC'], 'en cours': ['#3B6FB0', '#EAF1F9'], 'traité': ['#1B9E6A', '#E7F6EF'] };
+function statusBadge(st) { const [fg, bg] = STATUS_COLORS[st] || STATUS_COLORS['à traiter']; return `<span style="font-size:11px;font-weight:700;color:${fg};background:${bg};padding:2px 9px;border-radius:99px;white-space:nowrap">${esc(st)}</span>`; }
+function statusControl(item) {
+  const st = item.status || 'à traiter';
+  if (!IS_ADMIN) return statusBadge(st);
+  return `<select class="dt st-sel" data-id="${item.id}" title="Changer le statut" style="font-size:12px;padding:3px 6px">${STATUSES.map(s => `<option ${s === st ? 'selected' : ''}>${s}</option>`).join('')}</select>`;
+}
 
 const $ = id => document.getElementById(id);
 const esc = s => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -36,6 +46,7 @@ async function addImageFromBlob(blob) {
   const small = await downscale(raw);
   PENDING.push(small);
   renderThumbs();
+  $('fNote').textContent = `✓ Capture ajoutée (${PENDING.length})`;
 }
 function renderThumbs() {
   $('fThumbs').innerHTML = PENDING.map((src, i) =>
@@ -47,11 +58,13 @@ function card(item) {
   const imgs = (item.images || []).map(src => `<a href="${src}" target="_blank"><img src="${src}" style="max-height:140px;border-radius:8px;border:1px solid var(--br);margin:4px 6px 0 0"></a>`).join('');
   const comments = (item.comments || []).map(c => `<div style="border-top:1px solid var(--br);padding:6px 0;font-size:13px"><b>${esc(c.author)}</b> <span style="color:var(--t3);font-size:11px">${fmtDate(c.at)}</span><br>${esc(c.body).replace(/\n/g, '<br>')}</div>`).join('');
   const del = IS_ADMIN ? `<button class="btn" data-del="${item.id}" title="Supprimer ce retour" style="font-size:11px">🗑</button>` : '';
+  const cp = `<button class="btn cp-btn" data-id="${item.id}" title="Copier le ticket (pour le partager / le confier à l'IA)" style="font-size:11px">📋 Copier</button>`;
   return `<div class="card" data-fb="${item.id}">
-    <div class="toolbar" style="justify-content:space-between">
-      <h3 style="margin:0">${esc(item.title) || '<span style="color:var(--t3)">(sans titre)</span>'}</h3>${del}
+    <div class="toolbar" style="justify-content:space-between;align-items:flex-start;gap:8px">
+      <h3 style="margin:0;flex:1;min-width:0">${esc(item.title) || '<span style="color:var(--t3)">(sans titre)</span>'}</h3>
+      <div class="toolbar" style="gap:6px">${statusControl(item)} ${cp} ${del}</div>
     </div>
-    <div class="note" style="margin:2px 0 8px">par <b>${esc(item.author)}</b> · ${fmtDate(item.created_at)}${item.page ? ` · <span title="Contexte au moment du retour">${esc(item.page)}</span>` : ''}</div>
+    <div class="note" style="margin:2px 0 8px">👤 <b>${esc(item.author)}</b> · ${fmtDate(item.created_at)}${item.page ? ` · <span title="Page d'où vient le retour">${esc(item.page)}</span>` : ''}</div>
     ${item.body ? `<div style="font-size:14px;white-space:pre-wrap">${esc(item.body)}</div>` : ''}
     ${imgs ? `<div style="margin-top:6px">${imgs}</div>` : ''}
     <div style="margin-top:10px">${comments}</div>
@@ -61,14 +74,35 @@ function card(item) {
     </div>
   </div>`;
 }
+// Texte du ticket pour le presse-papier (à coller pour partager / confier l'implémentation à l'IA).
+function ticketText(item) {
+  const lines = [];
+  lines.push(`RETOUR #${item.id} [${item.status || 'à traiter'}] — par ${item.author} — ${fmtDate(item.created_at)}${item.page ? ` — page: ${item.page}` : ''}`);
+  lines.push(`Titre : ${item.title || '(sans titre)'}`);
+  if (item.body) lines.push(`Description :\n${item.body}`);
+  if ((item.images || []).length) lines.push(`(${item.images.length} capture(s) jointe(s) — visibles sur la page Retours)`);
+  if ((item.comments || []).length) { lines.push('Commentaires :'); item.comments.forEach(c => lines.push(`- ${c.author} (${fmtDate(c.at)}) : ${c.body}`)); }
+  return lines.join('\n');
+}
 
+function renderFilterBar() {
+  const count = st => st === 'tous' ? ITEMS.length : ITEMS.filter(x => (x.status || 'à traiter') === st).length;
+  const tabs = ['tous', ...STATUSES];
+  $('fFilter').innerHTML = tabs.map(t => `<button class="pb st-filter ${t === FILTER ? 'on' : ''}" data-f="${t}">${t === 'tous' ? 'Tous' : esc(t)} <span style="opacity:.6">(${count(t)})</span></button>`).join('');
+  $('fFilter').querySelectorAll('.st-filter').forEach(b => b.onclick = () => { FILTER = b.dataset.f; renderList(); });
+}
+function renderList() {
+  renderFilterBar();
+  const items = FILTER === 'tous' ? ITEMS : ITEMS.filter(x => (x.status || 'à traiter') === FILTER);
+  $('fList').innerHTML = items.length ? items.map(card).join('') : `<div class="card"><div class="note">${ITEMS.length ? 'Aucun ticket dans ce statut.' : 'Aucun retour pour l\'instant — sois le premier à en partager un ☝️'}</div></div>`;
+  wireList();
+}
 async function load() {
   try {
     const r = await fetch('/api/feedback'); const j = await r.json();
     $('dbWarn').innerHTML = j.dbBacked ? '' : '⚠️ Base de données non connectée (<code>DATABASE_URL</code>) : les retours sont en mémoire et seront <b>perdus au prochain redéploiement</b>. Active Postgres pour les conserver.';
-    const items = j.items || [];
-    $('fList').innerHTML = items.length ? items.map(card).join('') : '<div class="card"><div class="note">Aucun retour pour l\'instant — sois le premier à en partager un ☝️</div></div>';
-    wireList();
+    ITEMS = j.items || [];
+    renderList();
   } catch (e) { $('fList').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message || 'Erreur de chargement')}</div></div>`; }
 }
 
@@ -84,6 +118,18 @@ function wireList() {
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Supprimer ce retour ?')) return;
     const r = await fetch(`/api/feedback/${b.dataset.del}`, { method: 'DELETE' }); if (r.ok) load(); else alert('Suppression refusée');
+  });
+  // Changement de statut (admin)
+  document.querySelectorAll('.st-sel').forEach(sel => sel.onchange = async () => {
+    const id = sel.dataset.id;
+    const r = await fetch(`/api/feedback/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: sel.value }) });
+    if (r.ok) { const it = ITEMS.find(x => x.id === +id); if (it) it.status = sel.value; renderFilterBar(); } else alert('Changement de statut refusé');
+  });
+  // Copier le ticket (pour partager / confier à l'IA)
+  document.querySelectorAll('.cp-btn').forEach(b => b.onclick = async () => {
+    const it = ITEMS.find(x => x.id === +b.dataset.id); if (!it) return;
+    try { await navigator.clipboard.writeText(ticketText(it)); const o = b.textContent; b.textContent = '✓ Copié'; setTimeout(() => { b.textContent = o; }, 1500); }
+    catch (e) { const ta = document.createElement('textarea'); ta.value = ticketText(it); ta.style.cssText = 'width:100%;height:140px;margin-top:6px'; b.closest('.card').appendChild(ta); ta.select(); }
   });
 }
 

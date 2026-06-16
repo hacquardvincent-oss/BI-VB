@@ -76,6 +76,8 @@ async function init() {
     comments   jsonb NOT NULL DEFAULT '[]'::jsonb,
     created_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // Statut de ticket (à traiter / en cours / traité) — ajout idempotent.
+  await pool.query(`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'à traiter'`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }
