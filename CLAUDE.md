@@ -29,7 +29,11 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
   → corrige le « mauvais identifiants » sur un MDP correct (ex. « Marine » vs « marine »). `POST /auth/change-password` (son propre MdP, upsert DB ; pour l'admin
   bootstrap → crée sa ligne) ; admin `PATCH /auth/users/:u {password}` (réinitialise un compte). UI : page Admin.
 - **Montage des routes** (`index.js`) : `/healthz`; `/auth`; `/api/ingest`; `/api/report` (**reports.js ET pdf.js**);
-  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/reco`; `/api/objectives`; statique `web/` (no-cache html/js/css).
+  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/meta`; `/api/reco`; `/api/objectives`; `/api/feedback`; `/api/specs/reload` (admin);
+  statique `web/` (no-cache html/js/css). `express.json` limite **12 Mo** (captures du module Retours).
+- **Module Retours** (`feedback.js`, page `web/feedback.html`/`feedback.js`, onglet header 💬) : retours early users
+  PARTAGÉS (titre + description + **screenshots collés/uploadés, réduits côté client** → data URLs jsonb + commentaires).
+  Table `feedback` (write-through DB, repli RAM ; **sans `DATABASE_URL` → perdus au redeploy**). Suppression = admin.
   Au boot : ouvre le port → `db.init()` → `store.hydrate()` → `objectives.hydrate()` → `loadSpecs()` auto-charge
   les fichiers versionnés de `specs/` (`ref` N = "Referentiel produit.xlsx", `impl` N/N1 = "Implantation E26/E25.xlsx").
 

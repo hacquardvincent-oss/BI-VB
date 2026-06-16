@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Retours & idées</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting">📊 Reporting</a>
+    <a class="pb" href="/commerciale.html" title="Analyse commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison">🏷️ Analyse de saison</a>
+    <a class="pb" href="/objectifs.html" title="Objectifs">🎯 Objectifs</a>
+    <a class="pb on" href="/feedback.html" title="Retours & idées des utilisateurs">💬 Retours</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap" style="max-width:920px;margin:0 auto;padding:18px">
+  <!-- Composer un retour -->
+  <div class="card">
+    <h3>💬 Partager un retour ou une idée</h3>
+    <div class="note">Dis-nous ce qui marche, ce qui coince, ou ce que tu aimerais voir. <b>Colle une capture (Ctrl/Cmd+V)</b> ou dépose une image — c'est le plus parlant. Tes retours orientent les prochaines évolutions.</div>
+    <div style="margin-top:10px">
+      <input id="fTitle" class="dt" style="width:100%" placeholder="Titre court (ex. « Le filtre pays ne se réinitialise pas »)" maxlength="200">
+      <textarea id="fBody" class="dt" style="width:100%;height:90px;margin-top:8px;resize:vertical" placeholder="Décris le contexte : sur quelle page / vue, ce que tu attendais, ce qui s'est passé…" maxlength="5000"></textarea>
+      <div id="fDrop" tabindex="0" style="margin-top:8px;border:1px dashed var(--br);border-radius:10px;padding:14px;text-align:center;color:var(--t3);cursor:pointer;background:var(--s2)">
+        📎 Colle une capture (Ctrl/Cmd+V), dépose une image ici, ou <span style="text-decoration:underline">choisis un fichier</span>
+        <input type="file" id="fFile" accept="image/*" multiple style="display:none">
+      </div>
+      <div id="fThumbs" class="toolbar" style="gap:8px;margin-top:8px;flex-wrap:wrap"></div>
+      <div class="toolbar" style="margin-top:10px">
+        <button class="btn primary" id="fSubmit">Envoyer le retour</button>
+        <span class="note" id="fNote" style="margin:0"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" id="dbWarn" style="margin:10px 2px"></div>
+  <div id="fList"></div>
+</div>
+
+<script src="/feedback.js"></script>
+</body>
+</html>

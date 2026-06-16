@@ -22,6 +22,7 @@ const googleads = require('./googleads');
 const meta = require('./meta');
 const reco = require('./reco');
 const objectives = require('./objectives');
+const feedback = require('./feedback');
 const layouts = require('./layouts');
 const userviews = require('./userviews');
 const sftp = require('./sftp');
@@ -31,7 +32,7 @@ const PORT = process.env.PORT || 3000;
 const PROD = process.env.NODE_ENV === 'production';
 
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '12mb' })); // 12 Mo : marge pour les captures d'écran du module Retours
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieSession({
   name: 'bidash',
@@ -55,6 +56,7 @@ app.use('/api/meta', meta.router);
 app.use('/api/sftp', sftp.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
+app.use('/api/feedback', feedback.router);
 app.use('/api/layouts', layouts.router);
 app.use('/api/myviews', userviews.router);
 
@@ -110,6 +112,7 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     await db.init();
     await store.hydrate();
     await objectives.hydrate();
+    await feedback.hydrate();
     await layouts.hydrate();
   } catch (e) {
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);

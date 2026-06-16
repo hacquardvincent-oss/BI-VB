@@ -65,6 +65,17 @@ async function init() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_views jsonb`);
   // Droit d'édition : true = peut créer/modifier des vues ; false = lecture seule. Ajout idempotent (défaut true).
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit boolean NOT NULL DEFAULT true`);
+  // Retours utilisateurs (early users) : titre + description + screenshots + commentaires partagés.
+  await pool.query(`CREATE TABLE IF NOT EXISTS feedback (
+    id         serial PRIMARY KEY,
+    author     text,
+    title      text,
+    body       text,
+    page       text,
+    images     jsonb NOT NULL DEFAULT '[]'::jsonb,
+    comments   jsonb NOT NULL DEFAULT '[]'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }
