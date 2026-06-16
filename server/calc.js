@@ -88,9 +88,17 @@ function parseGAcsv(text) {
 }
 
 // ── Dates FR (dd/mm/yyyy) ───────────────────────────────────────────────────
+// Parseur de date TOLÉRANT (OMS, Y2, retours…). Gère les formats réels rencontrés :
+//  - FR : JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA (+ heure éventuelle, + année à 2 chiffres)
+//  - ISO : AAAA-MM-JJ (ou AAAA/MM/JJ) — fréquent dans les exports ERP/Y2.
+// Reste un sur-ensemble strict de l'ancien format JJ/MM/AAAA → aucune régression OMS.
 const parseFrD = s => {
-  const m = (s || '').toString().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  return m ? { d: +m[1], m: +m[2], y: +m[3] } : null;
+  const str = (s || '').toString().trim();
+  let m = str.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return { d: +m[1], m: +m[2], y }; }
+  m = str.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})/); // ISO AAAA-MM-JJ
+  if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+  return null;
 };
 const toISO = o => o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : '';
 const isoToD = s => { if (!s) return null; const p = s.split('-'); return { y: +p[0], m: +p[1], d: +p[2] }; };
