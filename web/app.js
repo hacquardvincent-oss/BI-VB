@@ -424,6 +424,7 @@ const SOURCES = [
   { key: 'ads', name: '📣 Google Ads (export campagnes : coût/clics/conv.)', periods: ['N', 'N1'] },
   { key: 'offre', name: '🏷️ Offre / listing produits (analyse commerciale)', periods: ['N', 'N1'] },
   { key: 'bis', name: '🔔 Alertes stock (export « prévenez-moi » — email écarté)', periods: ['N'] },
+  { key: 'ref', name: '📚 Référentiel produit (réf → famille) — maj immédiate', periods: ['N'] },
 ];
 
 async function me() {
@@ -447,6 +448,7 @@ async function me() {
     const ab = document.getElementById('adminBtn');
     if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } // page d'admin dédiée
     const ev = document.getElementById('editViewBtn'); if (ev) ev.classList.remove('hidden'); // CTA EDIT (admin)
+    const sb = document.getElementById('specsBox'); if (sb) sb.classList.remove('hidden'); // rechargement référentiel (admin)
   }
   return u;
 }
@@ -3062,6 +3064,19 @@ document.getElementById('pdf').addEventListener('click', () => {
 document.getElementById('filesToggle').addEventListener('click', () => {
   setFilesOpen(document.getElementById('filesBody').classList.contains('hidden'));
 });
+// Recharger le référentiel (specs/) à chaud — admin. Puis on rafraîchit le rapport.
+{ const rs = document.getElementById('reloadSpecs'); if (rs) rs.addEventListener('click', async () => {
+  const note = document.getElementById('reloadSpecsNote'); rs.disabled = true; note.textContent = 'Rechargement…';
+  try {
+    const r = await fetch('/api/specs/reload', { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    const summary = (j.loaded || []).map(x => `${x.name} : ${x.error ? '⚠ ' + x.error : x.rows + ' l.'}`).join(' · ');
+    note.textContent = '✓ ' + summary;
+    await loadStatus(); loadReport(); // recalcule le CA par famille avec le nouveau référentiel
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
+  finally { rs.disabled = false; }
+}); }
 // Sélecteur de dates : Appliquer (plage N + N-1) / Tout (plage complète auto)
 document.getElementById('applyDates').addEventListener('click', () => {
   const v = id => document.getElementById(id).value;
