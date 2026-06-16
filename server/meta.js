@@ -45,6 +45,9 @@ function pickPurchase(arr) {
 }
 
 // ── Appel Graph API (essaie les versions candidates sur 400/404 de version) ──
+// Retries sur erreurs TRANSITOIRES Meta (code 1/2/4/17/32/341/613 = service momentanément indispo /
+// rate-limit) et 5xx → un « Service temporarily unavailable » ne fait plus échouer l'appel.
+const TRANSIENT_CODES = [1, 2, 4, 17, 32, 341, 368, 613];
 async function graphGet(path, params) {
   const c = cfg();
   const tryVersions = goodVersion ? [goodVersion] : VERSIONS;
@@ -52,17 +55,21 @@ async function graphGet(path, params) {
   for (const ver of tryVersions) {
     const qs = new URLSearchParams({ ...params, access_token: c.token }).toString();
     const url = `https://graph.facebook.com/${ver}/${path}?${qs}`;
-    let res, j;
-    try { res = await fetch(url); j = await res.json().catch(() => ({})); }
-    catch (e) { lastErr = e; await sleep(400); continue; }
-    if (!res.ok) {
-      const err = j && j.error ? j.error : {};
-      // Version inexistante / dépréciée → on tente la suivante ; sinon on remonte l'erreur.
-      if (/unknown version|does not exist|Unsupported get request/i.test(err.message || '') && !goodVersion) { lastErr = new Error(err.message); continue; }
+    let nextVersion = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let res, j;
+      try { res = await fetch(url); j = await res.json().catch(() => ({})); }
+      catch (e) { lastErr = e; await sleep(500 * (attempt + 1)); continue; }
+      if (res.ok) { goodVersion = ver; return j; }
+      const err = (j && j.error) || {};
+      // Version inexistante / dépréciée → on tente la version suivante.
+      if (/unknown version|does not exist|Unsupported get request/i.test(err.message || '') && !goodVersion) { lastErr = new Error(err.message); nextVersion = true; break; }
+      // Erreur transitoire → on retente (backoff) sur la même version.
+      const transient = res.status >= 500 || TRANSIENT_CODES.includes(err.code) || /temporarily unavailable|please reduce|request limit|try again/i.test(err.message || '');
+      if (transient && attempt < 3) { lastErr = new Error(err.message || ('HTTP ' + res.status)); await sleep(900 * (attempt + 1)); continue; }
       throw new Error(`Meta API ${res.status} : ${(err.message || JSON.stringify(j)).toString().slice(0, 220)}`);
     }
-    goodVersion = ver;
-    return j;
+    if (!nextVersion) break;
   }
   throw lastErr || new Error('Meta API : aucune version compatible (essayées : ' + VERSIONS.join(', ') + ')');
 }
