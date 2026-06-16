@@ -2796,11 +2796,19 @@ document.getElementById('adsping').addEventListener('click', async () => {
 
 // Meta (Facebook/Instagram) Marketing API
 async function metaStatus() {
+  const box = document.getElementById('metabox'), note = document.getElementById('metanote'), btn = document.getElementById('metarefresh');
   try {
     const r = await fetch('/api/meta/status');
     if (!r.ok) return;
     const s = await r.json();
-    if (s.configured) document.getElementById('metabox').classList.remove('hidden');
+    box.classList.remove('hidden'); // box TOUJOURS visible → permet de diagnostiquer même non configuré
+    if (s.configured) { if (btn) btn.disabled = false; }
+    else {
+      if (btn) btn.disabled = true;
+      const tok = s.tokenPresent ? '✅ présent' : '❌ ABSENT';
+      const acc = s.account ? `✅ ${esc(s.account)}` : '❌ ABSENT';
+      note.innerHTML = `⚠ <b>Meta non détecté côté serveur</b> — <code>META_ACCESS_TOKEN</code> : ${tok} · <code>META_AD_ACCOUNT_ID</code> : ${acc}. Corrige la (les) variable(s) manquante(s) sur Render puis redéploie.`;
+    }
   } catch (e) { /* ignore */ }
 }
 document.getElementById('metarefresh').addEventListener('click', async () => {
