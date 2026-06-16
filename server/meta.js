@@ -197,7 +197,7 @@ async function refresh(opts = {}) {
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-router.get('/status', requireAuth, (req, res) => { const c = cfg(); res.json({ configured: isConfigured(), account: c.account || null, organic: hasOrganic(), ig: !!c.igUser, page: !!c.pageId }); });
+router.get('/status', requireAuth, (req, res) => { const c = cfg(); res.json({ configured: isConfigured(), tokenPresent: !!c.token, account: c.account || null, organic: hasOrganic(), ig: !!c.igUser, page: !!c.pageId }); });
 
 // Diagnostic : appelle l'endpoint du compte (nom + devise) puis 1 ligne d'insight (30 j).
 router.get('/ping', requireAuth, async (req, res) => {
