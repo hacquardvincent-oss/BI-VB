@@ -249,23 +249,25 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
 
 router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
 
-// Diagnostic d'un jeu : en-têtes + colonnes mappées + échantillon de la colonne Date (raw + parsé).
-// Sert à comprendre pourquoi un filtrage par période ne s'applique pas (ex. date Y2 non reconnue).
+// Diagnostic d'un jeu : en-têtes + colonnes mappées + aperçu de CHAQUE colonne (valeurs distinctes)
+// + distribution de la colonne Date. Sert à trouver une colonne temporelle exploitable (ex. Y2).
 router.get('/diag/:source/:period', requireAuth, (req, res) => {
   const ds = store.getDataset(req.params.source, req.params.period);
   if (!ds || !ds.rows) return res.status(404).json({ error: 'Jeu absent (non chargé)' });
   const map = ds.map || {};
-  const di = map.date;
-  const sample = (di !== undefined ? ds.rows.slice(0, 12) : []).map(r => {
-    const raw = r[di];
-    const p = calc.parseFrD ? calc.parseFrD(raw) : null;
-    return { raw, parsed: p ? `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}` : null };
+  // Pour chaque colonne : jusqu'à 5 valeurs distinctes non vides (aperçu du contenu réel du fichier).
+  const columns = (ds.hdrs || []).map((h, i) => {
+    const seen = new Set();
+    for (const r of ds.rows) { const v = (r[i] == null ? '' : String(r[i])).trim(); if (v) seen.add(v); if (seen.size >= 5) break; }
+    return { col: h, samples: [...seen] };
   });
+  // Distribution de la colonne date mappée : combien de lignes ont une date « réelle » (année ≥ 2000) ?
+  const di = map.date; let dateUsable = 0, dateJunk = 0;
+  if (di !== undefined) ds.rows.forEach(r => { const p = calc.parseFrD(r[di]); if (p && p.y >= 2000) dateUsable++; else dateJunk++; });
   res.json({
     source: req.params.source, period: req.params.period, rows: ds.rows.length,
-    headers: ds.hdrs, mappedColumns: map,
-    dateMapped: di !== undefined, dateHeader: di !== undefined ? ds.hdrs[di] : '(AUCUNE colonne date reconnue)',
-    sampleDates: sample,
+    mappedColumns: map, dateHeader: di !== undefined ? ds.hdrs[di] : '(aucune)',
+    dateUsable, dateJunk, columns,
   });
 });
 
