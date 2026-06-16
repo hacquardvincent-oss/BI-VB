@@ -249,6 +249,26 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
 
 router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
 
+// Diagnostic d'un jeu : en-têtes + colonnes mappées + échantillon de la colonne Date (raw + parsé).
+// Sert à comprendre pourquoi un filtrage par période ne s'applique pas (ex. date Y2 non reconnue).
+router.get('/diag/:source/:period', requireAuth, (req, res) => {
+  const ds = store.getDataset(req.params.source, req.params.period);
+  if (!ds || !ds.rows) return res.status(404).json({ error: 'Jeu absent (non chargé)' });
+  const map = ds.map || {};
+  const di = map.date;
+  const sample = (di !== undefined ? ds.rows.slice(0, 12) : []).map(r => {
+    const raw = r[di];
+    const p = calc.parseFrD ? calc.parseFrD(raw) : null;
+    return { raw, parsed: p ? `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}` : null };
+  });
+  res.json({
+    source: req.params.source, period: req.params.period, rows: ds.rows.length,
+    headers: ds.hdrs, mappedColumns: map,
+    dateMapped: di !== undefined, dateHeader: di !== undefined ? ds.hdrs[di] : '(AUCUNE colonne date reconnue)',
+    sampleDates: sample,
+  });
+});
+
 // Scoring qualité de données (déterministe, §7) : score + dimensions par jeu chargé.
 router.get('/quality', requireAuth, (req, res) => {
   const out = store.listDatasets().map(d => {
