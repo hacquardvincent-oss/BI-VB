@@ -129,7 +129,7 @@ router.get('/me', async (req, res) => {
       }
     } catch (e) { /* en cas d'erreur, on n'impose aucune restriction */ }
   }
-  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled, allowedViews, canEdit });
+  res.json({ username: req.session.username, role: req.session.role, dbAccounts: db.enabled, allowedViews, canEdit, demo: !!process.env.DEMO_MODE });
 });
 
 function requireAuth(req, res, next) {

@@ -103,6 +103,26 @@ app.post('/api/specs/reload', auth.requireAuth, auth.requireAdmin, (req, res) =>
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Export d'un SNAPSHOT de tous les jeux de données (pour construire la démo autonome).
+// Réservé aux administrateurs. À télécharger puis déposer dans demo/snapshot.json du service démo.
+app.get('/api/admin/export-datasets', auth.requireAuth, auth.requireAdmin, (req, res) => {
+  res.setHeader('Content-Disposition', 'attachment; filename="bi-demo-snapshot.json"');
+  res.json({ version: 1, exportedAt: new Date().toISOString(), datasets: store.exportAll() });
+});
+
+// Mode DÉMO autonome (DEMO_MODE=1) : charge un instantané de jeux depuis demo/snapshot.json
+// dans la RAM au démarrage → l'app tourne sans aucune API ni upload.
+function loadDemo() {
+  if (!process.env.DEMO_MODE) return;
+  const p = path.join(__dirname, '..', 'demo', 'snapshot.json');
+  try {
+    if (!fs.existsSync(p)) { console.warn('[demo] demo/snapshot.json introuvable — démo vide'); return; }
+    const snap = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const n = store.importAll(snap.datasets || snap);
+    console.log(`[demo] mode DÉMO actif — ${n} jeu(x) de données chargé(s) depuis demo/snapshot.json`);
+  } catch (e) { console.error('[demo] chargement KO:', e.message); }
+}
+
 // Démarrage : on OUVRE LE PORT D'ABORD (détection rapide par l'hébergeur), puis on
 // initialise la base + hydratation RAM + fichiers specs en arrière-plan. Évite le
 // « port scan timeout » quand l'hydratation depuis Postgres devient longue.
@@ -118,6 +138,7 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
   }
   loadSpecs();
-  try { sftp.startPolling(); } catch (e) { console.error('[sftp] poll KO:', e.message); }
+  loadDemo(); // mode démo : charge le snapshot par-dessus (autoritaire) si DEMO_MODE
+  try { if (!process.env.DEMO_MODE) sftp.startPolling(); } catch (e) { console.error('[sftp] poll KO:', e.message); }
   console.log(`[bidash] initialisation terminée — ${db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)'}`);
 })();

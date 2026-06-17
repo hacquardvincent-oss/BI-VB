@@ -150,7 +150,8 @@
     <!-- Référentiel : rechargement à chaud (admin) après mise à jour sur GitHub + redéploiement -->
     <div class="toolbar hidden" id="specsBox" style="margin-top:8px">
       <button class="btn" id="reloadSpecs" title="Relit le référentiel produit + implantations versionnés (specs/) sans attendre un redéploiement complet">📚 Recharger le référentiel</button>
-      <span class="note" id="reloadSpecsNote" style="margin:0">Recharge le référentiel produit + implantations depuis les fichiers déployés.</span>
+      <a class="btn" id="exportDemo" href="/api/admin/export-datasets" download title="Télécharge un instantané de tous les jeux de données chargés (pour construire la démo autonome)">🎬 Exporter les données (démo)</a>
+      <span class="note" id="reloadSpecsNote" style="margin:0">Recharge le référentiel · ou exporte un snapshot des données pour la démo.</span>
     </div>
 
     <!-- Import manuel (replié par défaut) -->
