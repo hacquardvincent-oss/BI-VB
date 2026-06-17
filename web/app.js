@@ -15,6 +15,8 @@ let COMPARE = true;        // comparaison N-1 activée ? (false = analyse N seul
 let ALLOWED_VIEWS = null;  // RBAC : liste des vues autorisées (null = toutes)
 let IS_ADMIN = false;      // l'utilisateur courant est admin (→ CTA EDIT, page Admin)
 let CAN_EDIT = true;       // droit de modification (créer/éditer des vues) ; false = lecture seule
+let IS_DEMO = false;       // mode démo (données figées, sans connecteur)
+let DEMO_REF_DATE = null;  // démo : dernière date couverte par le snapshot → ancre les raccourcis (Hier/S-1/Mois/Année)
 // Peut éditer la vue COURANTE (admin sur partagée ; can_edit sur sa vue perso) · peut CRÉER une vue perso.
 function canEditView() { return IS_ADMIN || (isMyView(CURRENT_MODULE) && CAN_EDIT); }
 function canCreateView() { return IS_ADMIN || CAN_EDIT; }
@@ -436,6 +438,7 @@ async function me() {
   // Mode DÉMO : données d'exemple embarquées, pas de connecteur → masque le panneau « Chargement »
   // et affiche un bandeau. Le reste de l'app fonctionne à l'identique.
   if (u.demo) {
+    IS_DEMO = true;
     const sd = document.getElementById('setupData'); if (sd) sd.style.display = 'none';
     if (!document.getElementById('demoBadge')) {
       const b = document.createElement('span'); b.id = 'demoBadge';
@@ -778,6 +781,10 @@ async function loadReport() {
     + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   LAST_REP = rep;
+  // Démo : sur la vue « Tout » (DATES nul = plage complète), mémorise la dernière date couverte
+  // par le snapshot → les raccourcis Hier/S-1/Mois/Année s'ancrent dessus (sinon ils visent
+  // « aujourd'hui » réel, hors période figée → résultats vides).
+  if (IS_DEMO && !DATES && rep.meta && rep.meta.to) DEMO_REF_DATE = rep.meta.to;
   fillCountrySelect(rep);
   box.innerHTML = coverageBanner(rep) + renderReport(rep);
   renderObjectives(rep);
@@ -3110,7 +3117,9 @@ document.getElementById('applyDates').addEventListener('click', () => {
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const shiftYearStr = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
-  const today = new Date(); let from = new Date(), to = new Date();
+  // En démo, « aujourd'hui » = dernière date du snapshot (ancre les raccourcis sur les données figées).
+  const anchor = (IS_DEMO && DEMO_REF_DATE) ? new Date(DEMO_REF_DATE + 'T00:00:00') : new Date();
+  const today = new Date(anchor); let from = new Date(anchor), to = new Date(anchor);
   const kind = b.dataset.range;
   // calendarCompare=true → N-1 = mêmes dates l'an dernier (mois/cumul/année) ;
   // sinon comparable −364 j (même jour de semaine : hier, semaine, fenêtres glissantes).
