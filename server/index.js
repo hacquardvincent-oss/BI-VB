@@ -142,5 +142,6 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
   loadSpecs();
   loadDemo(); // mode démo : charge le snapshot par-dessus (autoritaire) si DEMO_MODE
   try { if (!process.env.DEMO_MODE) sftp.startPolling(); } catch (e) { console.error('[sftp] poll KO:', e.message); }
+  try { if (!process.env.DEMO_MODE) y2.startPolling(); } catch (e) { console.error('[y2] poll KO:', e.message); }
   console.log(`[bidash] initialisation terminée — ${db.enabled ? 'avec base Postgres' : 'mode mémoire (sans base)'}`);
 })();

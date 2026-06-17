@@ -86,11 +86,22 @@ async function fetchRange(sql, from, to) {
   return toTable(result);
 }
 
+// Fenêtre par défaut (quand aucune date n'est fournie : polling / import « complet »).
+function isoD(d) { return d.toISOString().slice(0, 10); }
+function comparable364(iso) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() - 364); return isoD(d); }
+function defaultWindow() {
+  const months = parseInt(process.env.Y2_MONTHS || '24', 10) || 24;
+  const to = new Date(); const from = new Date(); from.setMonth(from.getMonth() - months);
+  return { from: isoD(from), to: isoD(to) };
+}
+
 // refresh({from,to,cfrom,cto}) : charge y2-N (et y2-N1 si une fenêtre N-1 est fournie).
+// Sans from/to → fenêtre par défaut (Y2_MONTHS, 24 mois).
 async function refresh(opts = {}, cb = () => {}) {
   if (!isConfigured()) throw new Error('Y2 non configuré (Y2_DATABASE_URL / Y2_QUERY manquants)');
   const c = CFG();
-  const from = opts.from || '', to = opts.to || '';
+  let from = opts.from || '', to = opts.to || '';
+  if (!from || !to) { const w = defaultWindow(); from = from || w.from; to = to || w.to; }
   const out = {};
   cb(`Requête Y2 N (${from} → ${to})…`);
   const tN = await fetchRange(c.query, from, to);
@@ -134,4 +145,20 @@ router.post('/refresh', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-module.exports = { router, isConfigured, refresh };
+// Rafraîchissement automatique périodique (Y2_POLL_MINUTES) : recharge N + N-1 sur la fenêtre
+// par défaut → les données marketplace restent fraîches sans action manuelle. (Instance active requise.)
+function startPolling() {
+  const min = parseInt(process.env.Y2_POLL_MINUTES || '0', 10) || 0;
+  if (!isConfigured() || !min) return;
+  const ms = Math.max(5, min) * 60000;
+  const run = () => {
+    const w = defaultWindow();
+    refresh({ from: w.from, to: w.to, cfrom: comparable364(w.from), cto: comparable364(w.to) }, p => console.log('[y2] ' + p))
+      .then(r => console.log('[y2] auto-refresh:', JSON.stringify(r)))
+      .catch(e => console.error('[y2] auto-refresh KO:', e.message));
+  };
+  setInterval(run, ms);
+  console.log(`[y2] auto-refresh activé toutes les ${min} min`);
+}
+
+module.exports = { router, isConfigured, refresh, startPolling };

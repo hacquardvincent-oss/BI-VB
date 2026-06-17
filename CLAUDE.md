@@ -190,6 +190,21 @@ Routes : `/status`, `/ping` (probe `SELECT campaign.id … LIMIT 1`), `/refresh`
 Routes : `/status` (configured + organic), `/ping` (compte name/currency + 1 insight 30 j + probe organique 7 j), `/refresh`.
 Upload manuel possible (`metaads` dans `SOURCES`, ADS_ALIASES). ⏳ **SPLIO (CRM)** : à venir, même pattern connecteur.
 
+### 3.5 Y2 — base Marketplace PostgreSQL (`y2.js`)
+**Automatise la source `y2`** (ventes marketplace : corner GL / SFS 674SFS, Place des Tendances, Lulli) en se connectant
+**directement à la base Postgres de l'ERP Y2** (plus d'upload ni de SFTP). **Env** : `Y2_DATABASE_URL` (chaîne pg ; ou
+`Y2_PGHOST/Y2_PGPORT/Y2_PGUSER/Y2_PGPASSWORD/Y2_PGDATABASE`), `Y2_SSL` (`disable` coupe TLS, défaut TLS `rejectUnauthorized:false`),
+**`Y2_QUERY`** (SELECT, **`$1`=début / `$2`=fin** en ISO ; `paramsFor` n'envoie que les placeholders réellement présents →
+tolère une requête sans bornes), `Y2_QUERY_N1` (optionnel, sinon `Y2_QUERY` sur la fenêtre N-1), `Y2_MONTHS` (fenêtre par
+défaut 24), `Y2_POLL_MINUTES` (auto-refresh périodique = vraie automatisation, instance active requise). `pg` en require
+**paresseux** (déjà dépendance via `db.js`), pool dédié. La requête doit **aliaser les colonnes** aux libellés attendus —
+`Y2_ALIASES` accepte désormais les **noms courts** (`Etablissement`, `Commercial`, `Quantite`, `Total TTC`) en plus des
+libellés exacts de l'export (« Etablissement Ligne Doc. »…). **`refresh({from,to,cfrom,cto})`** charge `y2-N` (+ `y2-N1` si
+fenêtre N-1) via **`ingest.ingestTable`** (nouveau point de réutilisation : auto-map + **anti-PII** sur des lignes déjà
+parsées, sans fichier → dataset identique à un upload). Routes : `/status`, `/ping` (connexion + **colonnes + nb lignes,
+JAMAIS les valeurs**), `/refresh`. Monté sur `/api/y2` ; UI `#y2box` (Tester / Importer, calée sur la période) ;
+polling câblé au boot (hors démo). ⚠️ **Calibrer `Y2_QUERY` sur le schéma réel Y2** (table de ventes + colonnes).
+
 ---
 
 ## 4. Ingestion & anti-PII (`ingest.js`)

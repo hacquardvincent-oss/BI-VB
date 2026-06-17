@@ -1,5 +1,23 @@
 # STATUS.md — BI Project
-_Mis à jour : 04/06/2026_
+_Mis à jour : 17/06/2026_
+
+## 📌 Suivi en cours (17/06/2026)
+**Démo autonome** (dépôt séparé `bi-vb-demo`, `DEMO_MODE` + snapshot) : ✅ en ligne. Raccourcis de période
+ancrés sur la dernière date du snapshot (`IS_DEMO`/`DEMO_REF_DATE`). Pistes : étendre l'export (layouts+objectifs+feedback).
+
+**Connecteur Y2 = automatisation des données marketplace** (corner GL / SFS, PDT, Lulli) :
+- ✅ Backend `server/y2.js` : connexion **directe à la base Postgres Y2** (plus d'upload/SFTP). `Y2_DATABASE_URL`
+  + `Y2_QUERY` ($1/$2 dates) → jeu `y2` N/N-1 via `ingest.ingestTable` (auto-map + anti-PII). Routes `/api/y2/status|ping|refresh`.
+- ✅ **Automatisation** : `Y2_POLL_MINUTES` (auto-refresh), fenêtre par défaut `Y2_MONTHS`.
+- ✅ UI `#y2box` (Tester / Importer, calée sur la période). `Y2_ALIASES` élargi (noms courts SQL).
+- ⏳ **À calibrer** : `Y2_QUERY` sur le **schéma réel Y2** (table de ventes + colonnes) + poser les variables sur la prod et tester via `/api/y2/ping`.
+
+**Backlog actif** : SPLIO (CRM) · couche déterministe (registre de métriques, funnel vs cible, Simpson) ·
+backlog data (marge/COGS, stock+tailles, ID client pseudonymisé) · PDF (TTF embarqués) · UX 3 zones commerciale/saison.
+
+---
+
+_Historique antérieur : 04/06/2026_
 
 ## 🧭 Roadmap — prochaine itération (cadrée le 04/06/2026)
 Objectif : capitaliser sur le socle (collecte multi-sources + analyse N/N-1 matures) en

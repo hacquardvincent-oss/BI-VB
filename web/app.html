@@ -119,7 +119,12 @@
       <button class="btn" id="sftpping">🩺 Tester la connexion</button>
       <span class="note" id="sftpnote">Récupère les fichiers déposés sur le SFTP (ex. exports Y2) et les ingère automatiquement</span>
     </div>
-    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads / SFTP). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
+    <div id="y2box" class="toolbar hidden" style="margin-top:8px">
+      <button class="btn blue" id="y2refresh">🔄 Importer Y2 (base Marketplace)</button>
+      <button class="btn" id="y2ping">🩺 Tester la connexion</button>
+      <span class="note" id="y2note">Charge les ventes marketplace (corner GL / SFS, Place des Tendances, Lulli) directement depuis la base Y2 sur la période N et N-1</span>
+    </div>
+    <div class="note hidden" id="noApiNote">Aucun connecteur API configuré côté serveur (GA4 / WSHOP / Google Ads / SFTP / Y2). Utilise l'import manuel ci-dessous, ou configure les variables d'environnement.</div>
 
     <!-- Réglages avancés (cookies RGPD + cible COS) — repliés -->
     <details class="fold" style="margin-top:8px">

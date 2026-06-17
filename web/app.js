@@ -509,10 +509,10 @@ function setFilesOpen(open) {
 }
 // Affiche un message si aucun connecteur API n'est configuré
 function updateApiHint() {
-  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), ad = document.getElementById('adsbox'), sf = document.getElementById('sftpbox'), no = document.getElementById('noApiNote');
+  const ga = document.getElementById('ga4box'), ws = document.getElementById('wshopbox'), ad = document.getElementById('adsbox'), sf = document.getElementById('sftpbox'), y2 = document.getElementById('y2box'), no = document.getElementById('noApiNote');
   if (!no) return;
   const vis = el => el && !el.classList.contains('hidden');
-  const anyApi = vis(ga) || vis(ws) || vis(ad) || vis(sf);
+  const anyApi = vis(ga) || vis(ws) || vis(ad) || vis(sf) || vis(y2);
   no.classList.toggle('hidden', anyApi);
 }
 
@@ -2890,6 +2890,43 @@ document.getElementById('sftpping').addEventListener('click', async () => {
   } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
 });
 
+// ── Y2 (base Marketplace PostgreSQL) ──
+async function y2Status() {
+  try {
+    const r = await fetch('/api/y2/status'); if (!r.ok) return;
+    const s = await r.json();
+    if (s.configured) {
+      document.getElementById('y2box').classList.remove('hidden');
+      const n = document.getElementById('y2note');
+      if (n) n.textContent = `Base Y2 ${esc(s.host || '')} · ventes marketplace (GL/SFS, PDT, Lulli) sur N et N-1${s.hasQueryN1 ? ' · requête N-1 dédiée' : ''}`;
+    }
+  } catch (e) { /* ignore */ }
+}
+document.getElementById('y2refresh').addEventListener('click', async () => {
+  const note = document.getElementById('y2note'), btn = document.getElementById('y2refresh');
+  btn.disabled = true; note.textContent = 'Import Y2 en cours…';
+  try {
+    const q = new URLSearchParams(importPeriod()).toString();
+    const r = await fetch('/api/y2/refresh?' + q, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); btn.disabled = false; return; }
+    const parts = Object.entries(j.result || {}).map(([p, x]) => `${esc(p)} : ${fInt(x.rows)} lignes`);
+    note.innerHTML = `✓ Y2 importé · ${parts.join(' · ') || 'aucune ligne'}`;
+    await loadStatus(); loadReport();
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+  finally { btn.disabled = false; }
+});
+document.getElementById('y2ping').addEventListener('click', async () => {
+  const note = document.getElementById('y2note');
+  note.textContent = 'Test de connexion Y2…';
+  try {
+    const r = await fetch('/api/y2/ping');
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || `HTTP ${r.status}`); return; }
+    note.innerHTML = `✓ Connecté (${j.ms}ms) · ${fInt(j.rowCount)} lignes sur ${esc(j.window)} · colonnes : ${(j.columns || []).map(esc).join(', ')}`;
+  } catch (e) { note.textContent = '⚠ ' + (e.message || 'Erreur'); }
+});
+
 // Moteur de recommandations stratégiques (API Claude)
 async function recoStatus() {
   try {
@@ -3257,6 +3294,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await googleAdsStatus();
   await metaStatus();
   await sftpStatus();
+  await y2Status();
   await recoStatus();
   updateApiHint();
   await loadReport();
