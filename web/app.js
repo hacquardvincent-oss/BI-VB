@@ -433,6 +433,17 @@ async function me() {
   const u = await r.json();
   document.getElementById('who').textContent = `${u.username}`;
   PERSIST = !!u.dbAccounts;
+  // Mode DÉMO : données d'exemple embarquées, pas de connecteur → masque le panneau « Chargement »
+  // et affiche un bandeau. Le reste de l'app fonctionne à l'identique.
+  if (u.demo) {
+    const sd = document.getElementById('setupData'); if (sd) sd.style.display = 'none';
+    if (!document.getElementById('demoBadge')) {
+      const b = document.createElement('span'); b.id = 'demoBadge';
+      b.textContent = '🎬 Mode démo';
+      b.style.cssText = 'margin-left:8px;font-size:11px;font-weight:700;color:#A8854A;background:var(--accent-soft, #F3ECE0);padding:3px 10px;border-radius:99px';
+      const who = document.getElementById('who'); if (who && who.parentNode) who.parentNode.insertBefore(b, who);
+    }
+  }
   // RBAC par vue : restreint la barre de vues si le compte a une liste autorisée.
   ALLOWED_VIEWS = (Array.isArray(u.allowedViews) && u.allowedViews.length) ? u.allowedViews : null;
   CAN_EDIT = u.canEdit !== false; // droit de créer/modifier des vues (false = lecture seule)

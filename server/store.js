@@ -50,5 +50,18 @@ function listDatasets() {
     };
   });
 }
+// Snapshot complet des jeux (pour l'export démo) : { "source-period": dataset, … }
+function exportAll() {
+  const out = {};
+  for (const [k, v] of STORE.entries()) out[k] = v;
+  return out;
+}
+// Charge un snapshot dans la RAM (mode démo) — écriture directe, SANS write-through base.
+function importAll(obj) {
+  if (!obj || typeof obj !== 'object') return 0;
+  let n = 0;
+  for (const k of Object.keys(obj)) { if (k.includes('-')) { STORE.set(k, obj[k]); n++; } }
+  return n;
+}
 
-module.exports = { setDataset, getDataset, delDataset, listDatasets, hydrate };
+module.exports = { setDataset, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };
