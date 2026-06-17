@@ -26,6 +26,7 @@ const feedback = require('./feedback');
 const layouts = require('./layouts');
 const userviews = require('./userviews');
 const sftp = require('./sftp');
+const y2 = require('./y2');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,7 @@ app.use('/api/wshop', wshop.router);
 app.use('/api/googleads', googleads.router);
 app.use('/api/meta', meta.router);
 app.use('/api/sftp', sftp.router);
+app.use('/api/y2', y2.router);
 app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 app.use('/api/feedback', feedback.router);

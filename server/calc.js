@@ -129,13 +129,13 @@ const OMS_ALIASES = {
 };
 const Y2_ALIASES = {
   date: ['date'],
-  etab: ['etablissement ligne doc', 'etablissement ligne doc.'],
-  ttc: ['total ttc ligne'],
-  commercial: ['commercial du doc.', 'commercial du doc'],
+  etab: ['etablissement ligne doc', 'etablissement ligne doc.', 'etablissement'],
+  ttc: ['total ttc ligne', 'total ttc'],
+  commercial: ['commercial du doc.', 'commercial du doc', 'commercial'],
   ref: ['reference interne doc.', 'reference interne doc', 'ref. interne doc', 'ref interne doc', 'reference interne'],
   code: ['code article'],
   libdim2: ['libdim2'],
-  qte: ['quantite ligne'],
+  qte: ['quantite ligne', 'quantite'],
 };
 const GA_ALIASES = {
   canal: ['groupe de canaux principal', 'groupe de canaux', 'channel group', 'default channel group'],

@@ -154,6 +154,26 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy) {
   return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
 }
 
+// Ingère un tableau DÉJÀ parsé (hdrs + rows de tableaux) — pour les connecteurs base de données
+// (ex. Y2 PostgreSQL) : même mapping d'alias + anti-PII que l'upload, sans étape de parsing de fichier.
+function ingestTable(source, period, hdrs, rows, filename, uploadedBy) {
+  if (!Array.isArray(hdrs) || !hdrs.length) throw new Error('Aucune colonne renvoyée par la requête');
+  // Anti-PII systématique côté connecteur DB : on ne maîtrise pas le schéma source → on écarte
+  // toute colonne identifiée comme PII (privacy by design, ADR-005), comme pour les sources sensibles.
+  let dropped = [];
+  ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
+  const map = calc.autoMap(hdrs, aliasesFor(source));
+  if (OMS_LIKE.has(source)) calc.ensureRefExtIdx(hdrs, map);
+  let dateMin = null, dateMax = null;
+  if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
+  store.setDataset(source, period, {
+    hdrs, rows, map, filename: filename || `${source}-${period}`,
+    row_count: rows.length, date_min: dateMin, date_max: dateMax,
+    uploaded_by: uploadedBy || 'connecteur', uploaded_at: new Date().toISOString(),
+  });
+  return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
+}
+
 // Import OMS « projeté » : ne conserve que les colonnes OMS canoniques (OMS_CANON).
 // Conçu pour les gros exports (saison) : projection ligne à ligne → empreinte mémoire
 // réduite (pas de copie pleine largeur ni d'étape anonymize), et PII naturellement écartées.
@@ -308,4 +328,4 @@ router.delete('/:source/:period', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { router, ingestBuffer, ingestOmsProjected, ingestBisProjected, ingestOffreListing };
+module.exports = { router, ingestBuffer, ingestTable, ingestOmsProjected, ingestBisProjected, ingestOffreListing };
