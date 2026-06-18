@@ -113,19 +113,76 @@ async function toggleDay(k, trEl, link) {
     const yN = k.slice(0, 4), yN1 = (+k.slice(0, 4) - 1);
     const rows = (j.days || []).map(d => {
       const has = d.n != null && d.n1 != null;
+      const val = d.objSource === 'day' ? Math.round(d.objectif) : '';
+      const ph = d.objAuto != null ? Math.round(d.objAuto) : '';
       return `<tr><td>${frd(d.dateN)}</td>
         <td style="text-align:right">${d.n != null ? fEur(d.n) : '—'}</td>
         <td>${d.dateN1 ? frd(d.dateN1) : '—'}</td>
         <td style="text-align:right">${d.n1 != null ? fEur(d.n1) : '—'}</td>
         <td style="text-align:right">${has ? delta(d.n, d.n1) : '—'}</td>
-        <td style="text-align:right">${d.objectif != null ? fEur(d.objectif) : '—'}</td></tr>`;
+        <td style="text-align:right"><input type="number" class="dt dayobj" data-iso="${d.dateN}" data-auto="${ph}" value="${val}" placeholder="${ph}" style="width:96px;text-align:right"></td></tr>`;
     }).join('');
-    const objNote = j.objectif != null
-      ? `objectif mensuel <b>${fEur(j.objectif)}</b> réparti selon le profil N-1`
-      : 'définis un objectif mensuel pour obtenir l\'objectif quotidien';
-    td.innerHTML = `<div style="padding:6px 2px 4px;font-size:12px"><b>Détail jour par jour — ${esc(k)}</b> · ${objNote}.</div>
-      <table style="font-size:11.5px"><thead><tr><th>Date ${esc(yN)}</th><th style="text-align:right">CA ${esc(yN)}</th><th>Date ${esc(String(yN1))}</th><th style="text-align:right">CA ${esc(String(yN1))}</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Objectif jour</th></tr></thead><tbody>${rows}</tbody></table>`;
+    td.innerHTML = `<div style="padding:6px 2px 4px;font-size:12px"><b>Détail jour par jour — ${esc(k)}</b> · saisis un <b>objectif par jour</b> (le gris = proposition auto répartie sur le profil N-1) ; la <b>somme des jours = objectif du mois</b>.</div>
+      <table style="font-size:11.5px"><thead><tr><th>Date ${esc(yN)}</th><th style="text-align:right">CA ${esc(yN)}</th><th>Date ${esc(String(yN1))}</th><th style="text-align:right">CA ${esc(String(yN1))}</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Objectif jour</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="toolbar" style="margin-top:8px;gap:10px;flex-wrap:wrap">
+        <span class="note" style="margin:0">Total objectifs jour : <b id="dayTot-${k}">—</b></span>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn" data-reset="${k}" title="Efface les objectifs saisis du mois → revient à la répartition auto">↺ Auto</button>
+        <button class="btn blue" data-saveday="${k}">💾 Enregistrer les objectifs du jour</button>
+        <span class="note" id="dayNote-${k}" style="margin:0"></span>
+      </div>`;
+    const recalc = () => {
+      let t = 0; td.querySelectorAll('.dayobj').forEach(i => { const v = i.value.trim() !== '' ? Number(i.value) : Number(i.dataset.auto); if (Number.isFinite(v)) t += v; });
+      const el = document.getElementById('dayTot-' + k); if (el) el.textContent = fEur(t);
+    };
+    td.querySelectorAll('.dayobj').forEach(i => i.addEventListener('input', recalc));
+    recalc();
+    td.querySelector(`[data-saveday="${k}"]`).addEventListener('click', () => saveDays(k, td));
+    td.querySelector(`[data-reset="${k}"]`).addEventListener('click', () => resetDays(k, td));
   } catch (e) { td.innerHTML = `<div class="note">⚠ ${esc(e.message)}</div>`; }
+}
+
+// Enregistre les objectifs du jour du mois : matérialise TOUS les jours (valeur saisie sinon proposition auto)
+// → la somme des jours devient l'objectif du mois (recalé côté serveur).
+async function saveDays(k, td) {
+  const note = document.getElementById('dayNote-' + k);
+  const days = {};
+  td.querySelectorAll('.dayobj').forEach(i => {
+    const v = i.value.trim() !== '' ? Number(i.value) : Number(i.dataset.auto);
+    if (Number.isFinite(v)) days[i.dataset.iso] = Math.round(v);
+  });
+  if (note) note.textContent = 'Enregistrement…';
+  try {
+    const r = await fetch('/api/objectives/days', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: k, days }) });
+    const j = await r.json();
+    if (!r.ok) { if (note) note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
+    await reloadKeepOpen(k);
+  } catch (e) { if (note) note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+}
+
+// Efface les objectifs du jour du mois → revient à la répartition auto.
+async function resetDays(k, td) {
+  const note = document.getElementById('dayNote-' + k);
+  const days = {};
+  td.querySelectorAll('.dayobj').forEach(i => { days[i.dataset.iso] = null; });
+  if (note) note.textContent = 'Réinitialisation…';
+  try {
+    const r = await fetch('/api/objectives/days', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: k, days }) });
+    if (!r.ok) { const j = await r.json(); if (note) note.textContent = '⚠ ' + (j.error || 'Erreur'); return; }
+    await reloadKeepOpen(k);
+  } catch (e) { if (note) note.textContent = '⚠ ' + (e.message || 'Erreur réseau'); }
+}
+
+// Recharge les objectifs (table mensuelle) et rouvre le détail du mois édité.
+async function reloadKeepOpen(k) {
+  try {
+    const r = await fetch('/api/objectives/history');
+    const j = await r.json();
+    HIST = j.history || {}; OBJ = j.objectives || {}; GROWTH = j.growth != null ? j.growth : GROWTH;
+  } catch (e) { /* garde l'état courant */ }
+  render();
+  const link = document.querySelector(`.mexp[data-m="${k}"]`);
+  if (link) toggleDay(k, link.closest('tr'), link);
 }
 
 function drawChart() {

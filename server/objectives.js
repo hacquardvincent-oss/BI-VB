@@ -83,6 +83,32 @@ function getMonthObjectiveCA(monthKey) {
   return m && Number.isFinite(Number(m.ca)) ? Number(m.ca) : null;
 }
 
+// ── Objectifs au JOUR (éditables + persistés) ──
+// PUT { month:"YYYY-MM", days:{ "YYYY-MM-DD": ca|null } } : enregistre les objectifs quotidiens
+// du mois (null = efface) et recale l'objectif MENSUEL = somme des jours (somme des jours = objectif du mois).
+router.put('/days', requireAuth, (req, res) => {
+  const body = req.body || {};
+  const month = (body.month || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Mois invalide (AAAA-MM attendu).' });
+  if (!OBJ.days) OBJ.days = {};
+  const src = body.days || {};
+  Object.keys(src).forEach(iso => {
+    if (!new RegExp(`^${month}-\\d{2}$`).test(iso)) return; // seulement les jours du mois ciblé
+    const v = src[iso];
+    if (v === null || v === '' || v === undefined) { delete OBJ.days[iso]; return; }
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 0) OBJ.days[iso] = Math.round(n);
+  });
+  // Recale l'objectif mensuel = somme des objectifs du jour de ce mois.
+  let sum = 0, count = 0;
+  Object.keys(OBJ.days).forEach(iso => { if (iso.slice(0, 7) === month) { sum += OBJ.days[iso]; count++; } });
+  if (!OBJ.months) OBJ.months = {};
+  if (count > 0) OBJ.months[month] = { ...(OBJ.months[month] || {}), ca: Math.round(sum) };
+  else if (OBJ.months[month]) delete OBJ.months[month];
+  persist();
+  res.json({ ok: true, month, objectif: count > 0 ? Math.round(sum) : null, count });
+});
+
 // Détail JOUR PAR JOUR d'un mois : CA N (année du mois) et CA N-1 (même mois, année −1 →
 // gère naturellement les années bissextiles : si le 29/02 N-1 n'existe pas, n1 = null) +
 // objectif quotidien = objectif mensuel réparti selon le profil N-1 (sinon réparti à plat).
@@ -115,15 +141,21 @@ router.get('/daily', requireAuth, (req, res) => {
   const nBy = dayMapForYear(y), n1By = dayMapForYear(y - 1);
   const n1Total = Object.values(n1By).reduce((a, b) => a + b, 0);
   const objMonth = getMonthObjectiveCA(month);
+  const dayObj = OBJ.days || {};
   const days = [];
   for (let d = 1; d <= daysInMonth; d++) {
+    const iso = isoOf(y, d);
     const n = nBy[d] != null ? Math.round(nBy[d] * 100) / 100 : null;
     const n1 = n1By[d] != null ? Math.round(n1By[d] * 100) / 100 : null;
-    let objectif = null;
+    // Objectif quotidien auto = objectif mensuel réparti selon le profil N-1 (sinon à plat).
+    let objAuto = null;
     if (objMonth != null) {
-      objectif = (n1Total > 0 && n1By[d] != null) ? Math.round(objMonth * (n1By[d] / n1Total)) : Math.round(objMonth / daysInMonth);
+      objAuto = (n1Total > 0 && n1By[d] != null) ? Math.round(objMonth * (n1By[d] / n1Total)) : Math.round(objMonth / daysInMonth);
     }
-    days.push({ day: d, dateN: isoOf(y, d), dateN1: isValidDate(y - 1, mo, d) ? isoOf(y - 1, d) : null, n, n1, objectif });
+    // Objectif effectif = valeur SAISIE au jour (prioritaire) sinon l'auto.
+    const hasOverride = dayObj[iso] != null;
+    const objectif = hasOverride ? Math.round(dayObj[iso]) : objAuto;
+    days.push({ day: d, dateN: iso, dateN1: isValidDate(y - 1, mo, d) ? isoOf(y - 1, d) : null, n, n1, objectif, objAuto, objSource: hasOverride ? 'day' : (objAuto != null ? 'auto' : null) });
   }
   res.json({ month, daysInMonth, objectif: objMonth, n1Total: Math.round(n1Total), days });
 });
