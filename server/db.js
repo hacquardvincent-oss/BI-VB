@@ -78,6 +78,19 @@ async function init() {
   )`);
   // Statut de ticket (à traiter / en cours / traité) — ajout idempotent.
   await pool.query(`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'à traiter'`);
+  // Reports FIGÉS (gel d'un rapport à un instant T) : métadonnées + objet `rep` complet (data jsonb).
+  await pool.query(`CREATE TABLE IF NOT EXISTS report_snapshots (
+    id          serial PRIMARY KEY,
+    label       text,
+    profile     text,
+    period_from text,
+    period_to   text,
+    dim         text,
+    author      text,
+    meta        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    data        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at  timestamptz NOT NULL DEFAULT now()
+  )`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }

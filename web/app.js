@@ -779,6 +779,92 @@ function reportQuery() {
   const cv = id => { const el = document.getElementById(id); return el && el.value ? encodeURIComponent(el.value) : ''; };
   return `${base}&scope=${SCOPE}&consentN=${cv('consentN')}&consentN1=${cv('consentN1')}&cosTarget=${cv('cosTarget')}${COMPARE ? '' : '&compare=0'}`;
 }
+// Mêmes paramètres que reportQuery() mais sous forme d'OBJET (pour le POST de gel d'un report figé).
+function currentReportParams() {
+  const v = id => { const el = document.getElementById(id); return el && el.value ? el.value : ''; };
+  const p = DATES
+    ? { from: DATES.from, to: DATES.to, cfrom: DATES.cfrom, cto: DATES.cto, dim: CURRENT_DIM }
+    : { preset: 'all', dim: CURRENT_DIM };
+  p.scope = SCOPE; p.consentN = v('consentN'); p.consentN1 = v('consentN1'); p.cosTarget = v('cosTarget');
+  if (!COMPARE) p.compare = '0';
+  return p;
+}
+
+// ── Reports FIGÉS (gel à instant T + historique partagé in-app) ──────────────
+async function freezeReport() {
+  const note = document.getElementById('freezeNote');
+  const def = `${viewLabel(CURRENT_MODULE)} · ${DATES ? `${DATES.from}→${DATES.to}` : 'tout'}`;
+  const label = prompt('Nom du report figé :', def);
+  if (label === null) return;
+  if (note) note.textContent = 'Gel en cours…';
+  try {
+    const r = await fetch('/api/snapshots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, profile: CURRENT_MODULE, params: currentReportParams() }) });
+    const j = await r.json();
+    if (!r.ok) { if (note) note.textContent = '⚠️ ' + (j.error || 'échec du gel'); return; }
+    if (note) note.textContent = '✅ Figé : ' + (j.label || '');
+    const panel = document.getElementById('snapPanel');
+    if (panel && !panel.classList.contains('hidden')) loadSnapshots();
+  } catch (e) { if (note) note.textContent = '⚠️ ' + e.message; }
+}
+async function loadSnapshots() {
+  const panel = document.getElementById('snapPanel'); if (!panel) return;
+  panel.classList.remove('hidden');
+  panel.innerHTML = '<h3>📚 Reports figés</h3><div class="note">Chargement…</div>';
+  try {
+    const r = await fetch('/api/snapshots'); const j = await r.json();
+    const items = j.items || [];
+    if (!items.length) { panel.innerHTML = '<h3>📚 Reports figés</h3><div class="note">Aucun report figé pour le moment. Utilise « 📌 Figer ce report » pour en créer un.</div>'; return; }
+    const isAdmin = IS_ADMIN;
+    const rows = items.map(it => {
+      const when = it.created_at ? new Date(it.created_at).toLocaleString('fr-FR') : '';
+      const per = (it.period_from || it.period_to) ? `${it.period_from || '?'} → ${it.period_to || '?'}` : '—';
+      return `<tr>
+        <td><a href="#" class="snap-open" data-id="${it.id}">${esc(it.label || '(sans titre)')}</a></td>
+        <td>${esc(per)}</td>
+        <td>${esc(it.author || '—')}</td>
+        <td style="white-space:nowrap">${esc(when)}</td>
+        <td style="text-align:right">${isAdmin ? `<button class="btn" data-del="${it.id}" title="Supprimer">🗑</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+    panel.innerHTML = `<h3>📚 Reports figés <span class="note">(${items.length})</span></h3>
+      <table><thead><tr><th>Report</th><th>Période</th><th>Par</th><th>Figé le</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="note">Clique un report pour le rouvrir tel qu'il était (rapport gelé, lecture seule).</div>`;
+    panel.querySelectorAll('.snap-open').forEach(a => a.onclick = ev => { ev.preventDefault(); openFrozenReport(+a.dataset.id); });
+    panel.querySelectorAll('[data-del]').forEach(b => b.onclick = () => delSnapshot(+b.dataset.del));
+  } catch (e) { panel.innerHTML = `<h3>📚 Reports figés</h3><div class="note">⚠️ ${esc(e.message)}</div>`; }
+}
+async function delSnapshot(id) {
+  if (!confirm('Supprimer ce report figé ?')) return;
+  try { await fetch('/api/snapshots/' + id, { method: 'DELETE' }); } catch (e) { /* ignore */ }
+  loadSnapshots();
+}
+async function openFrozenReport(id) {
+  const box = document.getElementById('report'); if (!box) return;
+  box.innerHTML = '<div class="card">Ouverture du report figé…</div>';
+  try {
+    const r = await fetch('/api/snapshots/' + id);
+    const rec = await r.json();
+    if (!r.ok || !rec.data) { box.innerHTML = `<div class="card">⚠️ ${esc((rec && rec.error) || 'Report figé introuvable')}</div>`; return; }
+    const rep = rec.data;
+    // Rejoue le report dans le layout du profil d'origine (si connu)
+    if (rec.profile && MODULES[rec.profile]) { CURRENT_MODULE = rec.profile; const sel = document.getElementById('moduleSelect'); if (sel) sel.value = rec.profile; }
+    LAST_REP = rep;
+    fillCountrySelect(rep);
+    const created = rec.created_at ? new Date(rec.created_at).toLocaleString('fr-FR') : '';
+    const banner = `<div class="card" style="border-left:3px solid var(--a)"><b>📌 Report figé</b> — ${esc(rec.label || '')} · figé le ${esc(created)} par ${esc(rec.author || '?')}<button class="btn blue" id="unfreezeBtn" style="float:right">↩︎ Revenir au live</button></div>`;
+    box.innerHTML = banner + renderReport(rep);
+    renderObjectives(rep); renderDailyChart(rep); renderTimelineChart(rep); renderTimeline2Chart(rep); renderCumulChart(rep); renderCharts(rep); renderWidgetCharts();
+    wireBilan(); buildReportNav();
+    balanceKgrids(box); requestAnimationFrame(() => balanceKgrids(box));
+    const ub = document.getElementById('unfreezeBtn'); if (ub) ub.onclick = () => loadReport();
+    const panel = document.getElementById('snapPanel'); if (panel) panel.classList.add('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) { box.innerHTML = `<div class="card">⚠️ ${esc(e.message)}</div>`; }
+}
+function wireSnapshots() {
+  const fb = document.getElementById('freezeBtn'); if (fb && !fb._wired) { fb._wired = true; fb.addEventListener('click', freezeReport); }
+  const hb = document.getElementById('histBtn'); if (hb && !hb._wired) { hb._wired = true; hb.addEventListener('click', () => { const p = document.getElementById('snapPanel'); if (p && !p.classList.contains('hidden')) { p.classList.add('hidden'); } else { loadSnapshots(); } }); }
+}
 async function loadReport() {
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement…</div>';
@@ -808,6 +894,7 @@ async function loadReport() {
   renderDailyChart(rep);
   renderTimelineChart(rep);
   renderTimeline2Chart(rep);
+  renderCumulChart(rep);
   renderCharts(rep);
   renderWidgetCharts(); // graphes des widgets « from scratch » (mode normal + édition)
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
@@ -1859,7 +1946,7 @@ function renderReport(rep) {
       ? ` Objectif <b>${fEur(c.objectif)}</b> → atterrissage projeté à <b>${fPct(c.projVsObjectif)}</b> de la cible${c.projVsObjectif >= 1 ? ' ✅' : ''}.`
       : ' Définis un objectif mensuel dans l\'onglet <b>Objectifs</b> pour suivre l\'atteinte.';
     const note = `<div class="note">Cumul du mois de <b>${moLabel}</b> arrêté au <b>jour ${c.asOfDay}/${c.daysInMonth}</b>. L'<b>atterrissage</b> projette le reste du mois sur le profil observé en N-1 (pas un simple rythme linéaire).${objNote}</div>`;
-    return `<div class="card"><h3>📅 Cumul mensuel & atterrissage</h3>${tiles}${tbl}${note}</div>`;
+    return `<div class="card"><h3>📅 Cumul mensuel & atterrissage</h3>${tiles}<div style="height:200px;margin:10px 0"><canvas id="cumulChart"></canvas></div>${tbl}${note}</div>`;
   })();
   // 🎯 Synthèse par périmètre : mini-cartes (KPI clés + Δ N-1) sous le Bilan, cliquables → section détaillée.
   const perimSynthCard = (() => {
@@ -2749,6 +2836,36 @@ function renderTimeline2Chart(rep) {
     },
   });
 }
+// 📅 Trajectoire cumulée du mois : N (plein) vs N-1 (pointillé) + ligne d'objectif. Données = rep.cumul.byDay.
+function renderCumulChart(rep) {
+  const c = rep && rep.cumul;
+  const el = document.getElementById('cumulChart');
+  if (!el) { if (_charts.cumulChart) { _charts.cumulChart.destroy(); _charts.cumulChart = null; } return; }
+  if (typeof Chart === 'undefined' || !c || !c.byDay || !c.byDay.length) { if (_charts.cumulChart) { _charts.cumulChart.destroy(); _charts.cumulChart = null; } return; }
+  const labels = c.byDay.map(d => 'J' + d.day);
+  const nData = c.byDay.map(d => d.n);
+  const n1Data = c.byDay.map(d => d.n1);
+  const hasN1 = n1Data.some(v => v != null && v > 0);
+  const objData = (c.objectif != null && c.objectif > 0) ? c.byDay.map(() => c.objectif) : null;
+  const datasets = [
+    { label: 'Cumul N', data: nData, borderColor: '#A8854A', backgroundColor: 'rgba(168,133,74,.10)', fill: true, tension: .25, pointRadius: 0, borderWidth: 2, spanGaps: false },
+  ];
+  if (hasN1) datasets.push({ label: 'Cumul N-1', data: n1Data, borderColor: '#6E7B8B', borderDash: [5, 3], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 1.5, spanGaps: true });
+  if (objData) datasets.push({ label: 'Objectif', data: objData, borderColor: '#1B9E6A', borderDash: [2, 2], backgroundColor: 'transparent', pointRadius: 0, borderWidth: 1.5 });
+  if (_charts.cumulChart) _charts.cumulChart.destroy();
+  _charts.cumulChart = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 15 }, grid: { color: 'rgba(20,22,28,.06)' } },
+        y: { ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } },
+      },
+    },
+  });
+}
 function renderDailyChart(rep) {
   if (typeof Chart === 'undefined' || !rep || !rep.daily || !rep.daily.length) return;
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
@@ -3343,5 +3460,6 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await y2Status();
   await recoStatus();
   updateApiHint();
+  wireSnapshots();
   await loadReport();
 })();
