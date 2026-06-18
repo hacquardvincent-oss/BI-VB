@@ -725,6 +725,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   })();
   const actionPlan = { newCampaigns, missingCampaigns: lostCampaigns, offerChanges, emailHour, teams };
 
+  // ── Cumul mensuel (MTD) : où en est le mois de `to` vs N-1 / vs objectif + atterrissage projeté ──
+  // Périmètre EShop global (hors mkt + Outstore) sur le jeu OMS COMPLET (pas la fenêtre filtrée),
+  // cohérent avec le module Objectifs. Objectif mensuel lu dans objectives (mois de `to`).
+  const cumulMonthKey = (to || omsN.dateMax || '').slice(0, 7);
+  let objMonth = null;
+  try { objMonth = require('./objectives').getMonthObjectiveCA(cumulMonthKey); } catch (_) { /* objectifs indispo */ }
+  const cumul = calc.cumulMTD(omsN.rows, omsN.map, omsN1 ? omsN1.rows : null, omsN1 ? omsN1.map : null, { asOf: to, objMonth });
+
   return {
     empty: false,
     meta: {
@@ -738,6 +746,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     },
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
+    cumul,
     zoneFullOff: { n: calc.calcZoneFullOff(rowsN, omsN.map), n1: (rowsN1 && rowsN1.length) ? calc.calcZoneFullOff(rowsN1, mapN1) : null },
     marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2RowsN, y2N ? y2N.map : {}) },
     pays,

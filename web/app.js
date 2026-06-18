@@ -28,13 +28,25 @@ const dimLabelOf = d => (d && d.indexOf && d.indexOf('c:') === 0) ? ('🌍 ' + d
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'dailysoft', 'hebdo', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
-    intro: 'Synthèse 360 pour la direction — bilan, KPI clés et top produits en un écran.',
+    intro: 'Synthèse 360 pour la direction — bilan, KPI clés, cumul du mois et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
-    layout: ['kpi', 'ca', 'ads', 'funnel', 'produits'],
+    layout: ['kpi', 'cumul', 'ca', 'ads', 'funnel', 'produits'],
+  },
+  dailysoft: {
+    icon: '🌅', label: 'Matin (soft)', preset: 'yesterday',
+    intro: 'Lecture rapide du matin : ce qui s\'est passé hier + où en est le mois (cumul & atterrissage projeté).',
+    files: { required: ['oms'], optional: ['ga'] },
+    layout: ['kpi', 'cumul', 'timeline', 'produits'],
+  },
+  hebdo: {
+    icon: '📅', label: 'Hebdo & cumul mois', preset: 'week',
+    intro: 'Bilan de la semaine écoulée (lun→dim) + cumul du mois en cours vs objectif et atterrissage projeté, avec familles, produits et suivi temporel.',
+    files: { required: ['oms'], optional: ['ga', 'ret'] },
+    layout: ['kpi', 'cumul', 'famille', 'produits', 'daily', 'channels', 'annulations', 'retours'],
   },
   estore: {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
@@ -106,7 +118,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -118,7 +130,7 @@ const THEME_META = {
 };
 const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
 const THEME_OF = {
-  kpi: 'P', actionplan: 'PA', variance: 'P', perimsynth: 'P',
+  kpi: 'P', actionplan: 'PA', cumul: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
@@ -142,7 +154,7 @@ function sectionize(layout) {
 
 // ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
 const CARD_LABELS = {
-  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', cumul: 'Cumul mensuel & atterrissage', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
@@ -153,7 +165,7 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
@@ -532,6 +544,11 @@ function switchModule(mod) {
   }
   const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.toggle('hidden', !isMyView(CURRENT_MODULE));
   renderModuleHint();
+  // Cadence du module : si le module déclare un preset (ex. 'yesterday', 'week', 'month'), on cale la
+  // période via le raccourci correspondant (réutilise dates + N-1 comparable + reload). Ignoré si le
+  // module fixe ses propres dates, ou si le preset n'a pas de raccourci ('all'/'today' → inchangé).
+  const prBtn = (!m.dates && m.preset) ? document.querySelector(`[data-range="${m.preset}"]`) : null;
+  if (prBtn) { prBtn.click(); return; } // le raccourci applique la période ET recharge
   loadReport();
 }
 function initModules() {
@@ -1815,6 +1832,35 @@ function renderReport(rep) {
     const note = `<div class="note">Décomposition déterministe : <b>CA = Sessions × Taux de transfo × Panier moyen</b>. La ${v.dCA >= 0 ? 'hausse' : 'baisse'} de CA vient surtout du <b>${esc(top[0].replace(/^[^\s]+\s/, '').toLowerCase())}</b> (${sgnEur(top[1])}). Les trois effets somment exactement à la variation totale.</div>`;
     return `<div class="card"><h3>🧮 Pourquoi le CA bouge vs N-1 ?</h3>${tiles}${note}</div>`;
   })();
+  // 📅 Cumul mensuel (MTD) + atterrissage projeté sur le profil N-1 + suivi d'objectif
+  const cumulCard = (() => {
+    const c = rep.cumul; if (!c || !c.ca) return '';
+    const MN = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+    const [yy, mm] = c.month.split('-'); const moLabel = `${MN[+mm - 1]} ${yy}`;
+    const hasN1 = c.n1Full != null && c.n1Full > 0;
+    const hasObj = c.objectif != null && c.objectif > 0;
+    const dlt = (a, b) => (b > 0 ? delta(a, b) : ''); // évite les deltas absurdes si comparateur N-1 = 0
+    const paceTone = hasObj ? (c.pctObjectif >= c.asOfDay / c.daysInMonth ? 'up' : 'dn') : '';
+    const tiles = `<div class="kgrid">
+      <div class="kc"><div class="l">CA cumulé (à J${c.asOfDay}/${c.daysInMonth})</div><div class="v">${fEur(c.ca)} ${hasN1 ? dlt(c.ca, c.caN1) : ''}</div></div>
+      <div class="kc"><div class="l">Atterrissage projeté</div><div class="v">${fEur(c.atterrissage)} ${hasN1 ? dlt(c.atterrissage, c.n1Full) : ''}</div></div>
+      ${hasObj ? `<div class="kc"><div class="l">Objectif ${moLabel}</div><div class="v">${fEur(c.objectif)}</div></div>` : ''}
+      ${hasObj ? `<div class="kc"><div class="l">% objectif atteint</div><div class="v"><span class="${paceTone}">${fPct(c.pctObjectif)}</span></div></div>` : ''}
+      ${hasObj ? `<div class="kc"><div class="l">Reste à faire</div><div class="v">${fEur(c.resteAFaire)}</div></div>` : ''}
+    </div>`;
+    const rowsTbl = [
+      [`CA cumulé à J${c.asOfDay}`, fEur(c.ca), hasN1 ? fEur(c.caN1) : '—', hasN1 ? dlt(c.ca, c.caN1) : '—'],
+      ['Projection fin de mois', fEur(c.atterrissage), hasN1 ? fEur(c.n1Full) : '—', hasN1 ? dlt(c.atterrissage, c.n1Full) : '—'],
+      ['Commandes cumulées', fInt(c.commandes), '—', '—'],
+      ['Pièces cumulées', fInt(c.pieces), '—', '—'],
+    ];
+    const tbl = `<table><thead><tr><th>Indicateur</th><th style="text-align:right">N</th><th style="text-align:right">N-1</th><th style="text-align:right">vs N-1</th></tr></thead><tbody>${rowsTbl.map(r => `<tr><td>${r[0]}</td><td style="text-align:right">${r[1]}</td><td style="text-align:right">${r[2]}</td><td style="text-align:right">${r[3]}</td></tr>`).join('')}</tbody></table>`;
+    const objNote = hasObj
+      ? ` Objectif <b>${fEur(c.objectif)}</b> → atterrissage projeté à <b>${fPct(c.projVsObjectif)}</b> de la cible${c.projVsObjectif >= 1 ? ' ✅' : ''}.`
+      : ' Définis un objectif mensuel dans l\'onglet <b>Objectifs</b> pour suivre l\'atteinte.';
+    const note = `<div class="note">Cumul du mois de <b>${moLabel}</b> arrêté au <b>jour ${c.asOfDay}/${c.daysInMonth}</b>. L'<b>atterrissage</b> projette le reste du mois sur le profil observé en N-1 (pas un simple rythme linéaire).${objNote}</div>`;
+    return `<div class="card"><h3>📅 Cumul mensuel & atterrissage</h3>${tiles}${tbl}${note}</div>`;
+  })();
   // 🎯 Synthèse par périmètre : mini-cartes (KPI clés + Δ N-1) sous le Bilan, cliquables → section détaillée.
   const perimSynthCard = (() => {
     const k = rep.kpiEShop && rep.kpiEShop.n; if (!k) return '';
@@ -1834,7 +1880,7 @@ function renderReport(rep) {
   const C = {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
-    kpi: kpiCard, actionplan: actionPlanCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
+    kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,

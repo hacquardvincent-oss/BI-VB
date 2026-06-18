@@ -351,6 +351,84 @@ function monthlyEShopCA(rows, map) {
   return out;
 }
 
+// ── CA quotidien d'un mois donné (EShop hors mkt + Outstore) → { jour: {ca, commandes:Set, pieces, caOP} }
+// Brique interne de cumulMTD. Même périmètre que monthlyEShopCA.
+function dailyCAofMonth(rows, map, year, mon) {
+  const pi = map.prix, ti = map.type, di = map.date, ni = map.num, qi = map.qte, li = map.lieu, pvi = map.pv, pvri = map.pv_remise;
+  const hasFPOP = pvi !== undefined && pvri !== undefined;
+  const days = {};
+  if (di === undefined || !rows) return days;
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return; // périmètre EShop = Outstore
+    const d = parseFrD(r[di]); if (!d || d.y !== year || d.m !== mon) return;
+    const e = days[d.d] || (days[d.d] = { ca: 0, caOP: 0, commandes: new Set(), pieces: 0 });
+    const p = fN(r[pi]);
+    e.ca += p;
+    if (hasFPOP && !isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p)) e.caOP += p;
+    if (ni !== undefined && r[ni]) e.commandes.add(r[ni]);
+    e.pieces += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+  });
+  return days;
+}
+
+// ── Cumul mensuel (MTD) jour par jour + atterrissage projeté sur le profil N-1 ──
+// Répond au besoin « analyse du cumul mensuel » : où en est le mois en cours vs N-1
+// et vs objectif, et où va-t-il atterrir au rythme actuel (projection N-1, pas linéaire).
+//   rowsN/mapN  = OMS N (jeu complet, NON filtré par période) ; rowsN1/mapN1 = OMS N-1 (peut être null).
+//   opts.month  = "YYYY-MM" du mois à cumuler ; sinon déduit de opts.asOf ; sinon du dernier jour OMS N.
+//   opts.asOf   = "YYYY-MM-DD" jour jusqu'auquel on cumule N (défaut = dernier jour OMS présent ce mois).
+//   opts.objMonth = objectif CA du mois (number) ou null.
+// Périmètre EShop hors mkt + Outstore (cohérent avec monthlyEShopCA / le Bilan).
+function cumulMTD(rowsN, mapN, rowsN1, mapN1, opts = {}) {
+  const r2 = x => Math.round(x * 100) / 100;
+  if (!rowsN || !mapN || mapN.date === undefined) return null;
+  // 1) Déterminer mois (y, mo)
+  let y, mo;
+  const mm = (opts.month || '').match(/^(\d{4})-(\d{2})$/);
+  if (mm) { y = +mm[1]; mo = +mm[2]; }
+  else if (opts.asOf) { const d = parseFrD(opts.asOf); if (d) { y = d.y; mo = d.m; } }
+  if (y === undefined) { // déduit du dernier jour OMS N
+    let max = null;
+    rowsN.forEach(r => { const d = parseFrD(r[mapN.date]); if (d && (!max || d.y > max.y || (d.y === max.y && (d.m > max.m || (d.m === max.m && d.d > max.d))))) max = d; });
+    if (!max) return null;
+    y = max.y; mo = max.m;
+  }
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  // 2) Cumuls quotidiens N (mois courant) et N-1 (même mois, année −1)
+  const daysN = dailyCAofMonth(rowsN, mapN, y, mo);
+  const hasN1 = rowsN1 && mapN1 && mapN1.date !== undefined;
+  const daysN1 = hasN1 ? dailyCAofMonth(rowsN1, mapN1, y - 1, mo) : {};
+  // 3) asOfDay : jour de coupe de N (défaut = dernier jour présent ce mois dans N)
+  let asOfDay;
+  if (opts.asOf) { const d = parseFrD(opts.asOf); if (d && d.y === y && d.m === mo) asOfDay = d.d; }
+  if (asOfDay == null) { const present = Object.keys(daysN).map(Number); asOfDay = present.length ? Math.max(...present) : daysInMonth; }
+  asOfDay = Math.max(1, Math.min(asOfDay, daysInMonth));
+  // 4) Trajectoires cumulées (N jusqu'à asOfDay ; N-1 sur tout le mois pour la courbe)
+  const byDay = []; let cumN = 0, cumN1 = 0;
+  let cmd = 0, pcs = 0, caOP = 0, caN1toDate = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    if (daysN[day] && day <= asOfDay) { cumN += daysN[day].ca; cmd += daysN[day].commandes.size; pcs += daysN[day].pieces; caOP += daysN[day].caOP; }
+    if (daysN1[day]) { cumN1 += daysN1[day].ca; if (day <= asOfDay) caN1toDate += daysN1[day].ca; }
+    byDay.push({ day, n: day <= asOfDay ? r2(cumN) : null, n1: hasN1 ? r2(cumN1) : null });
+  }
+  const ca = r2(cumN), n1Full = r2(cumN1);
+  // 5) Atterrissage : cumul N + « reste du mois » observé en N-1 (sinon extrapolation linéaire)
+  const resteN1 = n1Full > caN1toDate ? (n1Full - caN1toDate) : 0;
+  const atterrissage = hasN1 && n1Full > 0 ? r2(ca + resteN1) : r2(asOfDay ? ca * daysInMonth / asOfDay : ca);
+  const runRate = r2(asOfDay ? ca * daysInMonth / asOfDay : ca);
+  // 6) Objectif
+  const objectif = Number.isFinite(opts.objMonth) ? opts.objMonth : null;
+  return {
+    month: `${y}-${String(mo).padStart(2, '0')}`, asOfDay, daysInMonth,
+    ca, caOP: r2(caOP), commandes: cmd, pieces: pcs,
+    caN1: r2(caN1toDate), n1Full,
+    byDay,
+    objectif, pctObjectif: objectif ? ca / objectif : null, resteAFaire: objectif ? r2(objectif - ca) : null,
+    runRate, atterrissage, projVsObjectif: objectif ? atterrissage / objectif : null,
+  };
+}
+
 // ── Poids des regroupements par mois (saison) ───────────────────────────────
 // Croise OMS (CA EShop hors mkt, Outstore) × refMap (réf. externe → regroupement) × mois.
 // Sortie : { months[], monthTotals{}, total, rows[{regroup, total, weight, byMonth{}}] } trié par CA.
@@ -1914,7 +1992,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, cumulMTD, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

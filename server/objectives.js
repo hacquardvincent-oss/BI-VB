@@ -77,4 +77,10 @@ router.get('/history', requireAuth, (req, res) => {
   res.json({ history: merged, objectives: OBJ.months || {}, growth: OBJ.growth != null ? OBJ.growth : 0.05 });
 });
 
-module.exports = { router, hydrate };
+// Accesseur de l'objectif CA d'un mois ("YYYY-MM") → number ou null (consommé par buildReport pour rep.cumul).
+function getMonthObjectiveCA(monthKey) {
+  const m = OBJ.months && OBJ.months[monthKey];
+  return m && Number.isFinite(Number(m.ca)) ? Number(m.ca) : null;
+}
+
+module.exports = { router, hydrate, getMonthObjectiveCA };

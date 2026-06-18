@@ -312,4 +312,37 @@ assert.ok(!loOut.some(r => /instore/i.test(r[1])), 'aucune ligne Instore conserv
 // colonne absente → aucun filtre (pas de régression)
 assert.strictEqual(calc.filterOutstore([['100'], ['50']], calc.autoMap(['Prix de vente paye'], calc.OMS_ALIASES)).length, 2, 'sans colonne lieu → tout conservé');
 
+// ── Cumul mensuel (MTD) + atterrissage projeté sur le profil N-1 ────────────
+const cuHdrs = ['Date', 'Prix de vente paye', 'quantites commandees', 'Numeros', 'Type Paiement'];
+const cuMap = calc.autoMap(cuHdrs, calc.OMS_ALIASES);
+const cuN = [
+  ['2026-06-01', '100', '1', 'A1', 'Carte Bancaire'],
+  ['2026-06-02', '200', '2', 'A2', 'Carte Bancaire'],
+  ['2026-06-03', '150', '1', 'A3', 'Carte Bancaire'],
+  ['2026-05-31', '999', '1', 'Z9', 'Carte Bancaire'], // hors mois → ignoré
+  ['2026-06-02', '500', '1', 'M1', 'GL.com'],          // marketplace → exclu
+];
+const cuN1 = [
+  ['2025-06-01', '80', '1', 'B1', 'Carte Bancaire'],
+  ['2025-06-02', '120', '1', 'B2', 'Carte Bancaire'],
+  ['2025-06-03', '100', '1', 'B3', 'Carte Bancaire'],
+  ['2025-06-20', '300', '1', 'B4', 'Carte Bancaire'],  // reste du mois (profil N-1)
+];
+const cu = calc.cumulMTD(cuN, cuMap, cuN1, cuMap, { asOf: '2026-06-03', objMonth: 1000 });
+assert.strictEqual(cu.month, '2026-06', 'cumul : mois déduit de asOf');
+assert.strictEqual(cu.asOfDay, 3, 'cumul : jour de coupe = 3');
+assert.strictEqual(cu.daysInMonth, 30, 'cumul : juin = 30 jours');
+assert.strictEqual(cu.ca, 450, 'cumul N à J3 (hors mkt, hors mai) = 450');
+assert.strictEqual(cu.commandes, 3, 'cumul : 3 commandes');
+assert.strictEqual(cu.caN1, 300, 'cumul N-1 à date (1→3 juin 2025) = 300');
+assert.strictEqual(cu.n1Full, 600, 'cumul N-1 mois complet = 600');
+assert.strictEqual(cu.atterrissage, 750, 'atterrissage = cumul N + reste-du-mois N-1 (450+300)');
+assert.strictEqual(cu.objectif, 1000, 'objectif mensuel injecté');
+assert.ok(Math.abs(cu.projVsObjectif - 0.75) < 1e-9, 'projection vs objectif = 750/1000');
+assert.strictEqual(cu.resteAFaire, 550, 'reste à faire = 1000 - 450');
+// Sans N-1 → atterrissage retombe sur l'extrapolation linéaire
+const cuNoN1 = calc.cumulMTD(cuN, cuMap, null, null, { asOf: '2026-06-03' });
+assert.strictEqual(cuNoN1.atterrissage, 4500, 'sans N-1 : atterrissage linéaire 450×30/3');
+assert.strictEqual(cuNoN1.objectif, null, 'sans objectif → objectif null');
+
 console.log('✅ calc.test.js : tous les calculs OK');
