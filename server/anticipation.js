@@ -76,6 +76,94 @@ function weeklyCampaigns(from, to) {
   return Object.keys(by).sort().map(wk => ({ from: wk, top: Object.entries(by[wk]).map(([campaign, v]) => ({ campaign, sessions: Math.round(v.sessions), ca: Math.round(v.ca) })).sort((a, b) => b.ca - a.ca).slice(0, 5) }));
 }
 
+// Rows d'un jeu GA stocké en OBJETS (galanding, gacampcat, gacampnr, gacampaigns…) : slot N sinon N1.
+function objRows(source) { const d = store.getDataset(source, 'N') || store.getDataset(source, 'N1'); return (d && d.rows) ? d.rows : []; }
+const notBrand = c => !/^\(?(direct|none|\(none\)|organic|referral|\(not set\)|\(direct\))/i.test((c || '').toString());
+
+// ── AXE 1 · Stock & alertes : demande back-in-stock (« prévenez-moi ») par produit ──
+// Signal de réassort prioritaire. ⚠️ Snapshot de la demande sur ruptures (non daté).
+function stockAlerts() {
+  const d = store.getDataset('bis', 'N') || store.getDataset('saisonbis', 'N') || store.getDataset('bis', 'N1');
+  if (!d || !d.rows || !d.rows.length) return null;
+  const m = d.map || {};
+  const rows = d.rows.map(r => Array.isArray(r)
+    ? { name: r[m.name != null ? m.name : 0], count: numUS(r[m.count != null ? m.count : 1]), waiting: numUS(r[m.waiting != null ? m.waiting : 2]) }
+    : { name: r.name, count: numUS(r.count), waiting: numUS(r.waiting), rayon: r.rayon });
+  return rows.filter(x => x.name && x.count).sort((a, b) => b.count - a.count).slice(0, 12)
+    .map(x => ({ name: x.name, count: Math.round(x.count), waiting: Math.round(x.waiting || 0), rayon: x.rayon || '' }));
+}
+
+// ── AXE 2 · Croisement campagnes → produits (gacampcat) + campagnes → landing (gacampaignland) ──
+function campaignCategory() {
+  const rows = objRows('gacampcat');
+  if (!rows.length) return null;
+  return rows.filter(r => (r.revenue || 0) > 0 && notBrand(r.campaign) && (r.category || '') !== '(not set)')
+    .map(r => ({ campaign: r.campaign, category: r.category, revenue: Math.round(r.revenue), qty: Math.round(r.qty || 0) }))
+    .sort((a, b) => b.revenue - a.revenue).slice(0, 15);
+}
+function campaignLanding() {
+  const rows = objRows('gacampaignland');
+  if (!rows.length) return null;
+  const by = {};
+  rows.forEach(r => { if (!notBrand(r.campaign)) return; const key = `${r.campaign}||${r.page || r.landing || ''}`; const e = by[key] || (by[key] = { campaign: r.campaign, page: r.page || r.landing || '', sessions: 0, purchases: 0 }); e.sessions += (r.sessions || 0); e.purchases += (r.purchases || 0); });
+  return Object.values(by).filter(x => x.purchases > 0).sort((a, b) => b.purchases - a.purchases).slice(0, 12)
+    .map(x => ({ campaign: x.campaign, page: x.page, sessions: Math.round(x.sessions), purchases: Math.round(x.purchases) }));
+}
+
+// ── AXE 3 · Calendrier média hebdo (ads date×campagne → coût/ROAS/CPA par semaine) ──
+function weeklyAds(from, to) {
+  const d = rowsInPeriod('ads', from, to);
+  if (!d.rows.length || d.map.cost == null) return null;
+  const m = d.map, by = {};
+  d.rows.forEach(r => { const iso = isoDate(r[m.date]); if (!iso) return; const wk = mondayISO(iso); const e = by[wk] || (by[wk] = { cost: 0, convValue: 0, conv: 0 }); e.cost += numUS(r[m.cost]); if (m.convValue != null) e.convValue += numUS(r[m.convValue]); if (m.conversions != null) e.conv += numUS(r[m.conversions]); });
+  const arr = Object.keys(by).sort().map(wk => { const e = by[wk]; return { from: wk, cost: Math.round(e.cost), convValue: Math.round(e.convValue), roas: e.cost ? e.convValue / e.cost : 0, cpa: e.conv ? e.cost / e.conv : 0 }; });
+  // Fatigue : ROAS en baisse sur les 2 dernières semaines actives.
+  let fatigue = false;
+  const act = arr.filter(w => w.cost > 0);
+  if (act.length >= 3) fatigue = act[act.length - 1].roas < act[act.length - 2].roas && act[act.length - 2].roas < act[act.length - 3].roas;
+  return { weeks: arr, fatigue };
+}
+
+// ── AXE 4 · CRM & top pages ──
+function crmInsights(from, to) {
+  const out = {};
+  const eph = calc.emailPeakHour(store.getDataset('gaemailhour', 'N') || store.getDataset('gaemailhour', 'N1'));
+  if (eph) out.emailPeakHour = eph.peakHour;
+  // Top campagnes CRM (gacampdaily, noms email/crm/newsletter) sur la période
+  const rows = [];
+  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
+  if (rows.length) {
+    const by = {};
+    rows.forEach(r => { const c = (r[1] || '').toString(); if (!/e-?mail|crm|newsletter|mailing|splio/i.test(c)) return; const e = by[c] || (by[c] = { campaign: c, sessions: 0, ca: 0 }); e.sessions += numUS(r[2]); e.ca += numUS(r[3]); });
+    const top = Object.values(by).sort((a, b) => b.ca - a.ca).slice(0, 8).map(c => ({ campaign: c.campaign, sessions: Math.round(c.sessions), ca: Math.round(c.ca) }));
+    if (top.length) out.crmCampaigns = top;
+  }
+  // Nouveaux vs récurrents (gacampnr)
+  const nr = objRows('gacampnr');
+  if (nr.length) {
+    const agg = { nouveau: { sessions: 0, revenue: 0 }, recurrent: { sessions: 0, revenue: 0 } };
+    nr.forEach(r => { const k = /new/i.test(r.nvr || '') ? 'nouveau' : 'recurrent'; agg[k].sessions += (r.sessions || 0); agg[k].revenue += (r.revenue || 0); });
+    if (agg.nouveau.sessions || agg.recurrent.sessions) out.newVsReturning = { nouveau: { sessions: Math.round(agg.nouveau.sessions), revenue: Math.round(agg.nouveau.revenue) }, recurrent: { sessions: Math.round(agg.recurrent.sessions), revenue: Math.round(agg.recurrent.revenue) } };
+  }
+  return Object.keys(out).length ? out : null;
+}
+function topPagesViewed() {
+  const out = {};
+  const land = objRows('galanding');
+  if (land.length) {
+    const by = {};
+    land.forEach(r => { const p = (r.page || '').toString(); const e = by[p] || (by[p] = { page: p, sessions: 0, revenue: 0, purchases: 0 }); e.sessions += (r.sessions || 0); e.revenue += (r.revenue || 0); e.purchases += (r.purchases || 0); });
+    out.landing = Object.values(by).sort((a, b) => b.revenue - a.revenue).slice(0, 10).map(x => ({ page: x.page, sessions: Math.round(x.sessions), revenue: Math.round(x.revenue), convRate: x.sessions ? x.purchases / x.sessions : 0 }));
+  }
+  const pages = objRows('gapages');
+  if (pages.length) {
+    const by = {};
+    pages.forEach(r => { const p = (r.page || '').toString(); by[p] = (by[p] || 0) + (r.views || 0); });
+    out.pages = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([page, views]) => ({ page, views: Math.round(views) }));
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Canaux d'acquisition (dont Email/CRM) agrégés depuis GA (date×canal) sur la période.
 function channelsAgg(from, to) {
   const d = rowsInPeriod('ga', from, to);
@@ -137,6 +225,13 @@ router.get('/', requireAuth, (req, res) => {
     const weekCamp = weeklyCampaigns(from, to);
     const googleAds = adsSummary('ads', from, to);
     const metaAds = adsSummary('metaads', from, to);
+    // 4 axes data-analyse (quick wins sur données déjà ingérées)
+    const stock = stockAlerts();
+    const campProd = campaignCategory();
+    const campLand = campaignLanding();
+    const weekAds = weeklyAds(from, to);
+    const crm = crmInsights(from, to);
+    const pages = topPagesViewed();
 
     res.json({
       empty: false,
@@ -149,7 +244,8 @@ router.get('/', requireAuth, (req, res) => {
       playbook: lines ? lines.playbook : [],
       weekly, weeklyChannels: weekCh, weeklyCampaigns: weekCamp,
       channels, campaigns, googleAds, metaAds,
-      has: { ga: !!channels, campaigns: !!campaigns, weeklyChannels: !!weekCh, weeklyCampaigns: !!weekCamp, googleAds: !!googleAds, metaAds: !!metaAds },
+      stock, campProd, campLand, weekAds, crm, pages,
+      has: { ga: !!channels, campaigns: !!campaigns, weeklyChannels: !!weekCh, weeklyCampaigns: !!weekCamp, googleAds: !!googleAds, metaAds: !!metaAds, stock: !!stock, campProd: !!campProd, weekAds: !!weekAds, crm: !!crm, pages: !!pages },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

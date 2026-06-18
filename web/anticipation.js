@@ -72,6 +72,36 @@ function render(a) {
   const wcampTable = wcampRows ? `<table style="font-size:12px;margin-top:10px"><thead><tr><th>Semaine</th><th>Top campagnes UTM</th></tr></thead><tbody>${wcampRows}</tbody></table>` : '';
   const crmCard = (wcTable || wcampTable) ? `<div class="card"><h3>📡 CRM & acquisition par semaine</h3>${wcTable}${wcampTable}</div>` : '';
 
+  // ── AXE 3 · Calendrier média hebdo (Google Ads) ──
+  const waRows = ((a.weekAds && a.weekAds.weeks) || []).filter(w => w.cost > 0).map(w => `<tr><td>${frd(w.from)}</td><td style="text-align:right">${fEur(w.cost)}</td><td style="text-align:right">${fEur(w.convValue)}</td><td style="text-align:right">${f2(w.roas)}×</td><td style="text-align:right">${fEur(w.cpa)}</td></tr>`).join('');
+  const waCard = waRows ? `<div class="card"><h3>🟢 Calendrier média par semaine (Google Ads)</h3>${a.weekAds.fatigue ? '<div class="note">⚠️ ROAS en baisse sur les dernières semaines → fatigue créative probable, prévoir un renouvellement.</div>' : ''}<table style="font-size:12px"><thead><tr><th>Semaine (lundi)</th><th style="text-align:right">Dépense</th><th style="text-align:right">Valeur conv.</th><th style="text-align:right">ROAS</th><th style="text-align:right">CPA</th></tr></thead><tbody>${waRows}</tbody></table></div>` : '';
+
+  // ── AXE 2 · Campagnes → produits (familles portées) + campagne → landing → achats ──
+  const cpRows = (a.campProd || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 28))}</td><td>${esc(c.category)}</td><td style="text-align:right">${fEur(c.revenue)}</td><td style="text-align:right">${fInt(c.qty)}</td></tr>`).join('');
+  const cpTbl = cpRows ? `<div><h3>🎯 Campagnes → familles portées</h3><table style="font-size:12px"><thead><tr><th>Campagne</th><th>Catégorie</th><th style="text-align:right">CA produit</th><th style="text-align:right">Qté</th></tr></thead><tbody>${cpRows}</tbody></table></div>` : '';
+  const clRows = (a.campLand || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 22))}</td><td title="${esc(c.page)}">${esc((c.page || '').slice(0, 26))}</td><td style="text-align:right">${fInt(c.purchases)}</td></tr>`).join('');
+  const clTbl = clRows ? `<div><h3>🔗 Campagne → landing → achats</h3><table style="font-size:12px"><thead><tr><th>Campagne</th><th>Landing</th><th style="text-align:right">Achats</th></tr></thead><tbody>${clRows}</tbody></table></div>` : '';
+  const cpCard = (cpTbl || clTbl) ? `<div class="card"><div class="grid cols2">${cpTbl}${clTbl}</div></div>` : '';
+
+  // ── AXE 1 · Stock & alertes (demande sur ruptures = réassort prioritaire) ──
+  const stRows = (a.stock || []).map(s => `<tr><td>${esc(s.name)}${s.rayon ? ` <span class="note" style="font-weight:400">${esc(s.rayon)}</span>` : ''}</td><td style="text-align:right">${fInt(s.count)}</td><td style="text-align:right">${fInt(s.waiting)}</td></tr>`).join('');
+  const stCard = stRows ? `<div class="card"><h3>🔔 Stock & alertes — demande sur ruptures (réassort prioritaire)</h3><div class="note">Demande « prévenez-moi » par produit (snapshot) → modèles à sécuriser en stock avant la période N.</div><table style="font-size:12px"><thead><tr><th>Produit</th><th style="text-align:right">Demandes</th><th style="text-align:right">En attente</th></tr></thead><tbody>${stRows}</tbody></table></div>` : '';
+
+  // ── AXE 4 · CRM (cadence & perf) + top pages ──
+  let crmBlocks = '';
+  if (a.crm) {
+    if (a.crm.emailPeakHour != null) crmBlocks += `<div class="note">📧 Heure d'envoi email optimale (N-1) : <b>${a.crm.emailPeakHour}h</b> → caler les envois.</div>`;
+    if (a.crm.newVsReturning) { const n = a.crm.newVsReturning; crmBlocks += `<div class="kgrid"><div class="kc"><div class="l">Nouveaux — sessions</div><div class="v">${fInt(n.nouveau.sessions)}</div></div><div class="kc"><div class="l">Nouveaux — CA</div><div class="v">${fEur(n.nouveau.revenue)}</div></div><div class="kc"><div class="l">Récurrents — sessions</div><div class="v">${fInt(n.recurrent.sessions)}</div></div><div class="kc"><div class="l">Récurrents — CA</div><div class="v">${fEur(n.recurrent.revenue)}</div></div></div>`; }
+    if (a.crm.crmCampaigns) crmBlocks += `<table style="font-size:12px;margin-top:6px"><thead><tr><th>Campagne CRM</th><th style="text-align:right">Sessions</th><th style="text-align:right">CA</th></tr></thead><tbody>${a.crm.crmCampaigns.map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 34))}</td><td style="text-align:right">${fInt(c.sessions)}</td><td style="text-align:right">${fEur(c.ca)}</td></tr>`).join('')}</tbody></table>`;
+  }
+  const crmInsCard = crmBlocks ? `<div class="card"><h3>📨 CRM — cadence & performance (N-1)</h3>${crmBlocks}</div>` : '';
+  let pgBlocks = '';
+  if (a.pages) {
+    if (a.pages.landing) pgBlocks += `<div><h3>📄 Top landing pages (CA)</h3><table style="font-size:12px"><thead><tr><th>Page</th><th style="text-align:right">Sess.</th><th style="text-align:right">CA</th><th style="text-align:right">Conv.</th></tr></thead><tbody>${a.pages.landing.map(p => `<tr><td title="${esc(p.page)}">${esc((p.page || '').slice(0, 30))}</td><td style="text-align:right">${fInt(p.sessions)}</td><td style="text-align:right">${fEur(p.revenue)}</td><td style="text-align:right">${fPct(p.convRate)}</td></tr>`).join('')}</tbody></table></div>`;
+    if (a.pages.pages) pgBlocks += `<div><h3>👁️ Top pages vues</h3><table style="font-size:12px"><thead><tr><th>Page</th><th style="text-align:right">Vues</th></tr></thead><tbody>${a.pages.pages.map(p => `<tr><td title="${esc(p.page)}">${esc((p.page || '').slice(0, 38))}</td><td style="text-align:right">${fInt(p.views)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  const pagesCard = pgBlocks ? `<div class="card"><div class="grid cols2">${pgBlocks}</div></div>` : '';
+
   // ── 6 · Canaux cumul + Jours pics + Ads ──
   const chRows = (a.channels || []).slice(0, 10).map(c => {
     const crm = /e-?mail|crm|newsletter|mailing/i.test(c.canal);
@@ -105,7 +135,7 @@ function render(a) {
   if (!a.has.metaAds) missing.push('Meta Ads');
   const miss = missing.length ? `<div class="card"><div class="note">ℹ️ Non disponible pour cette période (donnée non importée) : ${missing.map(esc).join(' · ')}. Charge-les via le panneau de gauche. L'OMS (CA, full/off, semaines, familles, produits) reste l'ossature.</div></div>` : '';
 
-  body.innerHTML = synth + weekCard + topCard + crmCard + card6 + adsCard + miss;
+  body.innerHTML = synth + weekCard + topCard + crmCard + waCard + cpCard + stCard + crmInsCard + pagesCard + card6 + adsCard + miss;
 }
 
 function eqNote() {
