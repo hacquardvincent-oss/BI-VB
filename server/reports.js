@@ -733,14 +733,6 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   try { objMonth = require('./objectives').getMonthObjectiveCA(cumulMonthKey); } catch (_) { /* objectifs indispo */ }
   const cumul = calc.cumulMTD(omsN.rows, omsN.map, omsN1 ? omsN1.rows : null, omsN1 ? omsN1.map : null, { asOf: to, objMonth });
 
-  // ── Anticipation : ce qui a marché l'an dernier sur les semaines/mois À VENIR ──
-  // Ancrée sur la dernière date OMS (= « maintenant » du point de vue des données) ; on combine
-  // OMS N + N-1 pour couvrir au mieux le N-1 de la fenêtre future (décalage −364 j dans calc).
-  if (omsN1) calc.ensureRefExtIdx(omsN1.hdrs, omsN1.map);
-  const anticipDatasets = [{ rows: omsN.rows, map: omsN.map }];
-  if (omsN1) anticipDatasets.push({ rows: omsN1.rows, map: omsN1.map });
-  const anticipation = calc.buildAnticipation(anticipDatasets, refMap, { today: omsN.dateMax, horizonDays: 42 });
-
   return {
     empty: false,
     meta: {
@@ -755,7 +747,6 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     kpiEShop: { n: kpiEShopN, n1: kpiEShopN1 },
     ca: { n: caN, n1: caN1 },
     cumul,
-    anticipation,
     zoneFullOff: { n: calc.calcZoneFullOff(rowsN, omsN.map), n1: (rowsN1 && rowsN1.length) ? calc.calcZoneFullOff(rowsN1, mapN1) : null },
     marketplace: { n: mktN, n1: mktN1, cancelRefund: calc.calcMarketplaceCancelRefund(rowsN, omsN.map, y2RowsN, y2N ? y2N.map : {}) },
     pays,

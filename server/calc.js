@@ -439,12 +439,20 @@ function cumulMTD(rowsN, mapN, rowsN1, mapN1, opts = {}) {
 //   opts.horizonDays = profondeur de la fenêtre à venir (défaut 42 ≈ 6 semaines)
 function buildAnticipation(datasets, refMap, opts = {}) {
   const DAY = 86400000, SHIFT = 364;
-  const horizon = Math.max(7, Math.min(opts.horizonDays || 42, 120));
-  const todayStr = opts.today && /^\d{4}-\d{2}-\d{2}/.test(opts.today) ? opts.today.slice(0, 10) : new Date().toISOString().slice(0, 10);
-  const tp = todayStr.split('-').map(Number);
-  const t0 = Date.UTC(tp[0], tp[1] - 1, tp[2]);
-  // Fenêtre à venir = [demain .. +horizon] ; sa référence N-1 = −364 j.
-  const refStart = t0 + (1 - SHIFT) * DAY, refEnd = t0 + (horizon - SHIFT) * DAY;
+  let refStart, refEnd, horizon;
+  if (opts.from && opts.to && /^\d{4}-\d{2}-\d{2}/.test(opts.from) && /^\d{4}-\d{2}-\d{2}/.test(opts.to)) {
+    // Mode fenêtre explicite : l'utilisateur saisit la période N-1 ; période N équivalente = +364 j.
+    refStart = Date.parse(opts.from.slice(0, 10) + 'T00:00:00Z');
+    refEnd = Date.parse(opts.to.slice(0, 10) + 'T00:00:00Z');
+    horizon = Math.round((refEnd - refStart) / DAY) + 1;
+  } else {
+    // Mode horizon : fenêtre à venir = [demain .. +horizon] ; sa référence N-1 = −364 j.
+    horizon = Math.max(7, Math.min(opts.horizonDays || 42, 120));
+    const todayStr = opts.today && /^\d{4}-\d{2}-\d{2}/.test(opts.today) ? opts.today.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const tp = todayStr.split('-').map(Number);
+    const t0 = Date.UTC(tp[0], tp[1] - 1, tp[2]);
+    refStart = t0 + (1 - SHIFT) * DAY; refEnd = t0 + (horizon - SHIFT) * DAY;
+  }
   const r2 = x => Math.round(x * 100) / 100;
   const isoOf = ms => new Date(ms).toISOString().slice(0, 10);
   const frD = iso => iso.split('-').reverse().join('/');
@@ -491,7 +499,7 @@ function buildAnticipation(datasets, refMap, opts = {}) {
   if (weeks.length >= 2) { const best = weeks.slice().sort((a, b) => b.ca - a.ca)[0]; playbook.push(`Semaine la plus forte à venir (réf. N-1) : semaine du ${frD(best.monday)} (${eur(best.ca)}).`); }
 
   return {
-    window: { refFrom: isoOf(refStart), refTo: isoOf(refEnd), futureFrom: isoOf(t0 + DAY), futureTo: isoOf(t0 + horizon * DAY) },
+    window: { refFrom: isoOf(refStart), refTo: isoOf(refEnd), futureFrom: isoOf(refStart + SHIFT * DAY), futureTo: isoOf(refEnd + SHIFT * DAY) },
     horizonDays: horizon, total: r2(total), offShare,
     peakDays, weeks, topProduits, topFamilles, playbook,
   };

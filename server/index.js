@@ -24,6 +24,7 @@ const reco = require('./reco');
 const objectives = require('./objectives');
 const feedback = require('./feedback');
 const snapshots = require('./snapshots');
+const anticipation = require('./anticipation');
 const layouts = require('./layouts');
 const userviews = require('./userviews');
 const sftp = require('./sftp');
@@ -61,6 +62,7 @@ app.use('/api/reco', reco.router);
 app.use('/api/objectives', objectives.router);
 app.use('/api/feedback', feedback.router);
 app.use('/api/snapshots', snapshots.router);
+app.use('/api/anticipation', anticipation.router);
 app.use('/api/layouts', layouts.router);
 app.use('/api/myviews', userviews.router);
 

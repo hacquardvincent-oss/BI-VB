@@ -367,5 +367,11 @@ assert.ok(an.playbook.length >= 3, 'anticipation : checklist générée');
 assert.strictEqual(an.window.futureFrom, '2026-06-16', 'anticipation : fenêtre future démarre demain');
 // Aucune donnée dans la fenêtre → null (carte masquée)
 assert.strictEqual(calc.buildAnticipation([{ rows: [['2020-01-01', '100', 'Carte Bancaire', 'X', '1', 'REFA', '100', '100']], map: anMap }], {}, { today: '2026-06-15' }), null, 'anticipation : fenêtre vide → null');
+// Mode fenêtre explicite {from,to} (page Anticipation) : période N équivalente = +364 j
+const anWin = calc.buildAnticipation([{ rows: anRows, map: anMap }], { REFA: 'Robes', REFB: 'Sacs' }, { from: '2025-06-01', to: '2025-07-31' });
+assert.ok(anWin, 'anticipation {from,to} : objet renvoyé');
+assert.strictEqual(anWin.window.refFrom, '2025-06-01', 'anticipation {from,to} : refFrom = début saisi');
+assert.strictEqual(anWin.window.futureFrom, '2026-05-31', 'anticipation {from,to} : futureFrom = +364 j');
+assert.strictEqual(anWin.total, 900, 'anticipation {from,to} : total = 900 (hors mkt/ancien)');
 
 console.log('✅ calc.test.js : tous les calculs OK');
