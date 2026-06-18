@@ -38,6 +38,18 @@
     </div>
   </div>
 
+  <div class="card hidden" id="dataPanel">
+    <h3>📥 Chargement des données — sur la période N-1 sélectionnée</h3>
+    <div class="note">Si l'Anticipation manque de données sur la période choisie, importe-les ici (mêmes connecteurs que le Reporting — <b>slots partagés</b>). L'OMS WSHOP importe <b>24 mois</b> (couvre N-1) ; GA4/Ads/Meta importent la <b>période N-1 sélectionnée</b>.</div>
+    <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+      <span class="hidden" id="wshopBox"><button class="btn blue" id="impWshop" title="Import complet OMS (24 mois) depuis WSHOP — couvre la période N-1">🔄 Importer l'OMS (WSHOP, 24 mois)</button></span>
+      <span class="hidden" id="ga4Box"><button class="btn blue" id="impGa4" title="Importe GA4 (sessions, canaux, campagnes) sur la période N-1 sélectionnée">🔄 GA4 sur la période</button></span>
+      <span class="hidden" id="adsBox"><button class="btn blue" id="impAds" title="Importe Google Ads sur la période N-1 sélectionnée">🔄 Google Ads</button></span>
+      <span class="hidden" id="metaBox"><button class="btn blue" id="impMeta" title="Importe Meta Ads sur la période N-1 sélectionnée">🔄 Meta Ads</button></span>
+      <span class="note" id="impNote" style="margin:0"></span>
+    </div>
+  </div>
+
   <div id="body">
     <div class="card"><div class="note">Choisis une période N-1 puis « Analyser ».</div></div>
   </div>

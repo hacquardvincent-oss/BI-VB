@@ -29,7 +29,7 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
   → corrige le « mauvais identifiants » sur un MDP correct (ex. « Marine » vs « marine »). `POST /auth/change-password` (son propre MdP, upsert DB ; pour l'admin
   bootstrap → crée sa ligne) ; admin `PATCH /auth/users/:u {password}` (réinitialise un compte). UI : page Admin.
 - **Montage des routes** (`index.js`) : `/healthz`; `/auth`; `/api/ingest`; `/api/report` (**reports.js ET pdf.js**);
-  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/meta`; `/api/reco`; `/api/objectives` (+ `/daily` détail jour) ; `/api/feedback`; `/api/snapshots`; `/api/anticipation`; `/api/specs/reload` (admin);
+  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/meta`; `/api/reco`; `/api/objectives` (+ `/daily` détail jour, `/days` objectifs au jour) ; `/api/feedback`; `/api/snapshots`; `/api/anticipation`; `/api/specs/reload` (admin);
   statique `web/` (no-cache html/js/css). `express.json` limite **12 Mo** (captures du module Retours).
 - **Module Retours** (`feedback.js`, page `web/feedback.html`/`feedback.js`, onglet header 💬) : retours early users
   PARTAGÉS (titre + description + **screenshots collés/uploadés, réduits côté client** → data URLs jsonb + commentaires).
@@ -50,7 +50,7 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
 | `server/reco.js` (187 l.) | Reco IA (Anthropic) + endpoint `/context` (gratuit, prompt à coller dans Claude.ai). |
 | `server/store.js`/`db.js`/`auth.js`/`objectives.js`/`index.js` | Persistance, RBAC, objectifs, montage. |
 | `server/snapshots.js` | **Reports FIGÉS** (gel d'un `rep` à instant T → historique partagé in-app). Liste légère en RAM, payload `rep` en base (table `report_snapshots`, repli RAM sans `DATABASE_URL`). Routes `GET/POST/DELETE /api/snapshots` (POST **reconstruit `rep` côté serveur** depuis les params de `/api/report` ; DELETE admin). Front : barre « 📌 Figer ce report » / « 📚 Historique », réouverture via `openFrozenReport` (rejoue le `rep` dans le layout de son profil + « Revenir au live »). |
-| `server/anticipation.js` (+ `web/anticipation.html`/`anticipation.js`) | **Page Anticipation = onglet HEADER** (pas une vue Reporting). L'utilisateur saisit une **période N-1** → `GET /api/anticipation?from&to` ressort les grandes lignes de l'historique (CA/KPI, top produits/familles, jours pics, semaines, démarque, **playbook**) + canaux/CRM (GA), top campagnes UTM (`gacampdaily`), Google Ads & Meta Ads (`calc.calcAds`), projetés sur la **période N équivalente (+364 j)**. Scanne les slots N/N1, dégradation gracieuse si GA/Ads non importés. `calc.buildAnticipation` accepte une **fenêtre explicite `{from,to}`** en plus du mode horizon. |
+| `server/anticipation.js` (+ `web/anticipation.html`/`anticipation.js`) | **Page Anticipation = onglet HEADER** (pas une vue Reporting). L'utilisateur saisit une **période N-1** → `GET /api/anticipation?from&to` ressort les grandes lignes de l'historique (CA/KPI, top produits/familles, jours pics, semaines, démarque, **playbook**) + canaux/CRM (GA), top campagnes UTM (`gacampdaily`), Google Ads & Meta Ads (`calc.calcAds`), projetés sur la **période N équivalente (+364 j)**. Scanne les slots N/N1, dégradation gracieuse si GA/Ads non importés. `calc.buildAnticipation` accepte une **fenêtre explicite `{from,to}`** en plus du mode horizon. **Panneau de chargement** (`#dataPanel`, réutilise les connecteurs/slots partagés) : WSHOP = import complet 24 mois (job + poll, couvre N-1) ; GA4/Ads/Meta = import daté sur la période N-1 (`/api/{conn}/refresh?from&to`). Boutons affichés selon `/status`. |
 | `web/app.js` (2062 l.) | Frontend central (cartes, graphes, bilan, plan d'action, handlers). |
 | `web/saison.js`/`saison.html` | Page « Analyse de saison » (à part, période longue). |
 
@@ -555,7 +555,12 @@ l'import (jeter les pages brutes) ; PDF WinAnsi (pas de `→`/`Δ`) ; merges via
 Prévision & suivi **mensuels** du CA EShop (mix auto + manuel). Backend : `objectives.js` étendu —
 `OBJ = { ca, sessions, tt (legacy global), months:{ "YYYY-MM":{ca,sessions,commandes} }, growth }`.
 Routes : `GET /api/objectives/history` (historique mensuel = `calc.monthlyEShopCA` agrégé sur `oms`+`saisonoms`
-N&N-1, périmètre EShop hors mkt + Outstore) ; `PUT /api/objectives/months` (objectifs mensuels + croissance).
+N&N-1, périmètre EShop hors mkt + Outstore) ; `PUT /api/objectives/months` (objectifs mensuels + croissance) ;
+`GET /api/objectives/daily?month` (détail **jour par jour** : CA N + CA N-1 [dates N/dateN1, bissextile géré → 29/02 sans
+équivalent = null ; fusionne `oms`+`saisonoms` pour combler les jours], + `objAuto` réparti sur le profil N-1 et `objectif`
+effectif) ; `PUT /api/objectives/days {month, days:{iso:ca|null}}` (**objectifs éditables au JOUR, persistés** dans
+`OBJ.days` ; recale l'objectif **mensuel = somme des jours**). Front : chaque mois dépliable (▸) → table jour avec objectif
+quotidien saisissable (placeholder = auto), total live, 💾 Enregistrer / ↺ Auto.
 Front : tableau 12 mois × [Réalisé / N-1 / vs N-1 / Objectif éditable / % atteint / Reste à faire] + graphe
 (barres Réalisé/N-1 + courbe Objectif) + bouton **« ✨ Proposer »** (objectif = CA N-1 du mois × (1+croissance)).
 Plus l'OMS importé est large, plus l'historique mensuel est complet. **Connecteurs à venir** : META (Marketing API,
