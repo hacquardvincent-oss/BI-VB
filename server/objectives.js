@@ -93,26 +93,23 @@ router.get('/daily', requireAuth, (req, res) => {
   const mm = month.match(/^(\d{4})-(\d{2})$/);
   if (!mm) return res.status(400).json({ error: 'Mois invalide (AAAA-MM attendu).' });
   const y = +mm[1], mo = +mm[2], daysInMonth = new Date(y, mo, 0).getDate();
-  // Agrège le CA EShop par jour, pour une année donnée, sur oms (N+N1) ; repli saisonoms si oms ne couvre pas ce mois.
+  const isValidDate = (yy, mm2, dd) => { const dt = new Date(yy, mm2 - 1, dd); return dt.getMonth() === mm2 - 1 && dt.getDate() === dd; };
+  const isoOf = (yy, dd) => `${yy}-${String(mo).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  // Agrège le CA EShop par jour, pour une année donnée, en fusionnant oms (priorité) PUIS saisonoms
+  // pour combler les jours manquants. 1ʳᵉ source qui couvre un jour gagne (pas de double-comptage).
   const dayMapForYear = (year) => {
     const acc = {};
-    let any = false;
-    [['oms', 'N'], ['oms', 'N1']].forEach(([s, p]) => {
-      const ds = store.getDataset(s, p);
-      if (!ds || !ds.rows || !ds.map) return;
-      calc.ensureRefExtIdx(ds.hdrs, ds.map);
-      const dd = calc.dailyEShopCA(ds.rows, ds.map, year, mo);
-      Object.entries(dd).forEach(([d, ca]) => { acc[d] = (acc[d] || 0) + ca; any = true; });
-    });
-    if (!any) { // repli période longue
-      [['saisonoms', 'N'], ['saisonoms', 'N1']].forEach(([s, p]) => {
+    const addFrom = (s) => {
+      ['N', 'N1'].forEach(p => {
         const ds = store.getDataset(s, p);
         if (!ds || !ds.rows || !ds.map) return;
         calc.ensureRefExtIdx(ds.hdrs, ds.map);
         const dd = calc.dailyEShopCA(ds.rows, ds.map, year, mo);
-        Object.entries(dd).forEach(([d, ca]) => { acc[d] = (acc[d] || 0) + ca; });
+        Object.entries(dd).forEach(([d, ca]) => { if (acc[d] == null) acc[d] = ca; });
       });
-    }
+    };
+    addFrom('oms');
+    addFrom('saisonoms');
     return acc;
   };
   const nBy = dayMapForYear(y), n1By = dayMapForYear(y - 1);
@@ -126,7 +123,7 @@ router.get('/daily', requireAuth, (req, res) => {
     if (objMonth != null) {
       objectif = (n1Total > 0 && n1By[d] != null) ? Math.round(objMonth * (n1By[d] / n1Total)) : Math.round(objMonth / daysInMonth);
     }
-    days.push({ day: d, n, n1, objectif });
+    days.push({ day: d, dateN: isoOf(y, d), dateN1: isValidDate(y - 1, mo, d) ? isoOf(y - 1, d) : null, n, n1, objectif });
   }
   res.json({ month, daysInMonth, objectif: objMonth, n1Total: Math.round(n1Total), days });
 });

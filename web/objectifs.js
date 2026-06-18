@@ -11,6 +11,7 @@ const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : Math.round(v * 100) + '%');
 const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+const frd = iso => (iso ? iso.split('-').reverse().join('/') : '—');
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); }
@@ -112,8 +113,9 @@ async function toggleDay(k, trEl, link) {
     const yN = k.slice(0, 4), yN1 = (+k.slice(0, 4) - 1);
     const rows = (j.days || []).map(d => {
       const has = d.n != null && d.n1 != null;
-      return `<tr><td>${String(d.day).padStart(2, '0')}</td>
+      return `<tr><td>${frd(d.dateN)}</td>
         <td style="text-align:right">${d.n != null ? fEur(d.n) : '—'}</td>
+        <td>${d.dateN1 ? frd(d.dateN1) : '—'}</td>
         <td style="text-align:right">${d.n1 != null ? fEur(d.n1) : '—'}</td>
         <td style="text-align:right">${has ? delta(d.n, d.n1) : '—'}</td>
         <td style="text-align:right">${d.objectif != null ? fEur(d.objectif) : '—'}</td></tr>`;
@@ -122,7 +124,7 @@ async function toggleDay(k, trEl, link) {
       ? `objectif mensuel <b>${fEur(j.objectif)}</b> réparti selon le profil N-1`
       : 'définis un objectif mensuel pour obtenir l\'objectif quotidien';
     td.innerHTML = `<div style="padding:6px 2px 4px;font-size:12px"><b>Détail jour par jour — ${esc(k)}</b> · ${objNote}.</div>
-      <table style="font-size:11.5px"><thead><tr><th>Jour</th><th style="text-align:right">CA ${esc(yN)}</th><th style="text-align:right">CA ${esc(String(yN1))}</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Objectif jour</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <table style="font-size:11.5px"><thead><tr><th>Date ${esc(yN)}</th><th style="text-align:right">CA ${esc(yN)}</th><th>Date ${esc(String(yN1))}</th><th style="text-align:right">CA ${esc(String(yN1))}</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Objectif jour</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) { td.innerHTML = `<div class="note">⚠ ${esc(e.message)}</div>`; }
 }
 
