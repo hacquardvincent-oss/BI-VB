@@ -60,7 +60,7 @@ function render() {
     if (obj != null) totObj += obj;
     const realCell = real != null ? fEur(real) : (future ? '<span class="na">à venir</span>' : '<span class="na">—</span>');
     return `<tr${future ? ' style="opacity:.85"' : ''}>
-      <td><b>${esc(label)}</b></td>
+      <td><a href="#" class="mexp" data-m="${k}" title="Voir le détail jour par jour (CA N vs N-1 + objectif quotidien)">▸ <b>${esc(label)}</b></a></td>
       <td>${realCell}</td>
       <td>${n1 != null ? fEur(n1) : '—'}</td>
       <td>${(real != null && n1 != null) ? delta(real, n1) : '—'}</td>
@@ -92,7 +92,38 @@ function render() {
       render();
     });
   });
+  // clic sur un mois → déplie le détail jour par jour
+  document.querySelectorAll('.mexp').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); toggleDay(a.dataset.m, a.closest('tr'), a); }));
   drawChart();
+}
+
+// Détail jour par jour d'un mois (CA N vs N-1 + objectif quotidien), déplié sous la ligne du mois.
+async function toggleDay(k, trEl, link) {
+  const existing = document.getElementById('detail-' + k);
+  if (existing) { existing.remove(); if (link) link.firstChild.textContent = '▸ '; return; }
+  if (link) link.firstChild.textContent = '▾ ';
+  const tr = document.createElement('tr'); tr.id = 'detail-' + k; tr.className = 'daydetail';
+  const td = document.createElement('td'); td.colSpan = 7; td.innerHTML = '<div class="note">Chargement du détail…</div>';
+  tr.appendChild(td); trEl.parentNode.insertBefore(tr, trEl.nextSibling);
+  try {
+    const r = await fetch('/api/objectives/daily?month=' + k);
+    const j = await r.json();
+    if (!r.ok) { td.innerHTML = `<div class="note">⚠ ${esc(j.error || 'Erreur')}</div>`; return; }
+    const yN = k.slice(0, 4), yN1 = (+k.slice(0, 4) - 1);
+    const rows = (j.days || []).map(d => {
+      const has = d.n != null && d.n1 != null;
+      return `<tr><td>${String(d.day).padStart(2, '0')}</td>
+        <td style="text-align:right">${d.n != null ? fEur(d.n) : '—'}</td>
+        <td style="text-align:right">${d.n1 != null ? fEur(d.n1) : '—'}</td>
+        <td style="text-align:right">${has ? delta(d.n, d.n1) : '—'}</td>
+        <td style="text-align:right">${d.objectif != null ? fEur(d.objectif) : '—'}</td></tr>`;
+    }).join('');
+    const objNote = j.objectif != null
+      ? `objectif mensuel <b>${fEur(j.objectif)}</b> réparti selon le profil N-1`
+      : 'définis un objectif mensuel pour obtenir l\'objectif quotidien';
+    td.innerHTML = `<div style="padding:6px 2px 4px;font-size:12px"><b>Détail jour par jour — ${esc(k)}</b> · ${objNote}.</div>
+      <table style="font-size:11.5px"><thead><tr><th>Jour</th><th style="text-align:right">CA ${esc(yN)}</th><th style="text-align:right">CA ${esc(String(yN1))}</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Objectif jour</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { td.innerHTML = `<div class="note">⚠ ${esc(e.message)}</div>`; }
 }
 
 function drawChart() {

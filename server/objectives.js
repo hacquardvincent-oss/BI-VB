@@ -83,4 +83,52 @@ function getMonthObjectiveCA(monthKey) {
   return m && Number.isFinite(Number(m.ca)) ? Number(m.ca) : null;
 }
 
+// Détail JOUR PAR JOUR d'un mois : CA N (année du mois) et CA N-1 (même mois, année −1 →
+// gère naturellement les années bissextiles : si le 29/02 N-1 n'existe pas, n1 = null) +
+// objectif quotidien = objectif mensuel réparti selon le profil N-1 (sinon réparti à plat).
+router.get('/daily', requireAuth, (req, res) => {
+  const calc = require('./calc');
+  const store = require('./store');
+  const month = (req.query.month || '').slice(0, 7);
+  const mm = month.match(/^(\d{4})-(\d{2})$/);
+  if (!mm) return res.status(400).json({ error: 'Mois invalide (AAAA-MM attendu).' });
+  const y = +mm[1], mo = +mm[2], daysInMonth = new Date(y, mo, 0).getDate();
+  // Agrège le CA EShop par jour, pour une année donnée, sur oms (N+N1) ; repli saisonoms si oms ne couvre pas ce mois.
+  const dayMapForYear = (year) => {
+    const acc = {};
+    let any = false;
+    [['oms', 'N'], ['oms', 'N1']].forEach(([s, p]) => {
+      const ds = store.getDataset(s, p);
+      if (!ds || !ds.rows || !ds.map) return;
+      calc.ensureRefExtIdx(ds.hdrs, ds.map);
+      const dd = calc.dailyEShopCA(ds.rows, ds.map, year, mo);
+      Object.entries(dd).forEach(([d, ca]) => { acc[d] = (acc[d] || 0) + ca; any = true; });
+    });
+    if (!any) { // repli période longue
+      [['saisonoms', 'N'], ['saisonoms', 'N1']].forEach(([s, p]) => {
+        const ds = store.getDataset(s, p);
+        if (!ds || !ds.rows || !ds.map) return;
+        calc.ensureRefExtIdx(ds.hdrs, ds.map);
+        const dd = calc.dailyEShopCA(ds.rows, ds.map, year, mo);
+        Object.entries(dd).forEach(([d, ca]) => { acc[d] = (acc[d] || 0) + ca; });
+      });
+    }
+    return acc;
+  };
+  const nBy = dayMapForYear(y), n1By = dayMapForYear(y - 1);
+  const n1Total = Object.values(n1By).reduce((a, b) => a + b, 0);
+  const objMonth = getMonthObjectiveCA(month);
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const n = nBy[d] != null ? Math.round(nBy[d] * 100) / 100 : null;
+    const n1 = n1By[d] != null ? Math.round(n1By[d] * 100) / 100 : null;
+    let objectif = null;
+    if (objMonth != null) {
+      objectif = (n1Total > 0 && n1By[d] != null) ? Math.round(objMonth * (n1By[d] / n1Total)) : Math.round(objMonth / daysInMonth);
+    }
+    days.push({ day: d, n, n1, objectif });
+  }
+  res.json({ month, daysInMonth, objectif: objMonth, n1Total: Math.round(n1Total), days });
+});
+
 module.exports = { router, hydrate, getMonthObjectiveCA };

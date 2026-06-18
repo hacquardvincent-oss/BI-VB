@@ -372,6 +372,15 @@ function dailyCAofMonth(rows, map, year, mon) {
   return days;
 }
 
+// CA EShop (hors mkt + Outstore) par JOUR d'un mois donné → { jour: ca }. Sert au détail
+// jour-par-jour du module Objectifs (CA N / N-1 + objectifs quotidiens).
+function dailyEShopCA(rows, map, year, mon) {
+  const d = dailyCAofMonth(rows, map, year, mon);
+  const out = {};
+  Object.keys(d).forEach(day => { out[day] = Math.round(d[day].ca * 100) / 100; });
+  return out;
+}
+
 // ── Cumul mensuel (MTD) jour par jour + atterrissage projeté sur le profil N-1 ──
 // Répond au besoin « analyse du cumul mensuel » : où en est le mois en cours vs N-1
 // et vs objectif, et où va-t-il atterrir au rythme actuel (projection N-1, pas linéaire).
@@ -2068,7 +2077,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
