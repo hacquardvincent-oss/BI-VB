@@ -429,6 +429,74 @@ function cumulMTD(rowsN, mapN, rowsN1, mapN1, opts = {}) {
   };
 }
 
+// ── Anticipation : ce qui a marché (et raté) l'an dernier sur les semaines/mois À VENIR ──
+// Lit le N-1 de la fenêtre FUTURE (décalage −364 j = même jour de semaine) pour préparer la
+// période qui arrive : pics de CA, best-sellers à réassortir, familles porteuses, démarque, et
+// une checklist « à ne pas oublier ». Déterministe, périmètre EShop hors mkt + Outstore.
+//   datasets   = [{rows, map}, ...] (ex. OMS N + OMS N-1 → maximise la couverture du N-1 futur)
+//   refMap     = réf. externe → famille/regroupement
+//   opts.today = ancre "YYYY-MM-DD" (défaut = aujourd'hui ; en pratique = dernière date OMS)
+//   opts.horizonDays = profondeur de la fenêtre à venir (défaut 42 ≈ 6 semaines)
+function buildAnticipation(datasets, refMap, opts = {}) {
+  const DAY = 86400000, SHIFT = 364;
+  const horizon = Math.max(7, Math.min(opts.horizonDays || 42, 120));
+  const todayStr = opts.today && /^\d{4}-\d{2}-\d{2}/.test(opts.today) ? opts.today.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const tp = todayStr.split('-').map(Number);
+  const t0 = Date.UTC(tp[0], tp[1] - 1, tp[2]);
+  // Fenêtre à venir = [demain .. +horizon] ; sa référence N-1 = −364 j.
+  const refStart = t0 + (1 - SHIFT) * DAY, refEnd = t0 + (horizon - SHIFT) * DAY;
+  const r2 = x => Math.round(x * 100) / 100;
+  const isoOf = ms => new Date(ms).toISOString().slice(0, 10);
+  const frD = iso => iso.split('-').reverse().join('/');
+  const eur = n => Math.round(n).toLocaleString('fr-FR') + ' €';
+  const isoWeek = ms => { const day = (new Date(ms).getUTCDay() + 6) % 7; const monday = ms - day * DAY; const thu = monday + 3 * DAY; const td = new Date(thu); const ys = Date.UTC(td.getUTCFullYear(), 0, 1); const wk = Math.floor((thu - ys) / (7 * DAY)) + 1; return { key: `${td.getUTCFullYear()}-S${String(wk).padStart(2, '0')}`, monday: isoOf(monday) }; };
+
+  const byDay = {}, byProd = {}, byFam = {}, byWeek = {};
+  let total = 0, off = 0, hasFPOPany = false;
+  (datasets || []).forEach(({ rows, map }) => {
+    if (!rows || !map || map.date === undefined) return;
+    const di = map.date, pi = map.prix, ti = map.type, li = map.lieu, qi = map.qte, desi = map.des;
+    const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+    const pvi = map.pv, pvri = map.pv_remise, hasFPOP = pvi !== undefined && pvri !== undefined;
+    if (hasFPOP) hasFPOPany = true;
+    rows.forEach(r => {
+      if (isMkt((r[ti] || '').trim())) return;
+      if (li !== undefined && isInstore(r[li])) return; // périmètre EShop = Outstore
+      const d = parseFrD(r[di]); if (!d) return;
+      const ms = Date.UTC(d.y, d.m - 1, d.d);
+      if (ms < refStart || ms > refEnd) return;
+      const p = fN(r[pi]); total += p;
+      if (hasFPOP && !isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p)) off += p;
+      const futMs = ms + SHIFT * DAY, futISO = isoOf(futMs);
+      (byDay[futISO] = byDay[futISO] || { ca: 0, n1date: isoOf(ms) }).ca += p;
+      const wk = isoWeek(futMs); (byWeek[wk.key] = byWeek[wk.key] || { ca: 0, monday: wk.monday }).ca += p;
+      if (desi !== undefined) { const des = (r[desi] || '').toString().trim() || '(?)'; const e = (byProd[des] = byProd[des] || { ca: 0, qte: 0 }); e.ca += p; e.qte += parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1; }
+      if (refIdx !== undefined && refMap) { const fam = refMap[(r[refIdx] || '').toString().trim()] || '(non référencé)'; (byFam[fam] = byFam[fam] || { ca: 0 }).ca += p; }
+    });
+  });
+  if (total <= 0) return null;
+
+  const peakDays = Object.entries(byDay).map(([date, v]) => ({ date, n1date: v.n1date, ca: r2(v.ca) })).sort((a, b) => b.ca - a.ca).slice(0, 6);
+  const weeks = Object.entries(byWeek).map(([week, v]) => ({ week, monday: v.monday, ca: r2(v.ca) })).sort((a, b) => (a.monday < b.monday ? -1 : 1));
+  const topProduits = Object.entries(byProd).map(([des, v]) => ({ des, ca: r2(v.ca), qte: v.qte })).sort((a, b) => b.ca - a.ca).slice(0, 10);
+  const topFamilles = Object.entries(byFam).filter(([f]) => f !== '(non référencé)').map(([fam, v]) => ({ fam, ca: r2(v.ca) })).sort((a, b) => b.ca - a.ca).slice(0, 8);
+  const offShare = hasFPOPany && total > 0 ? off / total : null;
+
+  // Checklist « à ne pas oublier » (déterministe, partagée UI/PDF/copie)
+  const playbook = [];
+  if (peakDays.length) { const pd = peakDays[0]; playbook.push(`Pic l'an dernier le ${frD(pd.n1date)} (${eur(pd.ca)}) → équivalent ${frD(pd.date)} : sécuriser stock, trafic et CRM ce jour-là.`); }
+  if (topProduits.length) playbook.push(`Réassort des best-sellers de la période : ${topProduits.slice(0, 3).map(p => p.des).join(' · ')}.`);
+  if (topFamilles.length) playbook.push(`Familles porteuses à mettre en avant : ${topFamilles.slice(0, 3).map(f => f.fam).join(' · ')}.`);
+  if (offShare != null && offShare >= 0.3) playbook.push(`Forte démarque l'an dernier sur la fenêtre (${Math.round(offShare * 100)} % du CA en off price) → préparer l'opération commerciale et le stock.`);
+  if (weeks.length >= 2) { const best = weeks.slice().sort((a, b) => b.ca - a.ca)[0]; playbook.push(`Semaine la plus forte à venir (réf. N-1) : semaine du ${frD(best.monday)} (${eur(best.ca)}).`); }
+
+  return {
+    window: { refFrom: isoOf(refStart), refTo: isoOf(refEnd), futureFrom: isoOf(t0 + DAY), futureTo: isoOf(t0 + horizon * DAY) },
+    horizonDays: horizon, total: r2(total), offShare,
+    peakDays, weeks, topProduits, topFamilles, playbook,
+  };
+}
+
 // ── Poids des regroupements par mois (saison) ───────────────────────────────
 // Croise OMS (CA EShop hors mkt, Outstore) × refMap (réf. externe → regroupement) × mois.
 // Sortie : { months[], monthTotals{}, total, rows[{regroup, total, weight, byMonth{}}] } trié par CA.
@@ -1992,7 +2060,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, cumulMTD, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

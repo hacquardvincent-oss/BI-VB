@@ -345,4 +345,27 @@ const cuNoN1 = calc.cumulMTD(cuN, cuMap, null, null, { asOf: '2026-06-03' });
 assert.strictEqual(cuNoN1.atterrissage, 4500, 'sans N-1 : atterrissage linéaire 450×30/3');
 assert.strictEqual(cuNoN1.objectif, null, 'sans objectif → objectif null');
 
+// ── Anticipation : N-1 de la fenêtre à venir (pics, tops, démarque, playbook) ──
+const anHdrs = ['Date', 'Prix de vente paye', 'Type Paiement', 'Designation produit', 'quantites commandees', 'Ref. externe', 'Prix Vente', 'Prix Vente Remise'];
+const anMap = calc.ensureRefExtIdx(anHdrs, calc.autoMap(anHdrs, calc.OMS_ALIASES));
+const anRows = [
+  ['2025-06-20', '300', 'Carte Bancaire', 'Robe Lin', '2', 'REFA', '300', '300'],  // full, dans la fenêtre
+  ['2025-07-10', '500', 'Carte Bancaire', 'Sac Cuir', '1', 'REFB', '600', '500'],  // off, dans la fenêtre
+  ['2025-06-20', '100', 'Carte Bancaire', 'Robe Lin', '1', 'REFA', '100', '100'],  // même jour pic
+  ['2024-06-20', '999', 'Carte Bancaire', 'Vieux', '1', 'REFA', '999', '999'],     // trop ancien → exclu
+  ['2025-06-21', '200', 'GL.com', 'Mkt', '1', 'REFA', '200', '200'],               // marketplace → exclu
+];
+const an = calc.buildAnticipation([{ rows: anRows, map: anMap }], { REFA: 'Robes', REFB: 'Sacs' }, { today: '2026-06-15', horizonDays: 42 });
+assert.ok(an, 'anticipation : objet renvoyé');
+assert.strictEqual(an.total, 900, 'anticipation : total N-1 fenêtre = 900 (hors mkt, hors trop ancien)');
+assert.ok(Math.abs(an.offShare - 500 / 900) < 1e-9, 'anticipation : part off price = 500/900');
+assert.strictEqual(an.peakDays[0].date, '2026-07-09', 'anticipation : jour pic mappé +364 j (10/07/2025 → 09/07/2026)');
+assert.strictEqual(an.peakDays[0].ca, 500, 'anticipation : CA du jour pic = 500');
+assert.strictEqual(an.topProduits[0].des, 'Sac Cuir', 'anticipation : best-seller en tête');
+assert.strictEqual(an.topFamilles[0].fam, 'Sacs', 'anticipation : famille porteuse en tête');
+assert.ok(an.playbook.length >= 3, 'anticipation : checklist générée');
+assert.strictEqual(an.window.futureFrom, '2026-06-16', 'anticipation : fenêtre future démarre demain');
+// Aucune donnée dans la fenêtre → null (carte masquée)
+assert.strictEqual(calc.buildAnticipation([{ rows: [['2020-01-01', '100', 'Carte Bancaire', 'X', '1', 'REFA', '100', '100']], map: anMap }], {}, { today: '2026-06-15' }), null, 'anticipation : fenêtre vide → null');
+
 console.log('✅ calc.test.js : tous les calculs OK');
