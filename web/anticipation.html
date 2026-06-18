@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BI Project — Anticipation</title>
+<title>BI Project — Prévisionnel</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <a class="pb" href="/commerciale.html" title="Pilotage d'une opération commerciale">💰 Analyse commerciale</a>
     <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
     <a class="pb" href="/objectifs.html" title="Objectifs & prévisions mensuelles">🎯 Objectifs</a>
-    <a class="pb on" href="/anticipation.html" title="Anticiper la période N à partir de l'historique N-1">🔮 Anticipation</a>
+    <a class="pb on" href="/anticipation.html" title="Prévisionnel : préparer la période N à partir de l'historique N-1">🔮 Prévisionnel</a>
     <a class="pb" href="/feedback.html" title="Retours & idées des utilisateurs">💬 Retours</a>
   </nav>
   <div class="spacer"></div>
@@ -23,36 +23,42 @@
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap">
-  <div class="card">
-    <h3>🔮 Anticipation — préparer la période N à partir de l'historique N-1</h3>
-    <div class="note">Choisis une <b>période passée (N-1)</b> : l'outil ressort les <b>grandes lignes</b> de ce qui s'est passé (CA, KPI, jours pics, top produits/familles, canaux dont CRM, top campagnes UTM, Google&nbsp;Ads & Meta&nbsp;Ads) et les projette sur la <b>période N équivalente</b> (décalage 52 semaines) — pour anticiper stock, CRM, acquisition et opérations.</div>
-    <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Période N-1</span>
-      <input id="from" type="date" class="dt">
-      <span style="color:var(--t3)">→</span>
-      <input id="to" type="date" class="dt">
-      <button class="pb" id="shiftNext6" title="Préremplir avec l'équivalent N-1 des 6 prochaines semaines">↺ 6 prochaines semaines (N-1)</button>
-      <button class="btn blue" id="run">🔮 Analyser</button>
-      <span class="note" id="eqNote" style="margin:0"></span>
+<div class="wrap layout-side no-rightnav">
+  <aside id="setupCol">
+    <!-- 1 · PÉRIODE N-1 -->
+    <div class="card setup-card">
+      <h3>1 · Période N-1</h3>
+      <div class="note">Choisis une <b>période passée (N-1)</b> ; l'outil la projette sur la <b>période N équivalente</b> (52 semaines plus tard) pour préparer stock, CRM, acquisition et opérations.</div>
+      <label class="setlabel" style="margin-top:8px">Début</label>
+      <input id="from" type="date" class="dt" style="width:100%">
+      <label class="setlabel" style="margin-top:7px">Fin</label>
+      <input id="to" type="date" class="dt" style="width:100%">
+      <div class="toolbar" style="margin-top:8px;gap:6px;flex-wrap:wrap">
+        <button class="pb" id="shiftNext6" title="Préremplir avec l'équivalent N-1 des 6 prochaines semaines">↺ 6 prochaines semaines</button>
+        <button class="btn blue" id="run">🔮 Analyser</button>
+      </div>
+      <div class="note" id="eqNote" style="margin-top:6px"></div>
     </div>
-  </div>
 
-  <div class="card hidden" id="dataPanel">
-    <h3>📥 Chargement des données — sur la période N-1 sélectionnée</h3>
-    <div class="note">Si l'Anticipation manque de données sur la période choisie, importe-les ici (mêmes connecteurs que le Reporting — <b>slots partagés</b>). L'OMS WSHOP importe <b>24 mois</b> (couvre N-1) ; GA4/Ads/Meta importent la <b>période N-1 sélectionnée</b>.</div>
-    <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;gap:8px">
-      <span class="hidden" id="wshopBox"><button class="btn blue" id="impWshop" title="Import complet OMS (24 mois) depuis WSHOP — couvre la période N-1">🔄 Importer l'OMS (WSHOP, 24 mois)</button></span>
-      <span class="hidden" id="ga4Box"><button class="btn blue" id="impGa4" title="Importe GA4 (sessions, canaux, campagnes) sur la période N-1 sélectionnée">🔄 GA4 sur la période</button></span>
-      <span class="hidden" id="adsBox"><button class="btn blue" id="impAds" title="Importe Google Ads sur la période N-1 sélectionnée">🔄 Google Ads</button></span>
-      <span class="hidden" id="metaBox"><button class="btn blue" id="impMeta" title="Importe Meta Ads sur la période N-1 sélectionnée">🔄 Meta Ads</button></span>
-      <span class="note" id="impNote" style="margin:0"></span>
+    <!-- 2 · CHARGEMENT DES DONNÉES -->
+    <div class="card setup-card hidden" id="dataPanel">
+      <h3>2 · Chargement des données</h3>
+      <div class="note">Sur la <b>période N-1 sélectionnée</b> (mêmes connecteurs que le Reporting, <b>slots partagés</b>).</div>
+      <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+        <span class="hidden" id="wshopBox"><button class="btn blue" id="impWshop" style="width:100%" title="Importe l'OMS WSHOP sur la période sélectionnée (+ l'année précédente)">🔄 Importer l'OMS (WSHOP)</button></span>
+        <span class="hidden" id="ga4Box"><button class="btn blue" id="impGa4" style="width:100%" title="Importe GA4 (sessions, canaux, campagnes) sur la période">🔄 GA4 sur la période</button></span>
+        <span class="hidden" id="adsBox"><button class="btn blue" id="impAds" style="width:100%" title="Importe Google Ads sur la période">🔄 Google Ads</button></span>
+        <span class="hidden" id="metaBox"><button class="btn blue" id="impMeta" style="width:100%" title="Importe Meta Ads sur la période">🔄 Meta Ads</button></span>
+      </div>
+      <div class="note" id="impNote" style="margin-top:6px"></div>
     </div>
-  </div>
+  </aside>
 
-  <div id="body">
-    <div class="card"><div class="note">Choisis une période N-1 puis « Analyser ».</div></div>
-  </div>
+  <main id="mainCol">
+    <div id="body">
+      <div class="card"><div class="note">Choisis une période N-1 puis « Analyser ».</div></div>
+    </div>
+  </main>
 </div>
 
 <script src="/anticipation.js"></script>

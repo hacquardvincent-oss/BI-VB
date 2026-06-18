@@ -43,6 +43,39 @@ function rowsInPeriod(source, from, to) {
   return { rows, map: map || {}, hdrs };
 }
 
+// Lundi (ISO) de la semaine d'une date ISO.
+function mondayISO(iso) { const [y, m, d] = iso.split('-').map(Number); const ms = Date.UTC(y, m - 1, d); const dow = (new Date(ms).getUTCDay() + 6) % 7; return new Date(ms - dow * 86400000).toISOString().slice(0, 10); }
+// Type de canal GA → CRM / Acquisition / SEO / Direct / Referral / Autre.
+function channelType(canal) {
+  const s = (canal || '').toLowerCase();
+  if (/e-?mail|crm|newsletter|mailing|splio/.test(s)) return 'CRM';
+  if (/paid|cpc|ppc|\bads?\b|sea|shopping|display|sponsor/.test(s)) return 'Acquisition';
+  if (/organic|seo/.test(s)) return 'SEO';
+  if (/direct/.test(s)) return 'Direct';
+  if (/referr/.test(s)) return 'Referral';
+  if (/social/.test(s)) return 'Social';
+  return 'Autre';
+}
+// CRM & acquisition par SEMAINE depuis GA (date×canal).
+function weeklyChannels(from, to) {
+  const d = rowsInPeriod('ga', from, to);
+  if (!d.rows.length || d.map.canal == null) return null;
+  const di = d.map.date != null ? d.map.date : 0, ci = d.map.canal, si = d.map.sessions, ri = d.map.revenue;
+  const by = {};
+  d.rows.forEach(r => { const iso = isoDate(r[di]); if (!iso) return; const wk = mondayISO(iso); const t = channelType(r[ci]); const e = by[wk] || (by[wk] = {}); const x = e[t] || (e[t] = { sessions: 0, ca: 0 }); if (si != null) x.sessions += numUS(r[si]); if (ri != null) x.ca += numUS(r[ri]); });
+  return Object.keys(by).sort().map(wk => ({ from: wk, crm: by[wk].CRM || { sessions: 0, ca: 0 }, acq: by[wk].Acquisition || { sessions: 0, ca: 0 }, seo: by[wk].SEO || { sessions: 0, ca: 0 } }))
+    .map(w => ({ from: w.from, crm: { sessions: Math.round(w.crm.sessions), ca: Math.round(w.crm.ca) }, acq: { sessions: Math.round(w.acq.sessions), ca: Math.round(w.acq.ca) }, seo: { sessions: Math.round(w.seo.sessions), ca: Math.round(w.seo.ca) } }));
+}
+// Top campagnes UTM par SEMAINE depuis gacampdaily (date×campagne).
+function weeklyCampaigns(from, to) {
+  const rows = [];
+  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
+  if (!rows.length) return null;
+  const by = {};
+  rows.forEach(r => { const iso = isoDate(r[0]); const wk = mondayISO(iso); const c = (r[1] || '(direct/none)').toString(); if (/^\(?(direct|none|\(none\)|organic|referral|\(not set\)|\(direct\))/i.test(c)) return; const e = by[wk] || (by[wk] = {}); const x = e[c] || (e[c] = { sessions: 0, ca: 0 }); x.sessions += numUS(r[2]); x.ca += numUS(r[3]); });
+  return Object.keys(by).sort().map(wk => ({ from: wk, top: Object.entries(by[wk]).map(([campaign, v]) => ({ campaign, sessions: Math.round(v.sessions), ca: Math.round(v.ca) })).sort((a, b) => b.ca - a.ca).slice(0, 5) }));
+}
+
 // Canaux d'acquisition (dont Email/CRM) agrégés depuis GA (date×canal) sur la période.
 function channelsAgg(from, to) {
   const d = rowsInPeriod('ga', from, to);
@@ -96,9 +129,12 @@ router.get('/', requireAuth, (req, res) => {
     const kpi = calc.calcKPIEShop(eshop, map, 0);
     const ca = calc.calcOMS(eshop, map);
     const lines = calc.buildAnticipation([{ rows: oms.rows, map }], refMap, { from, to });
+    const weekly = calc.weeklyHistory(oms.rows, map, refMap, { from, to });
 
     const channels = channelsAgg(from, to);
     const campaigns = topCampaigns(from, to);
+    const weekCh = weeklyChannels(from, to);
+    const weekCamp = weeklyCampaigns(from, to);
     const googleAds = adsSummary('ads', from, to);
     const metaAds = adsSummary('metaads', from, to);
 
@@ -111,8 +147,9 @@ router.get('/', requireAuth, (req, res) => {
       peakDays: lines ? lines.peakDays : [], weeks: lines ? lines.weeks : [],
       topProduits: lines ? lines.topProduits : [], topFamilles: lines ? lines.topFamilles : [],
       playbook: lines ? lines.playbook : [],
+      weekly, weeklyChannels: weekCh, weeklyCampaigns: weekCamp,
       channels, campaigns, googleAds, metaAds,
-      has: { ga: !!channels, campaigns: !!campaigns, googleAds: !!googleAds, metaAds: !!metaAds },
+      has: { ga: !!channels, campaigns: !!campaigns, weeklyChannels: !!weekCh, weeklyCampaigns: !!weekCamp, googleAds: !!googleAds, metaAds: !!metaAds },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

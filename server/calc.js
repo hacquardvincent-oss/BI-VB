@@ -327,6 +327,63 @@ function calcOMS(rows, map) {
   return { caGlob, caEShop: caFR + caInt, caFR, caInt, caEnt, caSFS, caMkt, caOmni: caEnt + caSFS, total, caFP, caOP };
 }
 
+// ── Décomposition HEBDOMADAIRE d'une période (page Prévisionnel) ──
+// Périmètre EShop (hors mkt + Outstore). Renvoie le cumul (CA, full/off, top familles/produits)
+// + le détail par semaine ISO (lundi→dimanche) avec dates, full/off, top familles/produits,
+// + la période d'opération (jours où la démarque domine, ≥50 % du CA) = dates début/fin de soldes.
+function weeklyHistory(rows, map, refMap = {}, opts = {}) {
+  const from = (opts.from || '').slice(0, 10), to = (opts.to || '').slice(0, 10);
+  const di = map.date, pi = map.prix, ti = map.type, li = map.lieu, qi = map.qte, desi = map.des, ni = map.num;
+  const pvi = map.pv, pvri = map.pv_remise;
+  const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (di === undefined) return null;
+  const hasFPOP = pvi !== undefined && pvri !== undefined;
+  const DAY = 86400000;
+  const isoMs = ms => new Date(ms).toISOString().slice(0, 10);
+  const isoWeekNum = (ms) => { const d = new Date(ms); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day + 3); const firstThu = Date.UTC(d.getUTCFullYear(), 0, 4); return 1 + Math.round(((d.getTime() - firstThu) / DAY - 3 + ((new Date(firstThu).getUTCDay() + 6) % 7)) / 7); };
+  const mondayMs = (y, m, dd) => { const ms = Date.UTC(y, m - 1, dd); const dow = (new Date(ms).getUTCDay() + 6) % 7; return ms - dow * DAY; };
+
+  const weeks = {}, cumFam = {}, cumProd = {}, dayOff = {};
+  let total = 0, caFP = 0, caOP = 0, pieces = 0; const orders = new Set();
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const dt = parseFrD(r[di]); if (!dt) return;
+    const iso = toISO(dt);
+    if (from && iso < from) return; if (to && iso > to) return;
+    const p = fN(r[pi]);
+    const off = hasFPOP ? !isFullPriceLine(fN(r[pvi]), fN(r[pvri]), p) : false;
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const mon = mondayMs(dt.y, dt.m, dt.d);
+    const wk = weeks[mon] || (weeks[mon] = { monday: isoMs(mon), end: isoMs(mon + 6 * DAY), weekNum: isoWeekNum(mon), ca: 0, caFP: 0, caOP: 0, pieces: 0, orders: new Set(), fam: {}, prod: {} });
+    wk.ca += p; if (off) wk.caOP += p; else wk.caFP += p; wk.pieces += q;
+    if (ni !== undefined && r[ni]) { wk.orders.add(r[ni]); orders.add(r[ni]); }
+    let fam = 'Autre';
+    if (refIdx !== undefined) { const ref = (r[refIdx] || '').toString().trim(); if (ref && refMap[ref]) fam = refMap[ref]; }
+    wk.fam[fam] = (wk.fam[fam] || 0) + p; cumFam[fam] = (cumFam[fam] || 0) + p;
+    const des = desi !== undefined ? (r[desi] || '').toString().trim() : '';
+    if (des) { (wk.prod[des] = wk.prod[des] || { ca: 0, qte: 0 }); wk.prod[des].ca += p; wk.prod[des].qte += q; (cumProd[des] = cumProd[des] || { ca: 0, qte: 0 }); cumProd[des].ca += p; cumProd[des].qte += q; }
+    total += p; if (off) caOP += p; else caFP += p; pieces += q;
+    const ddo = dayOff[iso] || (dayOff[iso] = { ca: 0, off: 0 }); ddo.ca += p; if (off) ddo.off += p;
+  });
+
+  const topFam = (obj, n) => Object.entries(obj).map(([fam, ca]) => ({ fam, ca: Math.round(ca) })).sort((a, b) => b.ca - a.ca).slice(0, n);
+  const topProd = (obj, n) => Object.entries(obj).map(([des, v]) => ({ des, ca: Math.round(v.ca), qte: v.qte })).sort((a, b) => b.ca - a.ca).slice(0, n);
+  const weekArr = Object.keys(weeks).map(Number).sort((a, b) => a - b).map(mon => {
+    const w = weeks[mon];
+    return { week: `S${w.weekNum}`, weekNum: w.weekNum, from: w.monday, to: w.end, ca: Math.round(w.ca), caFP: Math.round(w.caFP), caOP: Math.round(w.caOP), offShare: w.ca ? w.caOP / w.ca : 0, pieces: w.pieces, commandes: w.orders.size, topFamilles: topFam(w.fam, 5), topProduits: topProd(w.prod, 5) };
+  });
+  const offDays = Object.keys(dayOff).filter(iso => { const d = dayOff[iso]; return d.ca > 0 && d.off / d.ca >= 0.5; }).sort();
+  const operation = offDays.length ? { from: offDays[0], to: offDays[offDays.length - 1], days: offDays.length } : null;
+
+  return {
+    from, to, total: Math.round(total), caFP: Math.round(caFP), caOP: Math.round(caOP),
+    offShare: total ? caOP / total : 0, pieces, commandes: orders.size,
+    topFamilles: topFam(cumFam, 10), topProduits: topProd(cumProd, 12),
+    weeks: weekArr, operation,
+  };
+}
+
 // ── Agrégation MENSUELLE du CA EShop (hors mkt + Outstore) → { "YYYY-MM": {ca, commandes, pieces, caOP} }
 // Sert au module Objectifs (historique + prévision par mois). Périmètre = même que le Bilan EShop.
 function monthlyEShopCA(rows, map) {
@@ -2077,7 +2134,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

@@ -19,46 +19,69 @@ function tbl(title, head, rows) {
 
 function render(a) {
   const body = document.getElementById('body');
-  if (a.empty) { body.innerHTML = `<div class="card"><div class="note">${esc(a.message || 'Aucune donnée sur cette période.')}</div></div>`; return; }
-  const w = a.window || {};
-  const offTile = a.offShare != null ? `<div class="kc"><div class="l">Démarque (off price)</div><div class="v">${fPct(a.offShare)}</div></div>` : '';
+  if (a.empty) { body.innerHTML = `<div class="card"><div class="note">${esc(a.message || 'Aucune donnée sur cette période.')} ← utilise le panneau « Chargement des données » à gauche.</div></div>`; return; }
+  const w = a.window || {}, wk = a.weekly || {};
+
+  // ── 1 · Synthèse 360 de la période ──
   const tiles = `<div class="kgrid">
     <div class="kc"><div class="l">CA EShop (N-1)</div><div class="v">${fEur(a.kpi.ca)}</div></div>
     <div class="kc"><div class="l">Commandes</div><div class="v">${fInt(a.kpi.commandes)}</div></div>
     <div class="kc"><div class="l">Panier moyen</div><div class="v">${fEur(a.kpi.pm)}</div></div>
     <div class="kc"><div class="l">Pièces</div><div class="v">${fInt(a.kpi.pieces)}</div></div>
-    ${offTile}
+    <div class="kc"><div class="l">Full price</div><div class="v">${fEur(a.kpi.caFP)}</div></div>
+    <div class="kc"><div class="l">Off price (démarque)</div><div class="v">${fEur(a.kpi.caOP)}${a.offShare != null ? ` <span class="note" style="font-weight:400">(${fPct(a.offShare)})</span>` : ''}</div></div>
   </div>`;
+  const opNote = wk.operation ? `<div class="note" style="margin-top:8px">🏷️ <b>Période d'opération détectée</b> (démarque dominante) : <b>${frd(wk.operation.from)} → ${frd(wk.operation.to)}</b> (${wk.operation.days} j) → planifie l'opération équivalente en N (~52 semaines plus tard).</div>` : '';
   const playbook = (a.playbook && a.playbook.length)
     ? `<div class="note" style="margin:10px 0 4px"><b>✅ À ne pas oublier pour performer sur la période N</b></div><ul style="margin:0 0 8px 16px;padding:0;font-size:12.5px;line-height:1.7">${a.playbook.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : '';
   const synth = `<div class="card">
-    <h3>🔮 Synthèse — préparer ${frd(w.futureFrom)} → ${frd(w.futureTo)} (période N)</h3>
+    <h3>🔮 Synthèse 360 — préparer ${frd(w.futureFrom)} → ${frd(w.futureTo)} (période N)</h3>
     <div class="note">Lu sur l'historique N-1 <b>${frd(w.refFrom)} → ${frd(w.refTo)}</b> (décalage 52 semaines, alignement jour de semaine).</div>
-    ${tiles}${playbook}</div>`;
+    ${tiles}${opNote}${playbook}</div>`;
 
-  const peak = tbl('📈 Jours pics à préparer', '<th>Jour N (à préparer)</th><th>Réf. N-1</th><th style="text-align:right">CA N-1</th>',
-    (a.peakDays || []).map(p => `<tr><td>${frd(p.date)}</td><td>${frd(p.n1date)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('') || null);
-  const weeks = tbl('🗓️ Semaines (réf. N-1)', '<th>Semaine</th><th>Lundi (N)</th><th style="text-align:right">CA N-1</th>',
-    (a.weeks || []).map(wk => `<tr><td>${esc(wk.week)}</td><td>${frd(wk.monday)}</td><td style="text-align:right">${fEur(wk.ca)}</td></tr>`).join('') || null);
-  const prod = tbl('👗 Best-sellers à réassortir / mettre en avant', '<th>Produit</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Qté</th>',
-    (a.topProduits || []).slice(0, 12).map(p => `<tr><td>${esc(p.des)}</td><td style="text-align:right">${fEur(p.ca)}</td><td style="text-align:right">${fInt(p.qte)}</td></tr>`).join('') || null);
-  const fam = tbl('🧶 Familles porteuses', '<th>Famille</th><th style="text-align:right">CA N-1</th>',
-    (a.topFamilles || []).map(f => `<tr><td>${esc(f.fam)}</td><td style="text-align:right">${fEur(f.ca)}</td></tr>`).join('') || null);
-  const card1 = (peak || weeks) ? `<div class="card"><div class="grid cols2">${peak ? `<div>${peak}</div>` : ''}${weeks ? `<div>${weeks}</div>` : ''}</div></div>` : '';
-  const card2 = (prod || fam) ? `<div class="card"><div class="grid cols2">${prod ? `<div>${prod}</div>` : ''}${fam ? `<div>${fam}</div>` : ''}</div></div>` : '';
+  // ── 2 · Détail par semaine (CA + full/off + dates + top familles/produits) ──
+  const wkRows = (wk.weeks || []).map(s => {
+    const fam = (s.topFamilles || []).slice(0, 3).map(f => esc(f.fam)).join(', ');
+    const prod = (s.topProduits || []).slice(0, 3).map(p => esc(p.des)).join(', ');
+    return `<tr>
+      <td><b>${esc(s.week)}</b><br><span class="note" style="font-size:10.5px">${frd(s.from)}→${frd(s.to)}</span></td>
+      <td style="text-align:right">${fEur(s.ca)}</td>
+      <td style="text-align:right">${fEur(s.caFP)}</td>
+      <td style="text-align:right">${fEur(s.caOP)} <span class="note" style="font-weight:400">(${fPct(s.offShare)})</span></td>
+      <td style="font-size:11px">${fam || '—'}</td>
+      <td style="font-size:11px">${prod || '—'}</td>
+    </tr>`;
+  }).join('');
+  const weekCard = wkRows ? `<div class="card"><h3>📅 Détail par semaine (CA · full/off · top familles & produits)</h3>
+    <table style="font-size:12px"><thead><tr><th>Semaine</th><th style="text-align:right">CA</th><th style="text-align:right">Full</th><th style="text-align:right">Off (démarque)</th><th>Top familles</th><th>Top produits</th></tr></thead><tbody>${wkRows}</tbody></table></div>` : '';
 
-  // Acquisition : canaux (dont CRM) + campagnes UTM
+  // ── 3 · Top familles & 4 · Top produits (cumul période) ──
+  const famSrc = wk.topFamilles || a.topFamilles || [];
+  const famRows = famSrc.map(f => `<tr><td>${esc(f.fam)}</td><td style="text-align:right">${fEur(f.ca)}</td><td style="text-align:right">${wk.total ? fPct(f.ca / wk.total) : '—'}</td></tr>`).join('');
+  const famCard = famRows ? `<div><h3>🧶 Top familles (cumul période)</h3><table style="font-size:12px"><thead><tr><th>Famille</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Poids</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
+  const prodSrc = wk.topProduits || a.topProduits || [];
+  const prodRows = prodSrc.map(p => `<tr><td>${esc(p.des)}</td><td style="text-align:right">${fEur(p.ca)}</td><td style="text-align:right">${fInt(p.qte)}</td></tr>`).join('');
+  const prodCard = prodRows ? `<div><h3>👗 Top produits (cumul période)</h3><table style="font-size:12px"><thead><tr><th>Produit</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Qté</th></tr></thead><tbody>${prodRows}</tbody></table></div>` : '';
+  const topCard = (famCard || prodCard) ? `<div class="card"><div class="grid cols2">${famCard}${prodCard}</div></div>` : '';
+
+  // ── 5 · CRM & acquisition par semaine ──
+  const wcRows = (a.weeklyChannels || []).map(x => `<tr><td>${frd(x.from)}</td><td style="text-align:right">${fInt(x.crm.sessions)}</td><td style="text-align:right">${fEur(x.crm.ca)}</td><td style="text-align:right">${fInt(x.acq.sessions)}</td><td style="text-align:right">${fEur(x.acq.ca)}</td><td style="text-align:right">${fInt(x.seo.sessions)}</td></tr>`).join('');
+  const wcTable = wcRows ? `<table style="font-size:12px"><thead><tr><th>Semaine (lundi)</th><th style="text-align:right">📧 CRM sess.</th><th style="text-align:right">CRM CA</th><th style="text-align:right">📣 Acq. sess.</th><th style="text-align:right">Acq. CA</th><th style="text-align:right">SEO sess.</th></tr></thead><tbody>${wcRows}</tbody></table>` : '';
+  const wcampRows = (a.weeklyCampaigns || []).map(x => `<tr><td>${frd(x.from)}</td><td style="font-size:11px">${(x.top || []).map(c => `${esc((c.campaign || '').slice(0, 28))} <span class="note" style="font-weight:400">(${fEur(c.ca)})</span>`).join('<br>') || '—'}</td></tr>`).join('');
+  const wcampTable = wcampRows ? `<table style="font-size:12px;margin-top:10px"><thead><tr><th>Semaine</th><th>Top campagnes UTM</th></tr></thead><tbody>${wcampRows}</tbody></table>` : '';
+  const crmCard = (wcTable || wcampTable) ? `<div class="card"><h3>📡 CRM & acquisition par semaine</h3>${wcTable}${wcampTable}</div>` : '';
+
+  // ── 6 · Canaux cumul + Jours pics + Ads ──
   const chRows = (a.channels || []).slice(0, 10).map(c => {
     const crm = /e-?mail|crm|newsletter|mailing/i.test(c.canal);
     return `<tr><td>${crm ? '📧 ' : ''}${esc(c.canal)}</td><td style="text-align:right">${fInt(c.sessions)}</td><td style="text-align:right">${fEur(c.ca)}</td><td style="text-align:right">${fInt(c.achats)}</td></tr>`;
   }).join('');
-  const channels = tbl('📡 Canaux d\'acquisition (dont CRM/Email)', '<th>Canal</th><th style="text-align:right">Sessions</th><th style="text-align:right">CA</th><th style="text-align:right">Achats</th>', chRows || null);
-  const campRows = (a.campaigns || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 40))}</td><td style="text-align:right">${fInt(c.sessions)}</td><td style="text-align:right">${fEur(c.ca)}</td></tr>`).join('');
-  const campaigns = tbl('🏷️ Top campagnes UTM', '<th>Campagne</th><th style="text-align:right">Sessions</th><th style="text-align:right">CA</th>', campRows || null);
-  const card3 = (channels || campaigns) ? `<div class="card"><div class="grid cols2">${channels ? `<div>${channels}</div>` : ''}${campaigns ? `<div>${campaigns}</div>` : ''}</div></div>` : '';
+  const channels = tbl('📊 Canaux (cumul période)', '<th>Canal</th><th style="text-align:right">Sessions</th><th style="text-align:right">CA</th><th style="text-align:right">Achats</th>', chRows || null);
+  const peak = tbl('📈 Jours pics à préparer', '<th>Jour N (à préparer)</th><th>Réf. N-1</th><th style="text-align:right">CA N-1</th>',
+    (a.peakDays || []).map(p => `<tr><td>${frd(p.date)}</td><td>${frd(p.n1date)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('') || null);
+  const card6 = (channels || peak) ? `<div class="card"><div class="grid cols2">${channels ? `<div>${channels}</div>` : ''}${peak ? `<div>${peak}</div>` : ''}</div></div>` : '';
 
-  // Ads Google / Meta
   const adsBlock = (label, icon, ad) => {
     if (!ad) return '';
     const top = (ad.top || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 34))}</td><td style="text-align:right">${fEur(c.cost)}</td><td style="text-align:right">${fEur(c.convValue)}</td><td style="text-align:right">${f2(c.roas)}×</td></tr>`).join('');
@@ -74,15 +97,15 @@ function render(a) {
     </div>`;
   };
   const g = adsBlock('Google Ads', '🟢', a.googleAds), m = adsBlock('Meta Ads', '🔵', a.metaAds);
-  const card4 = (g || m) ? `<div class="card"><div class="grid cols2">${g}${m}</div></div>` : '';
+  const adsCard = (g || m) ? `<div class="card"><div class="grid cols2">${g}${m}</div></div>` : '';
 
   const missing = [];
-  if (!a.has.ga) missing.push('canaux/CRM & campagnes (GA non importé sur cette période)');
+  if (!a.has.ga) missing.push('canaux/CRM & campagnes par semaine (GA non importé sur cette période)');
   if (!a.has.googleAds) missing.push('Google Ads');
   if (!a.has.metaAds) missing.push('Meta Ads');
-  const miss = missing.length ? `<div class="card"><div class="note">ℹ️ Non disponible pour cette période (donnée non importée) : ${missing.map(esc).join(' · ')}. L'OMS (CA, produits, familles, pics) reste toujours disponible sur ≥ 24 mois.</div></div>` : '';
+  const miss = missing.length ? `<div class="card"><div class="note">ℹ️ Non disponible pour cette période (donnée non importée) : ${missing.map(esc).join(' · ')}. Charge-les via le panneau de gauche. L'OMS (CA, full/off, semaines, familles, produits) reste l'ossature.</div></div>` : '';
 
-  body.innerHTML = synth + card1 + card2 + card3 + card4 + miss;
+  body.innerHTML = synth + weekCard + topCard + crmCard + card6 + adsCard + miss;
 }
 
 function eqNote() {
@@ -122,11 +145,16 @@ async function setupDataPanel() {
   const mb = document.getElementById('impMeta'); if (mb) mb.addEventListener('click', () => importDated('meta', 'Meta Ads'));
 }
 
-// WSHOP = import complet 24 mois (job asynchrone → poll). Couvre la période N-1.
+// WSHOP = import OMS sur la PÉRIODE N-1 sélectionnée (job asynchrone → poll). Charge aussi
+// l'année précédente (cfrom/cto = −364 j) pour un comparatif vs N-1 sur le Prévisionnel.
 async function importWshop() {
-  impNote('⏳ Import OMS WSHOP (24 mois)…');
+  const from = document.getElementById('from').value, to = document.getElementById('to').value;
+  if (!from || !to) { impNote('⚠ Renseigne d\'abord la période N-1.'); return; }
+  const shift = (iso, days) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + days); return ymd(d); };
+  impNote(`⏳ Import OMS WSHOP sur ${frd(from)} → ${frd(to)}…`);
   try {
-    const r = await fetch('/api/wshop/refresh', { method: 'POST' });
+    const q = `from=${from}&to=${to}&cfrom=${shift(from, -364)}&cto=${shift(to, -364)}`;
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
     if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
     await pollWshop();
   } catch (e) { impNote('⚠ ' + esc(e.message)); }
