@@ -29,6 +29,35 @@ const W_DIMS = {
 };
 const W_FORMS = { kpi: 'Chiffre clé (tuile)', table: 'Tableau', bars: 'Barres', donut: 'Camembert', line: 'Courbe' };
 
+// ── Catalogue des cartes NATIVES (tous les tableaux déjà conçus) — pour les afficher ici aussi ──
+const CARD_LABELS = {
+  kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', cumul: 'Cumul mensuel & atterrissage', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
+  daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
+  landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
+  ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
+  campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
+  funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
+  demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
+};
+const THEME_OF = {
+  kpi: 'P', actionplan: 'PA', cumul: 'P', variance: 'P', perimsynth: 'P',
+  demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
+  daily: 'T', timeline: 'T', timeline2: 'T', famille: 'ES', produits: 'ES',
+  annulations: 'AN', retours: 'AN', returnreasons: 'AN', returngeo: 'AN', returnprod: 'AN', stockalerts: 'SK',
+  pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS',
+  ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
+  pagesrc: 'CR', campaignland: 'CR', zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
+  marketplace: 'MP', crosschannel: 'MP', saisoncompare: 'OF', saison: 'OF', renta: 'OF', ca: 'Z', funnel: 'Z',
+};
+const THEME_CAT = { P: 'pilotage', PA: 'pilotage', T: 'pilotage', Z: 'pilotage', ES: 'estore', AQ: 'trafic', OS: 'trafic', CO: 'commercial', OF: 'commercial', SK: 'appro', AN: 'experience', IN: 'international', MP: 'marketplace', CR: 'croisees' };
+const CARD_FORMAT = {};
+['demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts'].forEach(k => CARD_FORMAT[k] = 'commerciale');
+['saison', 'saisoncompare', 'renta'].forEach(k => CARD_FORMAT[k] = 'saison');
+function nativeCards() { return Object.keys(CARD_LABELS).map(k => ({ key: k, title: CARD_LABELS[k], category: THEME_CAT[THEME_OF[k]] || 'pilotage', format: CARD_FORMAT[k] || 'reporting', native: true })); }
+
 let TABLES = [];
 let EDIT_ID = null;
 
@@ -94,17 +123,19 @@ async function del(id) {
 
 function render() {
   const cont = $('catalog');
-  if (!TABLES.length) { cont.innerHTML = '<div class="card"><div class="note">Aucun tableau créé pour l\'instant. Compose-en un à gauche → il apparaîtra ici et dans « 📋 Choisir les tableaux » des vues.</div></div>'; return; }
-  const byCat = {}; TABLES.forEach(t => { (byCat[t.category] = byCat[t.category] || []).push(t); });
-  cont.innerHTML = CAT_ORDER.filter(c => byCat[c]).map(c => {
-    const rows = byCat[c].map(t => `<tr>
-      <td><b>${esc(t.title)}</b></td>
-      <td>${esc(FORMAT_LABELS[t.format] || t.format)}</td>
-      <td>${esc((W_DIMS[t.dim] || {}).label || t.dim)} · ${esc(W_METRICS[t.metric] || t.metric)} · ${esc(W_FORMS[t.form] || t.form)}${t.n1 ? ' · vs N-1' : ''}</td>
-      <td style="text-align:right;white-space:nowrap"><button class="btn" data-edit="${t.id}" title="Modifier">✏️</button> <button class="btn" data-del="${t.id}" title="Supprimer">🗑️</button></td>
-    </tr>`).join('');
-    return `<div class="card"><h3>${esc(CAT_META[c] || c)}</h3><table style="font-size:12px"><thead><tr><th>Titre</th><th>Format</th><th>Définition</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }).join('');
+  // Tous les tableaux : cartes NATIVES (déjà conçues, lecture seule) + tableaux du REGISTRE (éditables).
+  const all = nativeCards().concat(TABLES.map(t => Object.assign({ native: false }, t)));
+  const byCat = {}; all.forEach(t => { (byCat[t.category] = byCat[t.category] || []).push(t); });
+  const nNative = nativeCards().length;
+  cont.innerHTML = `<div class="card"><div class="note">📦 <b>${nNative} cartes natives</b> (déjà conçues, lecture seule) + <b>${TABLES.length} tableau(x) créé(s)</b> (🔗 réutilisables, éditables). Tous disponibles dans « 📋 Choisir les tableaux » des vues.</div></div>` +
+    CAT_ORDER.filter(c => byCat[c]).map(c => {
+      const rows = byCat[c].map(t => {
+        if (t.native) return `<tr><td>${esc(t.title)}</td><td>${esc(FORMAT_LABELS[t.format] || t.format)}</td><td><span class="note" style="margin:0">Carte native</span></td><td></td></tr>`;
+        const def = `${esc((W_DIMS[t.dim] || {}).label || t.dim)} · ${esc(W_METRICS[t.metric] || t.metric)} · ${esc(W_FORMS[t.form] || t.form)}${t.n1 ? ' · vs N-1' : ''}`;
+        return `<tr><td><b>🔗 ${esc(t.title)}</b></td><td>${esc(FORMAT_LABELS[t.format] || t.format)}</td><td>${def}</td><td style="text-align:right;white-space:nowrap"><button class="btn" data-edit="${t.id}" title="Modifier">✏️</button> <button class="btn" data-del="${t.id}" title="Supprimer">🗑️</button></td></tr>`;
+      }).join('');
+      return `<div class="card"><h3>${esc(CAT_META[c] || c)}</h3><table style="font-size:12px"><thead><tr><th>Titre</th><th>Format</th><th>Définition</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }).join('');
   cont.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { const t = TABLES.find(x => x.id === b.dataset.edit); if (t) editTable(t); }));
   cont.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => del(b.dataset.del)));
 }

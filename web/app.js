@@ -188,6 +188,30 @@ function formatOf(k) { const w = widgetEntry(k); if (w) return w.format || 'repo
 function titleOf(k) { const w = widgetEntry(k); if (w) return w.title || 'Tableau'; return CARD_LABELS[k] || k; }
 // Clé d'identité d'une entrée de layout (pour l'appartenance à une vue).
 function entryKey(k) { return typeof k === 'string' ? k : (k.ref ? 'r:' + k.ref : 'w:' + (k.id || '')); }
+
+// Modèles de vues prêts à l'emploi (point de départ en 1 clic dans la pop-in).
+const VIEW_TEMPLATES = {
+  matin: { label: '🌅 Matin e-commerce', cards: ['kpi', 'cumul', 'timeline', 'produits'] },
+  direction: { label: '🏛️ Direction', cards: ['kpi', 'cumul', 'variance', 'famille', 'marketplace'] },
+  acquisition: { label: '📡 Acquisition', cards: ['ga', 'channels', 'canaltype', 'ads', 'campaigns'] },
+  appro: { label: '📦 Appro & Stock', cards: ['stockalerts', 'famille', 'produits', 'returnprod'] },
+  commercial: { label: '💰 Commercial', cards: ['demarque', 'fulloff', 'promo', 'offrecompare'] },
+};
+// Donnée externe requise par carte (pour le badge + le filtre « données disponibles »). null = OMS (toujours là).
+const CARD_NEEDS = {
+  ga: 'ga', channels: 'ga', canaltype: 'ga', campaigns: 'ga', pages: 'ga', landing: 'ga', lostpages: 'ga', pagesrc: 'ga', itemfunnel: 'ga', gafunnel: 'ga', device: 'ga', ttpays: 'ga', campaignland: 'ga',
+  ads: 'ads', metaads: 'metaads', metasocial: 'metaads',
+};
+const NEED_LABEL = { ga: 'GA4', ads: 'Ads', metaads: 'Meta' };
+function needOf(k) {
+  const w = widgetEntry(k);
+  if (w) return ['sessions', 'revenue', 'purchases'].includes(w.metric) ? 'ga' : null;
+  return CARD_NEEDS[k] || null;
+}
+function dataAvailable(need) { return !need || fileLoaded(need === 'metaads' ? 'metaads' : need); }
+// Favoris (épinglés en tête de la pop-in) — par navigateur.
+function favSet() { try { return new Set(JSON.parse(localStorage.getItem('bi_favTables') || '[]')); } catch (e) { return new Set(); } }
+function favSave(s) { try { localStorage.setItem('bi_favTables', JSON.stringify([...s])); } catch (e) { /* quota */ } }
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -589,6 +613,7 @@ function initModules() {
   const es = document.getElementById('editViewSel'); if (es && !es._wired) { es._wired = true; es.addEventListener('change', () => { EDIT_VIEW = es.value; loadReport(); }); }
   const sv = document.getElementById('editSave'); if (sv && !sv._wired) { sv._wired = true; sv.addEventListener('click', () => saveEditView()); }
   const ct = document.getElementById('chooseTablesBtn'); if (ct && !ct._wired) { ct._wired = true; ct.addEventListener('click', () => openTableSelector()); }
+  const dv = document.getElementById('dupViewBtn'); if (dv && !dv._wired) { dv._wired = true; dv.addEventListener('click', () => duplicateView()); }
   const rs = document.getElementById('editReset'); if (rs && !rs._wired) { rs._wired = true; rs.addEventListener('click', async () => { if (!EDIT_VIEW) return; if (!confirm('Réinitialiser cette vue à sa configuration d\'origine ?')) return; try { await resetLayout(EDIT_VIEW); } catch (e) { /* best-effort */ } loadReport(); }); }
   const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
   // 🧱 Nouveau widget (en mode édition) : compose un widget et l'insère en tête, déjà coché.
@@ -2219,53 +2244,86 @@ async function saveEditView() {
     exitEditMode();
   } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; } alert('Échec de l\'enregistrement : ' + e.message); }
 }
-// ── Pop-in de sélection des tableaux : liste compacte par catégorie + format + recherche ──
-// Cases à cocher pour ajouter/retirer cartes natives ET tableaux du registre (Création).
+// ── Pop-in de sélection des tableaux : liste compacte par catégorie + format ──
+// Cases à cocher (cartes natives + registre Création) + modèles 1 clic + favoris
+// + badge/filtre « données disponibles ». Le drag'n'drop / ✕ Retirer affinent ensuite.
 function openTableSelector() {
   if (!EDIT_VIEW) return;
   if (document.getElementById('tableSelOv')) return;
   const cur = getLayout(EDIT_VIEW).slice();
-  const members = new Set(cur.map(entryKey));
   const items = [];
-  ALL_CARDS.forEach(k => items.push({ mkey: k, entry: k, title: CARD_LABELS[k] || k, cat: catOf(k), fmt: formatOf(k), kind: 'card' }));
-  Object.values(TABLES).forEach(t => items.push({ mkey: 'r:' + t.id, entry: { ref: t.id }, title: t.title, cat: t.category || 'pilotage', fmt: t.format || 'reporting', kind: 'ref' }));
-  const groups = CAT_ORDER.map(cat => {
-    const its = items.filter(i => i.cat === cat); if (!its.length) return '';
-    const rows = its.map(i => `<label class="tsel-row" data-mkey="${esc(i.mkey)}" data-search="${esc((i.title + ' ' + (CAT_META[cat] || '') + ' ' + (FORMAT_LABELS[i.fmt] || '')).toLowerCase())}">
-      <input type="checkbox" ${members.has(i.mkey) ? 'checked' : ''}>
-      <span class="tsel-t">${i.kind === 'ref' ? '🔗 ' : ''}${esc(i.title)}</span>
-      <span class="tsel-f">${esc(FORMAT_LABELS[i.fmt] || i.fmt)}</span></label>`).join('');
-    return `<div class="tsel-cat"><div class="tsel-cat-h">${CAT_META[cat] || cat}</div>${rows}</div>`;
-  }).join('');
+  ALL_CARDS.forEach(k => items.push({ mkey: k, entry: k, title: CARD_LABELS[k] || k, cat: catOf(k), fmt: formatOf(k), kind: 'card', need: needOf(k) }));
+  Object.values(TABLES).forEach(t => items.push({ mkey: 'r:' + t.id, entry: { ref: t.id }, title: t.title, cat: t.category || 'pilotage', fmt: t.format || 'reporting', kind: 'ref', need: needOf({ ref: t.id }) }));
+  const itemByKey = {}; items.forEach(i => { itemByKey[i.mkey] = i; });
+  const state = { checked: new Set(cur.map(entryKey).filter(k => itemByKey[k])), favs: favSet(), q: '', onlyAvail: false };
+
+  const tplBtns = Object.entries(VIEW_TEMPLATES).map(([k, t]) => `<button class="btn" data-tpl="${k}" title="Partir de ce modèle (remplace la sélection)">${esc(t.label)}</button>`).join('');
   const ov = document.createElement('div'); ov.className = 'modal-ov'; ov.id = 'tableSelOv';
   ov.innerHTML = `<div class="modal-box">
     <div class="modal-head"><b>📋 Choisir les tableaux</b> <span class="note" style="margin:0">— ${esc(viewLabel(EDIT_VIEW))}</span><div class="spacer" style="flex:1"></div><button class="btn" id="tselClose" title="Fermer">✕</button></div>
-    <input id="tselSearch" class="dt" placeholder="🔎 Rechercher un tableau, une catégorie, un format…" style="width:100%;margin:8px 0">
-    <div class="tsel-list">${groups}</div>
+    <div class="note" style="margin:8px 0 3px">Partir d'un modèle :</div>
+    <div class="toolbar" id="tselTpl" style="gap:6px;flex-wrap:wrap">${tplBtns}</div>
+    <div class="toolbar" style="gap:8px;margin:8px 0">
+      <input id="tselSearch" class="dt" placeholder="🔎 Rechercher un tableau, une catégorie, un format…" style="flex:1;min-width:140px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap"><input type="checkbox" id="tselAvail" style="width:15px;height:15px;accent-color:var(--a)"> Données dispo. uniquement</label>
+    </div>
+    <div class="tsel-list" id="tselList"></div>
     <div class="modal-foot"><span class="note" id="tselCount" style="margin:0"></span><div class="spacer" style="flex:1"></div><button class="btn" id="tselCancel">Annuler</button><button class="btn primary" id="tselApply">Appliquer</button></div>
   </div>`;
   document.body.appendChild(ov);
+
+  const rowHtml = i => {
+    const avail = dataAvailable(i.need);
+    const needBadge = i.need ? `<span class="tsel-need${avail ? '' : ' off'}" title="${avail ? 'Donnée chargée' : 'Donnée non importée sur cette période'}">${NEED_LABEL[i.need]}</span>` : '';
+    return `<label class="tsel-row" data-mkey="${esc(i.mkey)}">
+      <input type="checkbox" ${state.checked.has(i.mkey) ? 'checked' : ''}>
+      <span class="tsel-star" data-fav="${esc(i.mkey)}" title="Épingler en favori">${state.favs.has(i.mkey) ? '★' : '☆'}</span>
+      <span class="tsel-t">${i.kind === 'ref' ? '🔗 ' : ''}${esc(i.title)}</span>
+      ${needBadge}<span class="tsel-f">${esc(FORMAT_LABELS[i.fmt] || i.fmt)}</span></label>`;
+  };
+  const recount = () => { ov.querySelector('#tselCount').textContent = state.checked.size + ' tableau(x) sélectionné(s)'; };
+  const renderList = () => {
+    const q = state.q.toLowerCase().trim();
+    const match = i => (!q || (i.title + ' ' + (CAT_META[i.cat] || '') + ' ' + (FORMAT_LABELS[i.fmt] || '')).toLowerCase().includes(q)) && (!state.onlyAvail || dataAvailable(i.need));
+    const vis = items.filter(match);
+    let html = '';
+    const favItems = vis.filter(i => state.favs.has(i.mkey));
+    if (favItems.length) html += `<div class="tsel-cat"><div class="tsel-cat-h">⭐ Favoris</div>${favItems.map(rowHtml).join('')}</div>`;
+    CAT_ORDER.forEach(cat => { const its = vis.filter(i => i.cat === cat); if (its.length) html += `<div class="tsel-cat"><div class="tsel-cat-h">${CAT_META[cat] || cat}</div>${its.map(rowHtml).join('')}</div>`; });
+    ov.querySelector('#tselList').innerHTML = html || '<div class="note" style="padding:12px">Aucun tableau ne correspond.</div>';
+    recount();
+  };
+  const list = ov.querySelector('#tselList');
+  list.addEventListener('change', e => { const inp = e.target.closest('input[type=checkbox]'); if (!inp) return; const mk = inp.closest('.tsel-row').dataset.mkey; if (inp.checked) state.checked.add(mk); else state.checked.delete(mk); recount(); });
+  list.addEventListener('click', e => { const st = e.target.closest('.tsel-star'); if (!st) return; e.preventDefault(); e.stopPropagation(); const mk = st.dataset.fav; if (state.favs.has(mk)) state.favs.delete(mk); else state.favs.add(mk); favSave(state.favs); renderList(); });
+  ov.querySelector('#tselSearch').addEventListener('input', e => { state.q = e.target.value; renderList(); });
+  ov.querySelector('#tselAvail').addEventListener('change', e => { state.onlyAvail = e.target.checked; renderList(); });
+  ov.querySelector('#tselTpl').addEventListener('click', e => { const b = e.target.closest('[data-tpl]'); if (!b) return; const tpl = VIEW_TEMPLATES[b.dataset.tpl]; if (!tpl) return; state.checked = new Set(tpl.cards.filter(k => itemByKey[k])); renderList(); });
   const close = () => ov.remove();
-  const recount = () => { ov.querySelector('#tselCount').textContent = ov.querySelectorAll('.tsel-row input:checked').length + ' tableau(x) sélectionné(s)'; };
-  ov.querySelector('#tselSearch').addEventListener('input', e => {
-    const q = e.target.value.toLowerCase().trim();
-    ov.querySelectorAll('.tsel-row').forEach(r => { r.style.display = (!q || r.dataset.search.includes(q)) ? '' : 'none'; });
-    ov.querySelectorAll('.tsel-cat').forEach(c => { c.style.display = [...c.querySelectorAll('.tsel-row')].some(r => r.style.display !== 'none') ? '' : 'none'; });
-  });
-  ov.querySelectorAll('.tsel-row input').forEach(i => i.addEventListener('change', recount));
   ov.querySelector('#tselClose').onclick = close; ov.querySelector('#tselCancel').onclick = close;
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   ov.querySelector('#tselApply').onclick = async () => {
-    const checked = new Set([...ov.querySelectorAll('.tsel-row input:checked')].map(i => i.closest('.tsel-row').dataset.mkey));
-    const kept = cur.filter(k => checked.has(entryKey(k)));
+    const kept = cur.filter(k => state.checked.has(entryKey(k)));
     const keptKeys = new Set(kept.map(entryKey));
-    const added = items.filter(i => checked.has(i.mkey) && !keptKeys.has(i.mkey)).map(i => i.entry);
+    const added = items.filter(i => state.checked.has(i.mkey) && !keptKeys.has(i.mkey)).map(i => i.entry);
     const next = kept.concat(added);
     if (!next.length) { alert('Sélectionne au moins un tableau.'); return; }
     try { await persistLayout(EDIT_VIEW, next); close(); loadReport(); }
     catch (e) { alert('Échec de l\'enregistrement : ' + (e.message || 'erreur')); }
   };
-  recount();
+  renderList();
+}
+
+// Duplique la vue en édition dans un nouveau tableau de bord personnel (point de départ).
+async function duplicateView() {
+  if (!EDIT_VIEW) return;
+  if (!canCreateView()) { alert('Votre compte est en lecture seule — la duplication n\'est pas autorisée.'); return; }
+  const name = (prompt('Nom de la copie ?', viewLabel(EDIT_VIEW) + ' (copie)') || '').trim();
+  if (!name) return;
+  const layout = getLayout(EDIT_VIEW).slice();
+  const key = 'd' + Date.now().toString(36);
+  try { await saveMyView(key, name, layout); } catch (e) { alert('Échec de la duplication : ' + e.message); return; }
+  EDIT_VIEW = null; CURRENT_MODULE = 'my:' + key; initModules(); enterEditMode('my:' + key);
 }
 
 // target optionnel : 'my:<key>' (perso, tout utilisateur) ou clé de vue partagée (admin).
