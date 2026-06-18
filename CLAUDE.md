@@ -29,7 +29,7 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
   → corrige le « mauvais identifiants » sur un MDP correct (ex. « Marine » vs « marine »). `POST /auth/change-password` (son propre MdP, upsert DB ; pour l'admin
   bootstrap → crée sa ligne) ; admin `PATCH /auth/users/:u {password}` (réinitialise un compte). UI : page Admin.
 - **Montage des routes** (`index.js`) : `/healthz`; `/auth`; `/api/ingest`; `/api/report` (**reports.js ET pdf.js**);
-  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/meta`; `/api/reco`; `/api/objectives`; `/api/feedback`; `/api/specs/reload` (admin);
+  `/api/ga4`; `/api/wshop`; `/api/googleads`; `/api/meta`; `/api/reco`; `/api/objectives`; `/api/feedback`; `/api/snapshots`; `/api/specs/reload` (admin);
   statique `web/` (no-cache html/js/css). `express.json` limite **12 Mo** (captures du module Retours).
 - **Module Retours** (`feedback.js`, page `web/feedback.html`/`feedback.js`, onglet header 💬) : retours early users
   PARTAGÉS (titre + description + **screenshots collés/uploadés, réduits côté client** → data URLs jsonb + commentaires).
@@ -49,6 +49,7 @@ Outil BI e-commerce (Vanessa Bruno) : reporting **N vs N-1** par module. Déploy
 | `server/pdf.js` (401 l.) | Export PDF (sections par type quotidien/hebdo, pdfkit). |
 | `server/reco.js` (187 l.) | Reco IA (Anthropic) + endpoint `/context` (gratuit, prompt à coller dans Claude.ai). |
 | `server/store.js`/`db.js`/`auth.js`/`objectives.js`/`index.js` | Persistance, RBAC, objectifs, montage. |
+| `server/snapshots.js` | **Reports FIGÉS** (gel d'un `rep` à instant T → historique partagé in-app). Liste légère en RAM, payload `rep` en base (table `report_snapshots`, repli RAM sans `DATABASE_URL`). Routes `GET/POST/DELETE /api/snapshots` (POST **reconstruit `rep` côté serveur** depuis les params de `/api/report` ; DELETE admin). Front : barre « 📌 Figer ce report » / « 📚 Historique », réouverture via `openFrozenReport` (rejoue le `rep` dans le layout de son profil + « Revenir au live »). |
 | `web/app.js` (2062 l.) | Frontend central (cartes, graphes, bilan, plan d'action, handlers). |
 | `web/saison.js`/`saison.html` | Page « Analyse de saison » (à part, période longue). |
 
@@ -339,6 +340,8 @@ nonVendus ; `baseRef` = modèle, `isSeasonal` = drop `P\d`), `demarque` (détect
 ## 7. Structure de l'objet `rep` (`buildReport`)
 Source **unique** consommée par `/api/report`, le **PDF**, et la **reco**. Clés principales :
 `meta` (preset, from/to, isAll, cf/ct, dim, gaDimUnavailable, has*, scope, consent) · `kpiEShop{n,n1}` · `ca{n,n1}` ·
+`cumul` (**cumul mensuel MTD** : `{month, asOfDay, daysInMonth, ca, caN1, n1Full, commandes, pieces, byDay[{day,n,n1}], objectif, pctObjectif, resteAFaire, runRate, atterrissage, projVsObjectif}` ; `calc.cumulMTD` ; atterrissage projeté sur le **profil N-1** [cumul N + reste-du-mois observé en N-1], pas linéaire ; objectif lu via `objectives.getMonthObjectiveCA(mois de to)` → carte `cumul` + courbe `#cumulChart`) ·
+`anticipation` (**N-1 de la fenêtre À VENIR** : `{window{refFrom,refTo,futureFrom,futureTo}, horizonDays(42), total, offShare, peakDays[{date,n1date,ca}], weeks[], topProduits[], topFamilles[], playbook[]}` ; `calc.buildAnticipation(datasets[{rows,map}], refMap, {today=omsN.dateMax, horizonDays})` ; décalage **−364 j** ; combine OMS N+N-1 ; checklist déterministe « à ne pas oublier » → carte `anticipation`, thème **AV**) ·
 `marketplace{n,n1,cancelRefund}` · `pays[]` · `saison[]` · `seasonCompare` · `crossChannel` · `cancellations{n,n1,detail}` ·
 `returns{n,n1,tauxRetour,topProduits}` · `famille[]` · `produits{topN,topN1,manquants,topVendus,topRetournes}` ·
 `topProduits{n,n1}` · `topProduitsQte` · `familleDetail` · `familleParPays` · `fullOffFamille`/`fullOffProduits` ·
@@ -372,8 +375,9 @@ Source **unique** consommée par `/api/report`, le **PDF**, et la **reco**. Clé
 ## 9. Frontend (`app.js`) — cartes & graphiques
 
 ### Modules / thèmes
-`MODULE_ORDER` (barre de vues, filtrée RBAC). Thèmes `THEME_ORDER = [P,CO,T,ES,AN,SK,OS,AQ,IN,MP,CR,OF,Z]`
-(`THEME_META` = bannières ; **AN** = 🚫 Annulations & Remboursements [cartes `annulations`+`retours`], **SK** = 🔔 Alertes stock [`stockalerts`]).
+`MODULE_ORDER` (barre de vues, filtrée RBAC). Thèmes `THEME_ORDER = [P,PA,AV,CO,T,ES,AN,SK,OS,AQ,IN,MP,CR,OF,Z]`
+(`THEME_META` = bannières ; **AV** = 🔮 Anticipation [carte `anticipation`], **AN** = 🚫 Annulations & Remboursements [cartes `annulations`+`retours`], **SK** = 🔔 Alertes stock [`stockalerts`]).
+**Profils de cadence** (le `preset` du module est désormais appliqué au changement de vue via `switchModule` → clic du raccourci `[data-range]` correspondant ; ignoré si `m.dates` ou preset sans raccourci `all`/`today`) : **`dailysoft`** (🌅 Matin, preset `yesterday` : kpi+cumul+timeline+produits), **`hebdo`** (📅 Hebdo & cumul mois, preset `week` : kpi+cumul+familles+produits+daily+channels+annulations+retours), **`anticipation`** (🔮 N-1 à venir). `direction` porte la carte `cumul`.
 Modules notables : `full` (layout exhaustif : kpi, actionplan, timeline, timeline2, daily, famille, produits, …,
 ga, channels, canaltype, ads, campaigns, …, marketplace, crosschannel, …, saisoncompare, saison, renta, ca) ;
 `acquisition` (ga, **channels, canaltype**, ads, campaigns — ordre KPI→détail→récap, choix métier) ; `international`
