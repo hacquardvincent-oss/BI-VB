@@ -47,6 +47,12 @@ async function init() {
     data       jsonb NOT NULL DEFAULT '{}'::jsonb,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // Registre GLOBAL de tableaux réutilisables (page Création) : data = { tableId: {title,category,format,...widget} }
+  await pool.query(`CREATE TABLE IF NOT EXISTS custom_tables (
+    id         int PRIMARY KEY DEFAULT 1,
+    data       jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
   // Tableaux de bord PERSONNELS (1 ligne / utilisateur) : data = { key: {label, cards[]} }
   await pool.query(`CREATE TABLE IF NOT EXISTS user_views (
     username   text PRIMARY KEY,

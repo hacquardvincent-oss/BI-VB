@@ -43,6 +43,8 @@ const W_FORMS = ['kpi', 'table', 'bars', 'donut', 'line'];
 function cleanCard(c) {
   if (typeof c === 'string') return KNOWN.has(c) ? c : null;
   if (c && typeof c === 'object') {
+    // Référence à un tableau du registre global (page Création) → résolu côté front.
+    if (c.ref) { const rid = c.ref.toString().slice(0, 24).replace(/[^a-z0-9_-]/gi, ''); return rid ? { ref: rid } : null; }
     const id = (c.id || '').toString().slice(0, 24).replace(/[^a-z0-9_-]/gi, '');
     if (!id || !W_DIMS.includes(c.dim) || !W_METRICS.includes(c.metric) || !W_FORMS.includes(c.form)) return null;
     return { id, title: (c.title || '').toString().slice(0, 60), dim: c.dim, metric: c.metric, form: c.form, top: Math.min(50, Math.max(1, parseInt(c.top) || 10)), n1: !!c.n1 };
@@ -58,7 +60,7 @@ router.put('/:module', requireAuth, (req, res) => {
   const seen = new Set(); const clean = [];
   arr.forEach(c => {
     const v = cleanCard(c); if (!v) return;
-    const k = typeof v === 'string' ? v : 'w:' + v.id;
+    const k = typeof v === 'string' ? v : (v.ref ? 'r:' + v.ref : 'w:' + v.id);
     if (seen.has(k)) return; seen.add(k); clean.push(v);
   });
   if (!clean.length) return res.status(400).json({ error: 'aucun tableau valide' });

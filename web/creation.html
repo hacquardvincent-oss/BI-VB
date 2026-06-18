@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Création</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting (tableaux de pilotage standard)">📊 Reporting</a>
+    <a class="pb" href="/commerciale.html" title="Pilotage d'une opération commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
+    <a class="pb" href="/objectifs.html" title="Objectifs & prévisions mensuelles">🎯 Objectifs</a>
+    <a class="pb" href="/anticipation.html" title="Prévisionnel : préparer la période N à partir de l'historique N-1">🔮 Prévisionnel</a>
+    <a class="pb on" href="/creation.html" title="Création & catalogue des tableaux réutilisables">🧱 Création</a>
+    <a class="pb" href="/feedback.html" title="Retours & idées des utilisateurs">💬 Retours</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn hidden" id="adminBtn" title="Administration des comptes">👤 Admin</button>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap layout-side no-rightnav">
+  <aside id="setupCol">
+    <div class="card setup-card">
+      <h3 id="formTitle">➕ Créer un tableau</h3>
+      <div class="note">Compose un tableau réutilisable (Donnée × Métrique × Forme). Il sera disponible dans toutes les vues via « 📋 Choisir les tableaux ». Le modifier ici se répercute partout.</div>
+      <label class="setlabel">Titre</label>
+      <input id="fTitle" class="dt" style="width:100%" placeholder="Ex. Top familles (CA)">
+      <label class="setlabel">Catégorie (regroupement)</label>
+      <select id="fCategory" class="dt" style="width:100%"></select>
+      <label class="setlabel">Format de base</label>
+      <select id="fFormat" class="dt" style="width:100%"></select>
+      <label class="setlabel">Donnée (dimension)</label>
+      <select id="fDim" class="dt" style="width:100%"></select>
+      <label class="setlabel">Métrique</label>
+      <select id="fMetric" class="dt" style="width:100%"></select>
+      <label class="setlabel">Forme</label>
+      <select id="fForm" class="dt" style="width:100%"></select>
+      <label class="setlabel">Top N (1–50)</label>
+      <input id="fTop" type="number" min="1" max="50" value="10" class="dt" style="width:100%">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px"><input type="checkbox" id="fN1" style="width:16px;height:16px;accent-color:var(--a)"> Comparer à N-1</label>
+      <div class="toolbar" style="margin-top:12px;gap:8px">
+        <button class="btn primary" id="fSave">💾 Enregistrer</button>
+        <button class="btn hidden" id="fCancel">Annuler</button>
+        <span class="note" id="fNote" style="margin:0"></span>
+      </div>
+    </div>
+  </aside>
+
+  <main id="mainCol">
+    <div class="card">
+      <h3>🗂️ Catalogue des tableaux</h3>
+      <div class="note">Tous les tableaux réutilisables, regroupés par catégorie data-analyse. Clique ✏️ pour modifier, 🗑️ pour supprimer.</div>
+    </div>
+    <div id="catalog">
+      <div class="card"><div class="note">Chargement…</div></div>
+    </div>
+  </main>
+</div>
+
+<script src="/creation.js"></script>
+</body>
+</html>

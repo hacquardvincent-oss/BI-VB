@@ -25,6 +25,7 @@ const objectives = require('./objectives');
 const feedback = require('./feedback');
 const snapshots = require('./snapshots');
 const anticipation = require('./anticipation');
+const tables = require('./tables');
 const layouts = require('./layouts');
 const userviews = require('./userviews');
 const sftp = require('./sftp');
@@ -63,6 +64,7 @@ app.use('/api/objectives', objectives.router);
 app.use('/api/feedback', feedback.router);
 app.use('/api/snapshots', snapshots.router);
 app.use('/api/anticipation', anticipation.router);
+app.use('/api/tables', tables.router);
 app.use('/api/layouts', layouts.router);
 app.use('/api/myviews', userviews.router);
 
@@ -140,6 +142,7 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     await objectives.hydrate();
     await feedback.hydrate();
     await snapshots.hydrate();
+    await tables.hydrate();
     await layouts.hydrate();
   } catch (e) {
     console.error('[bidash] init base KO (bascule en mémoire) :', e.message);

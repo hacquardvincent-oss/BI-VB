@@ -19,6 +19,7 @@
     <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
     <a class="pb" href="/objectifs.html" title="Objectifs & prévisions mensuelles">🎯 Objectifs</a>
     <a class="pb" href="/anticipation.html" title="Anticiper la période N à partir de l'historique N-1">🔮 Prévisionnel</a>
+    <a class="pb" href="/creation.html" title="Création & catalogue des tableaux réutilisables">🧱 Création</a>
     <a class="pb" href="/feedback.html" title="Retours & idées des utilisateurs">💬 Retours</a>
   </nav>
   <div class="spacer"></div>
@@ -47,8 +48,9 @@
       <select id="editViewSel" class="dt"></select>
       <input id="editViewName" class="dt hidden" placeholder="Nom du tableau de bord" style="min-width:160px">
       <span class="pill" id="editCount"></span>
-      <span class="note" style="margin:0">« + Ajouter » sur un tableau pour l'inclure · ⠿ pour réordonner.</span>
+      <span class="note" style="margin:0">📋 pour choisir les tableaux (cases à cocher) · ✕ pour retirer · ⠿ pour réordonner.</span>
       <div class="spacer" style="flex:1"></div>
+      <button class="btn primary" id="chooseTablesBtn" title="Choisir les tableaux de cette vue (liste par catégorie + cases à cocher)">📋 Choisir les tableaux</button>
       <button class="btn" id="addWidgetBtn" title="Composer un tableau : donnée × métrique × forme">🧱 Nouveau tableau</button>
       <button class="btn" id="editReset" title="Revenir à la configuration d'origine">↺</button>
       <button class="btn" id="editCancel">Annuler</button>

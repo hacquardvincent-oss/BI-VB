@@ -167,6 +167,27 @@ const CARD_LABELS = {
 };
 const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+
+// ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
+// Sert à la pop-in de sélection (liste compacte par catégorie + format) et à la page Création.
+const CAT_ORDER = ['pilotage', 'estore', 'trafic', 'commercial', 'appro', 'experience', 'international', 'marketplace', 'croisees'];
+const CAT_META = { pilotage: '🎯 Pilotage', estore: '🛒 E-Store', trafic: '📡 Trafic & Acquisition', commercial: '💰 Commercial & Offre', appro: '📦 Approvisionnement & Stock', experience: '💬 Expérience client', international: '🌍 International', marketplace: '🏬 Marketplace', croisees: '🔀 Analyses croisées' };
+const FORMAT_LABELS = { reporting: 'Reporting', commerciale: 'Analyse commerciale', saison: 'Analyse de saison' };
+const THEME_CAT = { P: 'pilotage', PA: 'pilotage', T: 'pilotage', Z: 'pilotage', ES: 'estore', AQ: 'trafic', OS: 'trafic', CO: 'commercial', OF: 'commercial', SK: 'appro', AN: 'experience', IN: 'international', MP: 'marketplace', CR: 'croisees' };
+const CARD_FORMAT = {};
+['demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts'].forEach(k => CARD_FORMAT[k] = 'commerciale');
+['saison', 'saisoncompare', 'renta'].forEach(k => CARD_FORMAT[k] = 'saison');
+
+// Registre GLOBAL des tableaux réutilisables (page Création), chargé au boot depuis /api/tables.
+let TABLES = {}; // { id: {id,title,category,format,dim,metric,form,top,n1} }
+async function loadTables() { try { const r = await fetch('/api/tables'); if (r.ok) { const j = await r.json(); TABLES = {}; (j.tables || []).forEach(t => { TABLES[t.id] = t; }); } } catch (e) { /* registre indispo */ } }
+// Résout une entrée de layout en widget rendable : {ref:id}→table du registre, objet widget→lui-même, sinon null.
+function widgetEntry(k) { if (typeof k !== 'object' || !k) return null; if (k.ref) return TABLES[k.ref] || null; return k; }
+function catOf(k) { const w = widgetEntry(k); if (w) return w.category || 'pilotage'; return THEME_CAT[THEME_OF[k]] || 'pilotage'; }
+function formatOf(k) { const w = widgetEntry(k); if (w) return w.format || 'reporting'; return CARD_FORMAT[k] || 'reporting'; }
+function titleOf(k) { const w = widgetEntry(k); if (w) return w.title || 'Tableau'; return CARD_LABELS[k] || k; }
+// Clé d'identité d'une entrée de layout (pour l'appartenance à une vue).
+function entryKey(k) { return typeof k === 'string' ? k : (k.ref ? 'r:' + k.ref : 'w:' + (k.id || '')); }
 // Vues personnalisées PARTAGÉES, enregistrées côté serveur (table layouts, persistées en base).
 // SERVER_LAYOUTS chargé au démarrage → getLayout reste synchrone (utilisé dans le rendu).
 let SERVER_LAYOUTS = {};
@@ -567,6 +588,7 @@ function initModules() {
   const nt = document.getElementById('navToggle'); if (nt && !nt._wired) { nt._wired = true; nt.addEventListener('click', () => { const n = document.getElementById('reportNav'); if (n) n.classList.toggle('open'); }); }
   const es = document.getElementById('editViewSel'); if (es && !es._wired) { es._wired = true; es.addEventListener('change', () => { EDIT_VIEW = es.value; loadReport(); }); }
   const sv = document.getElementById('editSave'); if (sv && !sv._wired) { sv._wired = true; sv.addEventListener('click', () => saveEditView()); }
+  const ct = document.getElementById('chooseTablesBtn'); if (ct && !ct._wired) { ct._wired = true; ct.addEventListener('click', () => openTableSelector()); }
   const rs = document.getElementById('editReset'); if (rs && !rs._wired) { rs._wired = true; rs.addEventListener('click', async () => { if (!EDIT_VIEW) return; if (!confirm('Réinitialiser cette vue à sa configuration d\'origine ?')) return; try { await resetLayout(EDIT_VIEW); } catch (e) { /* best-effort */ } loadReport(); }); }
   const cx = document.getElementById('editCancel'); if (cx && !cx._wired) { cx._wired = true; cx.addEventListener('click', () => exitEditMode()); }
   // 🧱 Nouveau widget (en mode édition) : compose un widget et l'insère en tête, déjà coché.
@@ -1991,7 +2013,7 @@ function renderReport(rep) {
     // layout corrompu par un ancien réordonnancement (sinon section + ancre du sommaire apparaissaient en double).
     let lastTheme = null; const out = []; const seenKeys = new Set(), seenThemes = new Set();
     layout.forEach(k => {
-      if (typeof k === 'object' && k) { const html = renderCustomWidget(k, rep); if (html) out.push(html.replace('<div class="card', `<div data-wid="${esc(k.id)}" class="card`)); return; }
+      if (typeof k === 'object' && k) { const w = widgetEntry(k); if (!w) return; const html = renderCustomWidget(w, rep); if (html) out.push(html.replace('<div class="card', `<div data-wid="${esc(w.id)}" class="card`)); return; }
       if (seenKeys.has(k)) return; seenKeys.add(k);
       const html = card(k); if (!html) return;
       const t = THEME_OF[k];
@@ -2110,29 +2132,31 @@ async function persistLayout(m, arr) {
 // Rendu du rapport en mode édition : TOUS les tableaux affichés (non sélectionnés estompés en fond),
 // les sélectionnés entourés en pointillés. `card` = builder local de renderReport.
 function editWrapHtml(k, inView, bodyHtml) {
-  const isW = typeof k === 'object' && k;
-  const name = isW ? (k.title || `Widget ${(W_DIMS[k.dim] || {}).label || k.dim}`) : (CARD_LABELS[k] || k);
-  const attrs = isW ? `data-widget="${encodeURIComponent(JSON.stringify(k))}"` : `data-key="${k}"`;
-  const cfg = isW ? `<button type="button" class="edit-cfg" title="Modifier ce tableau (donnée, métrique, forme, top…)">⚙️ Modifier</button>` : '';
+  const isObj = typeof k === 'object' && k;
+  const isRef = isObj && k.ref;
+  const name = titleOf(k);
+  const attrs = isObj ? `data-widget="${encodeURIComponent(JSON.stringify(k))}"` : `data-key="${k}"`;
+  const cfg = (isObj && !isRef) ? `<button type="button" class="edit-cfg" title="Modifier ce tableau (donnée, métrique, forme, top…)">⚙️ Modifier</button>` : '';
+  const icon = isRef ? '🔗 ' : (isObj ? '🧱 ' : '');
   return `<div class="edit-wrap ${inView ? 'in' : 'out'}" draggable="true" ${attrs} data-in="${inView ? 1 : 0}">
     <div class="edit-ctl"><span class="edit-grip" title="Glisser pour réordonner le sens de lecture">⠿</span>
-      <button type="button" class="edit-toggle">${inView ? '✓ Dans la vue' : '+ Ajouter à la vue'}</button>
-      ${cfg}<span class="edit-name">${isW ? '🧱 ' : ''}${esc(name)}</span></div>${bodyHtml}</div>`;
+      <button type="button" class="edit-toggle">${inView ? '✕ Retirer' : '↩︎ Remettre'}</button>
+      ${cfg}<span class="edit-name">${icon}${esc(name)}</span></div>${bodyHtml}</div>`;
 }
+// Mode édition : affiche UNIQUEMENT les tableaux de la vue (page courte) ; l'ajout passe par la pop-in « 📋 Choisir les tableaux ».
 function renderEditMode(rep, card) {
   const cur = getLayout(EDIT_VIEW);
   const included = cur.filter(k => (typeof k === 'object' && k) || ALL_CARDS.includes(k));
-  const inKeys = new Set(included.filter(k => typeof k === 'string'));
-  const excluded = ALL_CARDS.filter(k => !inKeys.has(k));
-  const ordered = included.concat(excluded); // inclus (dans l'ordre de lecture) puis les autres à ajouter
   const wrap = k => {
-    const isW = typeof k === 'object' && k;
-    const inView = isW || inKeys.has(k);
-    let html = isW ? renderCustomWidget(k, rep, true) : card(k);
-    if (!html) html = `<div class="card"><h3>${esc(CARD_LABELS[k] || k)}</h3><div class="note">Aucune donnée sur cette période — ce tableau s'affichera dès que la donnée sera disponible.</div></div>`;
-    return editWrapHtml(k, inView, html);
+    const isObj = typeof k === 'object' && k;
+    const w = widgetEntry(k);
+    let html = isObj ? (w ? renderCustomWidget(w, rep, true) : '') : card(k);
+    if (!html) html = `<div class="card"><h3>${esc(titleOf(k))}</h3><div class="note">Aucune donnée sur cette période — ce tableau s'affichera dès que la donnée sera disponible.</div></div>`;
+    return editWrapHtml(k, true, html);
   };
-  return `<div id="editCards">${ordered.map(wrap).join('')}</div>`;
+  const cards = included.map(wrap).join('');
+  const empty = included.length ? '' : '<div class="card"><div class="note">Vue vide — clique « 📋 Choisir les tableaux » pour en ajouter.</div></div>';
+  return `<div id="editCards">${cards}${empty}</div>`;
 }
 // Branche le drag'n'drop + les boutons « ajouter / retirer » (délégation → marche aussi pour
 // les widgets ajoutés dynamiquement en cours d'édition).
@@ -2166,7 +2190,7 @@ function wireEditMode() {
     const w = btn.closest('.edit-wrap'); const on = w.dataset.in === '1';
     w.dataset.in = on ? '0' : '1';
     w.classList.toggle('in', !on); w.classList.toggle('out', on);
-    btn.textContent = on ? '+ Ajouter à la vue' : '✓ Dans la vue';
+    btn.textContent = on ? '↩︎ Remettre' : '✕ Retirer';
     updateEditCount();
   });
   updateEditCount();
@@ -2195,6 +2219,55 @@ async function saveEditView() {
     exitEditMode();
   } catch (e) { if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; } alert('Échec de l\'enregistrement : ' + e.message); }
 }
+// ── Pop-in de sélection des tableaux : liste compacte par catégorie + format + recherche ──
+// Cases à cocher pour ajouter/retirer cartes natives ET tableaux du registre (Création).
+function openTableSelector() {
+  if (!EDIT_VIEW) return;
+  if (document.getElementById('tableSelOv')) return;
+  const cur = getLayout(EDIT_VIEW).slice();
+  const members = new Set(cur.map(entryKey));
+  const items = [];
+  ALL_CARDS.forEach(k => items.push({ mkey: k, entry: k, title: CARD_LABELS[k] || k, cat: catOf(k), fmt: formatOf(k), kind: 'card' }));
+  Object.values(TABLES).forEach(t => items.push({ mkey: 'r:' + t.id, entry: { ref: t.id }, title: t.title, cat: t.category || 'pilotage', fmt: t.format || 'reporting', kind: 'ref' }));
+  const groups = CAT_ORDER.map(cat => {
+    const its = items.filter(i => i.cat === cat); if (!its.length) return '';
+    const rows = its.map(i => `<label class="tsel-row" data-mkey="${esc(i.mkey)}" data-search="${esc((i.title + ' ' + (CAT_META[cat] || '') + ' ' + (FORMAT_LABELS[i.fmt] || '')).toLowerCase())}">
+      <input type="checkbox" ${members.has(i.mkey) ? 'checked' : ''}>
+      <span class="tsel-t">${i.kind === 'ref' ? '🔗 ' : ''}${esc(i.title)}</span>
+      <span class="tsel-f">${esc(FORMAT_LABELS[i.fmt] || i.fmt)}</span></label>`).join('');
+    return `<div class="tsel-cat"><div class="tsel-cat-h">${CAT_META[cat] || cat}</div>${rows}</div>`;
+  }).join('');
+  const ov = document.createElement('div'); ov.className = 'modal-ov'; ov.id = 'tableSelOv';
+  ov.innerHTML = `<div class="modal-box">
+    <div class="modal-head"><b>📋 Choisir les tableaux</b> <span class="note" style="margin:0">— ${esc(viewLabel(EDIT_VIEW))}</span><div class="spacer" style="flex:1"></div><button class="btn" id="tselClose" title="Fermer">✕</button></div>
+    <input id="tselSearch" class="dt" placeholder="🔎 Rechercher un tableau, une catégorie, un format…" style="width:100%;margin:8px 0">
+    <div class="tsel-list">${groups}</div>
+    <div class="modal-foot"><span class="note" id="tselCount" style="margin:0"></span><div class="spacer" style="flex:1"></div><button class="btn" id="tselCancel">Annuler</button><button class="btn primary" id="tselApply">Appliquer</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  const recount = () => { ov.querySelector('#tselCount').textContent = ov.querySelectorAll('.tsel-row input:checked').length + ' tableau(x) sélectionné(s)'; };
+  ov.querySelector('#tselSearch').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase().trim();
+    ov.querySelectorAll('.tsel-row').forEach(r => { r.style.display = (!q || r.dataset.search.includes(q)) ? '' : 'none'; });
+    ov.querySelectorAll('.tsel-cat').forEach(c => { c.style.display = [...c.querySelectorAll('.tsel-row')].some(r => r.style.display !== 'none') ? '' : 'none'; });
+  });
+  ov.querySelectorAll('.tsel-row input').forEach(i => i.addEventListener('change', recount));
+  ov.querySelector('#tselClose').onclick = close; ov.querySelector('#tselCancel').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('#tselApply').onclick = async () => {
+    const checked = new Set([...ov.querySelectorAll('.tsel-row input:checked')].map(i => i.closest('.tsel-row').dataset.mkey));
+    const kept = cur.filter(k => checked.has(entryKey(k)));
+    const keptKeys = new Set(kept.map(entryKey));
+    const added = items.filter(i => checked.has(i.mkey) && !keptKeys.has(i.mkey)).map(i => i.entry);
+    const next = kept.concat(added);
+    if (!next.length) { alert('Sélectionne au moins un tableau.'); return; }
+    try { await persistLayout(EDIT_VIEW, next); close(); loadReport(); }
+    catch (e) { alert('Échec de l\'enregistrement : ' + (e.message || 'erreur')); }
+  };
+  recount();
+}
+
 // target optionnel : 'my:<key>' (perso, tout utilisateur) ou clé de vue partagée (admin).
 function enterEditMode(target) {
   const personal = isMyView(target);
@@ -2221,6 +2294,7 @@ function enterEditMode(target) {
   document.getElementById('editViewBtn').classList.add('hidden');
   const myc = document.getElementById('myViewCtl'); if (myc) myc.classList.add('hidden');
   loadReport();
+  openTableSelector(); // ouvre directement la pop-in de sélection (le cœur du paramétrage)
 }
 function exitEditMode() {
   EDIT_VIEW = null;
@@ -3444,6 +3518,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   if (!(await me())) return;
   await loadServerLayouts(); // vues partagées (avant le 1er rendu)
   await loadMyViews();       // tableaux de bord personnels de l'utilisateur
+  await loadTables();        // registre global des tableaux réutilisables (page Création)
   // Lien profond ?view= : ouvre directement une vue donnée (si autorisée RBAC).
   const qView = new URLSearchParams(location.search).get('view');
   if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) CURRENT_MODULE = qView;
