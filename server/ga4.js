@@ -7,6 +7,7 @@
 // Date → sessions datables → TT fiable par période.
 // ============================================================================
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const { JWT } = require('google-auth-library');
 const store = require('./store');
@@ -51,22 +52,49 @@ const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisa
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let _tokCache = { token: null, exp: 0 };
 let _authP = null; // dédoublonne les récupérations de jeton concurrentes
+let _lastAuthVia = null; // 'direct' (notre fetch) ou 'lib' (google-auth-library) — pour le diagnostic /ping
+const b64url = buf => Buffer.from(buf).toString('base64').replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+const normKey = k => { let s = (k || '').toString(); if (s.includes('\\n')) s = s.replace(/\\n/g, '\n'); return s; };
+
+// VOIE DIRECTE : on signe nous-mêmes l'assertion JWT (RS256) et on POST sur le endpoint MODERNE
+// oauth2.googleapis.com/token avec notre propre fetch + Connection:close — contourne gaxios/undici
+// (réutilisation de connexion keep-alive = cause du « Premature close » sur www.googleapis.com).
+function signAssertion(creds) {
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = b64url(JSON.stringify({ iss: creds.client_email, scope: SCOPES.join(' '), aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }));
+  const input = `${head}.${claim}`;
+  const sig = b64url(crypto.createSign('RSA-SHA256').update(input).sign(normKey(creds.private_key)));
+  return `${input}.${sig}`;
+}
+async function tokenDirect(creds) {
+  const body = new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: signAssertion(creds) });
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Connection: 'close' }, body, keepalive: false, signal: ctrl.signal });
+    const txt = await res.text();
+    if (!res.ok) throw new Error(`token ${res.status} : ${txt.slice(0, 140)}`);
+    const j = JSON.parse(txt);
+    if (!j.access_token) throw new Error('token : access_token absent');
+    return j.access_token;
+  } finally { clearTimeout(to); }
+}
+async function tokenLib(creds) { // repli google-auth-library
+  const client = new JWT({ email: creds.client_email, key: normKey(creds.private_key), scopes: SCOPES });
+  const { token } = await client.getAccessToken();
+  if (!token) throw new Error('lib : jeton vide');
+  return token;
+}
 async function fetchToken() {
   const creds = loadCreds();
   if (!creds) throw new Error('Identifiants GA4 absents (Secret File ga4.json ou GA4_SA_KEY)');
   let lastErr;
   for (let i = 1; i <= 4; i++) {
-    try {
-      const client = new JWT({ email: creds.client_email, key: creds.private_key, scopes: SCOPES });
-      const { token } = await client.getAccessToken();
-      if (!token) throw new Error('jeton GA4 vide');
-      _tokCache = { token, exp: Date.now() + 50 * 60 * 1000 }; // ~50 min (jeton Google valable 1 h)
-      return token;
-    } catch (e) {
-      lastErr = e;
-      // « Premature close » / réseau / 5xx du endpoint token = transitoire → on retente avec backoff.
-      if (i < 4) { await sleep(700 * i); continue; }
-    }
+    try { const t = await tokenDirect(creds); _tokCache = { token: t, exp: Date.now() + 50 * 60 * 1000 }; _lastAuthVia = 'direct'; return t; }
+    catch (e) { lastErr = e; }
+    try { const t = await tokenLib(creds); _tokCache = { token: t, exp: Date.now() + 50 * 60 * 1000 }; _lastAuthVia = 'lib'; return t; }
+    catch (e) { lastErr = e; }
+    if (i < 4) await sleep(600 * i);
   }
   throw new Error('Auth GA4 KO (jeton OAuth) : ' + ((lastErr && lastErr.message) || 'indisponible'));
 }
@@ -425,7 +453,7 @@ router.get('/ping', requireAuth, async (req, res) => {
     const token = await getToken(true);
     const today = new Date().toISOString().slice(0, 10);
     const d = await post(process.env.GA4_PROPERTY_ID, { dateRanges: [{ startDate: today, endDate: today }], metrics: [{ name: 'sessions' }], limit: 1 });
-    res.json({ ok: true, tokenOk: !!token, propertyId: process.env.GA4_PROPERTY_ID, sampleRows: (d.rows || []).length });
+    res.json({ ok: true, tokenOk: !!token, via: _lastAuthVia, propertyId: process.env.GA4_PROPERTY_ID, sampleRows: (d.rows || []).length });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
