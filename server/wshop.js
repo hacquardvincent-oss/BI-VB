@@ -894,25 +894,31 @@ function bisDataset(subs, eanToRef) {
   const rows = Object.entries(by).map(([ref, v]) => [ref, v.title, String(v.count), String(v.waiting)]);
   return { hdrs: ['Ref. externe', 'Titre', 'Abonnements', 'En attente'], rows, map: { ref_ext: 0, title: 1, count: 2, waiting: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() };
 }
-// Orchestrateur : stock actuel → saisonstock N ; retours N/N-1 → saisonret ; back-in-stock → saisonbis N.
+// Orchestrateur : stock actuel → {pfx}stock N ; retours → {pfx}ret ; back-in-stock → {pfx}bis N.
+// pfx = '' (slots STANDARDS stock/bis, analysables dans toutes les briques) ou 'saison' (jeux dédiés).
+// ⚠️ Les retours format PRODUIT (returnsDataset) ne sont écrits que pour les jeux saison (le slot `ret`
+// standard a un autre format, alimenté par l'import OMS complet) → en standard on charge stock + bis.
 async function refreshSaisonMerch(opts = {}, cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré');
+  const pfx = (opts.slot === '' || opts.slot === 'standard') ? '' : (opts.slot || 'saison');
   if (cb.phase) cb.phase('Stock (inventory)…');
   const inv = await fetchInventory();
-  store.setDataset('saisonstock', 'N', stockDataset(inv.byRef));
+  store.setDataset(`${pfx}stock`, 'N', stockDataset(inv.byRef));
   if (cb.count) cb.count('N', Object.keys(inv.byRef).length);
   let retN = 0, retN1 = 0, bis = 0;
   if (opts.from && opts.to) {
-    if (cb.phase) cb.phase('Retours N…');
-    const rN = await fetchReturnsRange(opts.from, opts.to);
-    store.setDataset('saisonret', 'N', returnsDataset(rN, inv.eanToRef)); retN = rN.length;
+    if (pfx) {
+      if (cb.phase) cb.phase('Retours N…');
+      const rN = await fetchReturnsRange(opts.from, opts.to);
+      store.setDataset(`${pfx}ret`, 'N', returnsDataset(rN, inv.eanToRef)); retN = rN.length;
+    }
     if (cb.phase) cb.phase('Back-in-stock (demande)…');
-    try { const subs = await fetchBackInStock(opts.from, opts.to); store.setDataset('saisonbis', 'N', bisDataset(subs, inv.eanToRef)); bis = subs.length; } catch (e) { /* best-effort */ }
+    try { const subs = await fetchBackInStock(opts.from, opts.to); store.setDataset(`${pfx}bis`, 'N', bisDataset(subs, inv.eanToRef)); bis = subs.length; } catch (e) { /* best-effort */ }
   }
-  if (opts.cfrom && opts.cto) {
+  if (pfx && opts.cfrom && opts.cto) {
     if (cb.phase) cb.phase('Retours N-1…');
     const rN1 = await fetchReturnsRange(opts.cfrom, opts.cto);
-    store.setDataset('saisonret', 'N1', returnsDataset(rN1, inv.eanToRef)); retN1 = rN1.length;
+    store.setDataset(`${pfx}ret`, 'N1', returnsDataset(rN1, inv.eanToRef)); retN1 = rN1.length;
   }
   return { stockRefs: Object.keys(inv.byRef).length, invItems: inv.count, retoursN: retN, retoursN1: retN1, backInStock: bis };
 }

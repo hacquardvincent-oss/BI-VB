@@ -47,24 +47,35 @@
     } catch (e) { /* ignore */ }
   }
 
-  // WSHOP : import complet (job + poll) / delta (économe).
+  // WSHOP : import complet (job + poll) / delta (économe). L'import complet charge AUSSI
+  // les retours (ret/retprod) + les alertes back-in-stock (bis) → analysables dans toutes les briques.
   async function importWshop(delta) {
-    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS WSHOP…'); var url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
+    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS WSHOP (+ retours + alertes)…'); var url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
     else { note('⏳ Synchronisation delta WSHOP…'); url = '/api/wshop/sync'; }
     try {
       const r = await fetch(url, { method: 'POST' });
       if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
-      await pollWshop();
+      await pollJob(j => `✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}) — retours & alertes inclus.`);
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
-  function pollWshop() {
+  // Stock (inventaire) + alertes back-in-stock dans les slots STANDARDS (slot vide) → utilisables partout.
+  async function importMerch() {
+    const q = periodQuery(); if (!q) return;
+    note('⏳ Import stock + alertes stock (WSHOP)…');
+    try {
+      const r = await fetch('/api/wshop/saison-merch?slot=&' + q, { method: 'POST' });
+      if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur')); return; }
+      await pollJob(j => { const x = j.result || {}; return `✓ Stock & alertes importés (${fInt(x.stockRefs || 0)} réf. stock, ${fInt(x.backInStock || 0)} alertes).`; });
+    } catch (e) { note('⚠ ' + esc(e.message)); }
+  }
+  function pollJob(doneMsg) {
     return new Promise(resolve => {
       const tick = async () => {
         try {
           const j = await (await fetch('/api/wshop/job')).json();
           if (j.error) { note('⚠ ' + esc(j.error)); return resolve(); }
-          if (j.done) { note(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); afterLoad(); return resolve(); }
-          note(`⏳ ${esc(j.phase || 'Import…')} — N : ${fInt(j.ordersN || 0)} cmd`);
+          if (j.done) { note(doneMsg(j)); afterLoad(); return resolve(); }
+          note(`⏳ ${esc(j.phase || 'Import…')}${j.ordersN ? ' — N : ' + fInt(j.ordersN) + ' cmd' : ''}`);
         } catch (e) { /* transitoire */ }
         setTimeout(tick, 1500);
       };
@@ -110,6 +121,7 @@
       <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
         <span class="hidden" id="db_wshop"><button class="btn blue" id="db_impWshop" style="width:100%">🔄 Importer l'OMS (WSHOP)</button></span>
         <span class="hidden" id="db_wshopSync"><button class="btn" id="db_impSync" style="width:100%" title="Récupère seulement les commandes nouvelles/modifiées (économe)">⚡ Synchroniser le delta (WSHOP)</button></span>
+        <span class="hidden" id="db_merch"><button class="btn" id="db_impMerch" style="width:100%" title="Charge le stock (inventaire) + les alertes back-in-stock dans les slots standards → analysables dans toutes les briques">🔔 Stock & alertes stock (WSHOP)</button></span>
         <span class="hidden" id="db_ga4"><button class="btn blue" id="db_impGa4" style="width:100%">🔄 GA4</button></span>
         <span class="hidden" id="db_ads"><button class="btn blue" id="db_impAds" style="width:100%">🔄 Google Ads</button></span>
         <span class="hidden" id="db_meta"><button class="btn blue" id="db_impMeta" style="width:100%">🔄 Meta Ads</button></span>
@@ -117,7 +129,7 @@
       </div>
       <details class="fold" style="margin-top:8px"><summary>📁 Importer un fichier</summary>
         <div class="toolbar" style="gap:6px;margin-top:6px;flex-wrap:wrap">
-          <select id="db_fsrc" class="dt"><option value="oms">OMS</option><option value="ga">GA4</option><option value="ads">Google Ads</option><option value="ret">Retours</option><option value="y2">Y2</option><option value="ref">Référentiel</option><option value="offre">Offre</option></select>
+          <select id="db_fsrc" class="dt"><option value="oms">OMS</option><option value="ga">GA4</option><option value="ads">Google Ads</option><option value="ret">Retours</option><option value="bis">Alertes stock</option><option value="y2">Y2</option><option value="ref">Référentiel</option><option value="impl">Implantation</option><option value="offre">Offre</option></select>
           <select id="db_fper" class="dt"><option value="N">N</option><option value="N1">N-1</option></select>
           <input type="file" id="db_ffile" class="dt" style="flex:1;min-width:120px">
           <button class="btn" id="db_impFile">Importer</button>
@@ -129,11 +141,12 @@
     const allow = Array.isArray(OPTS.connectors) ? OPTS.connectors : ['wshop', 'ga4', 'googleads', 'meta', 'y2'];
     const map = [['wshop', 'db_wshop'], ['ga4', 'db_ga4'], ['googleads', 'db_ads'], ['meta', 'db_meta'], ['y2', 'db_y2']].filter(([c]) => allow.includes(c));
     await Promise.all(map.map(async ([c, box]) => {
-      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') document.getElementById('db_wshopSync').classList.remove('hidden'); } } catch (e) { /* */ }
+      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') { document.getElementById('db_wshopSync').classList.remove('hidden'); if (!OPTS.slot) document.getElementById('db_merch').classList.remove('hidden'); } } } catch (e) { /* */ }
     }));
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
     on('db_impWshop', () => importWshop(false));
     on('db_impSync', () => importWshop(true));
+    on('db_impMerch', importMerch);
     on('db_impGa4', () => importDated('ga4', 'GA4'));
     on('db_impAds', () => importDated('googleads', 'Google Ads'));
     on('db_impMeta', () => importDated('meta', 'Meta Ads'));
