@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BI Project — Tendances</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/fr.min.js"></script>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -28,20 +31,38 @@
 
 <div class="wrap layout-side no-rightnav">
   <aside id="setupCol">
+    <!-- 1 · PÉRIODE -->
     <div class="card setup-card">
-      <h3>📈 Tendances longue durée</h3>
-      <div class="note">Évolution <b>mois par mois</b> des indicateurs d'audience & de conversion, <b>N vs N-1</b>, sur toute la profondeur GA4/OMS importée. Trait plein = N, pointillé = N-1.</div>
-      <label class="setlabel">Filtre URL (optionnel — comme GA4)</label>
-      <input id="urlFilter" class="dt" style="width:100%" placeholder="Ex. /soldes, /robes, /collection…">
-      <div class="note" style="margin-top:3px">Laisse vide = tout le site. Filtre sur le chemin de page (sous-chaîne).</div>
+      <h3>1 · Période (temps long)</h3>
+      <div class="note">Choisis la profondeur à analyser. Idéalement <b>~1 an</b> en N et l'<b>année N-1</b> juste avant.</div>
+      <label class="setlabel">Période N — début → fin (1 calendrier)</label>
+      <input id="nRange" class="dt" style="width:100%;cursor:pointer" placeholder="Choisir la période N…" readonly>
+      <label class="setlabel" style="margin-top:7px">Période N-1 — début → fin (1 calendrier)</label>
+      <input id="n1Range" class="dt" style="width:100%;cursor:pointer" placeholder="Choisir la période N-1…" readonly>
+      <label class="setlabel" style="margin-top:7px">Filtre URL (optionnel — comme GA4)</label>
+      <input id="urlFilter" class="dt" style="width:100%" placeholder="Ex. /soldes, /robes…">
       <button class="btn blue" id="run" style="margin-top:10px;width:100%">📈 Analyser</button>
-      <div class="note" id="tnote" style="margin-top:8px"></div>
+      <div class="note" id="tnote" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 2 · CHARGEMENT DES DONNÉES -->
+    <div class="card setup-card hidden" id="dataPanel">
+      <h3>2 · Chargement des données</h3>
+      <div class="note">Sur les périodes N / N-1 ci-dessus (slots partagés avec le Reporting).</div>
+      <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+        <span class="hidden" id="wshopBox"><button class="btn blue" id="impWshop" style="width:100%" title="Importe l'OMS WSHOP sur N et N-1">🔄 Importer l'OMS (WSHOP)</button></span>
+        <span class="hidden" id="ga4Box"><button class="btn blue" id="impGa4" style="width:100%" title="Importe GA4 sur N et N-1">🔄 GA4</button></span>
+        <span class="hidden" id="adsBox"><button class="btn blue" id="impAds" style="width:100%" title="Importe Google Ads sur N et N-1">🔄 Google Ads</button></span>
+        <span class="hidden" id="metaBox"><button class="btn blue" id="impMeta" style="width:100%" title="Importe Meta Ads sur N et N-1">🔄 Meta Ads</button></span>
+        <span class="hidden" id="y2Box"><button class="btn blue" id="impY2" style="width:100%" title="Importe Y2 (marketplace) sur N et N-1">🔄 Y2 Marketplace</button></span>
+      </div>
+      <div class="note" id="impNote" style="margin-top:6px"></div>
     </div>
   </aside>
 
   <main id="mainCol">
     <div id="body">
-      <div class="card"><div class="note">Chargement…</div></div>
+      <div class="card"><div class="note">Choisis une période puis « Analyser ».</div></div>
     </div>
   </main>
 </div>

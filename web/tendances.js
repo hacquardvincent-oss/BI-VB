@@ -82,9 +82,24 @@ function render(d) {
   if (!d.has.oms) miss.push('OMS (taux de transfo, panier, indice de vente, retour)');
   if (!d.has.ads) miss.push('Google Ads (ROAS, CPA, dépense)');
   const missNote = miss.length ? ` · ⚠️ non importé : ${miss.map(esc).join(' · ')}` : '';
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>`;
+  // CA par marketplace (mois par mois) — multi-lignes, 1 par enseigne.
+  const mkt = d.marketplace;
+  let mktCard = '';
+  if (mkt && mkt.series && mkt.series.length) {
+    mktCard = `<div class="card"><h3>🏬 CA par marketplace (mois par mois)</h3><div class="note" style="margin:-6px 0 10px">${mkt.series.map(s => `${esc(s.name)} : <b>${fEur(s.total)}</b>`).join(' · ')}</div><div style="height:250px"><canvas id="ch_mkt"></canvas></div></div>`;
+  }
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${mktCard}<div class="grid cols2">${cards}</div>`;
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
+  if (mkt && mkt.series && mkt.series.length) {
+    const ml = mkt.months.map(monthLabel);
+    mk('ch_mkt', {
+      type: 'line',
+      data: { labels: ml, datasets: mkt.series.map((s, i) => ({ label: s.name, data: s.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+    });
+  }
 }
+const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B'];
 
 async function run() {
   const url = document.getElementById('urlFilter').value.trim();
@@ -98,6 +113,69 @@ async function run() {
   } catch (e) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
 
+// ── Période (flatpickr 1 calendrier par range) + chargement des données ──
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const frd = iso => (iso ? iso.split('-').reverse().join('/') : '');
+let FP_N, FP_N1;
+function rangeOf(fp) { const d = fp && fp.selectedDates; if (!d || d.length < 2) return null; return { from: ymd(d[0]), to: ymd(d[1]) }; }
+function periods() { const n = rangeOf(FP_N), n1 = rangeOf(FP_N1); return { n, n1 }; }
+function impNote(t) { const el = document.getElementById('impNote'); if (el) el.innerHTML = t; }
+
+async function setupDataPanel() {
+  const conns = [['wshop', 'wshopBox'], ['ga4', 'ga4Box'], ['googleads', 'adsBox'], ['meta', 'metaBox'], ['y2', 'y2Box']];
+  let any = false;
+  await Promise.all(conns.map(async ([c, box]) => {
+    try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); any = true; } } catch (e) { /* indispo */ }
+  }));
+  if (any) document.getElementById('dataPanel').classList.remove('hidden');
+  const w = document.getElementById('impWshop'); if (w) w.addEventListener('click', importWshop);
+  const g = document.getElementById('impGa4'); if (g) g.addEventListener('click', () => importDated('ga4', 'GA4'));
+  const a = document.getElementById('impAds'); if (a) a.addEventListener('click', () => importDated('googleads', 'Google Ads'));
+  const m = document.getElementById('impMeta'); if (m) m.addEventListener('click', () => importDated('meta', 'Meta Ads'));
+  const y = document.getElementById('impY2'); if (y) y.addEventListener('click', () => importDated('y2', 'Y2 Marketplace'));
+}
+function periodQuery() {
+  const { n, n1 } = periods();
+  if (!n) { impNote('⚠ Renseigne la période N.'); return null; }
+  let q = `from=${n.from}&to=${n.to}`;
+  if (n1) q += `&cfrom=${n1.from}&cto=${n1.to}`;
+  return q;
+}
+async function importWshop() {
+  const q = periodQuery(); if (!q) return;
+  impNote('⏳ Import OMS WSHOP…');
+  try {
+    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
+    if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
+    await pollWshop();
+  } catch (e) { impNote('⚠ ' + esc(e.message)); }
+}
+function pollWshop() {
+  return new Promise(resolve => {
+    const tick = async () => {
+      try {
+        const j = await (await fetch('/api/wshop/job')).json();
+        if (j.error) { impNote('⚠ ' + esc(j.error)); return resolve(); }
+        if (j.done) { impNote(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); run(); return resolve(); }
+        impNote(`⏳ ${esc(j.phase || 'Import…')} — N : ${fInt(j.ordersN || 0)} cmd`);
+      } catch (e) { /* transitoire */ }
+      setTimeout(tick, 1500);
+    };
+    tick();
+  });
+}
+async function importDated(conn, label) {
+  const q = periodQuery(); if (!q) return;
+  impNote(`⏳ Import ${esc(label)}…`);
+  try {
+    const r = await fetch(`/api/${conn}/refresh?` + q, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { impNote('⚠ ' + esc(j.error || ('Erreur ' + label))); return; }
+    impNote(`✓ ${esc(label)} importé.`);
+    run();
+  } catch (e) { impNote('⚠ ' + esc(e.message)); }
+}
+
 (async () => {
   let u;
   try { const r = await fetch('/auth/me'); if (!r.ok) { location.href = '/login.html'; return; } u = await r.json(); }
@@ -107,5 +185,16 @@ async function run() {
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   document.getElementById('run').addEventListener('click', run);
   document.getElementById('urlFilter').addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  // Calendriers range (1 par période). Défaut : N = 12 derniers mois, N-1 = l'année d'avant.
+  if (window.flatpickr) {
+    const L = window.flatpickr.l10ns && window.flatpickr.l10ns.fr;
+    const today = new Date();
+    const nFrom = new Date(today); nFrom.setFullYear(nFrom.getFullYear() - 1); nFrom.setDate(nFrom.getDate() + 1);
+    const n1To = new Date(nFrom); n1To.setDate(n1To.getDate() - 1);
+    const n1From = new Date(n1To); n1From.setFullYear(n1From.getFullYear() - 1); n1From.setDate(n1From.getDate() + 1);
+    FP_N = flatpickr('#nRange', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [nFrom, today] });
+    FP_N1 = flatpickr('#n1Range', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [n1From, n1To] });
+  }
+  await setupDataPanel();
   run();
 })();

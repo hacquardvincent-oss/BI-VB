@@ -1998,6 +1998,36 @@ function y2ChannelOf(etab) {
   return etab ? etab.toString() : 'Marketplace';
 }
 const CHANNEL_ORDER = ['EShop', 'GL', 'Printemps', 'PDT', 'Lulli'];
+
+// CA marketplace par MOIS et par enseigne (page Tendances). Respecte les règles figées :
+// OMS = lignes marketplace (type de paiement) ; Y2 = par établissement, GL = 674SFS UNIQUEMENT
+// (corner exclu = retail), retours Y2 (ttc ≤ 0) exclus.
+function marketplaceMonthly(omsRows, omsMap, y2Rows, y2Map) {
+  const by = {};
+  const add = (ens, mo, v) => { if (!ens || !mo) return; (by[ens] = by[ens] || {}); by[ens][mo] = (by[ens][mo] || 0) + v; };
+  if (omsRows && omsMap && omsMap.date !== undefined) {
+    const di = omsMap.date, pi = omsMap.prix, ti = omsMap.type, mi = omsMap.mag;
+    omsRows.forEach(r => {
+      const type = (r[ti] || '').toString(); if (!isMkt(type)) return;
+      const d = parseFrD(r[di]); if (!d) return;
+      let ens = omsChannelOf(r[mi], type); if (ens === 'EShop') ens = type.trim() || 'Marketplace';
+      add(ens, `${d.y}-${String(d.m).padStart(2, '0')}`, fN(r[pi]));
+    });
+  }
+  if (y2Rows && y2Map && y2Map.date !== undefined && y2Map.ttc !== undefined) {
+    const di = y2Map.date, ti = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
+    y2Rows.forEach(r => {
+      const ttc = fN(r[ti]); if (ttc <= 0) return;
+      const d = parseFrD(r[di]); if (!d) return;
+      const ens = y2ChannelOf(ei !== undefined ? r[ei] : '');
+      if (ens === 'GL') { const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase(); if (!com.includes('sfs')) return; }
+      add(ens, `${d.y}-${String(d.m).padStart(2, '0')}`, ttc);
+    });
+  }
+  const months = [...new Set(Object.values(by).flatMap(o => Object.keys(o)))].sort();
+  const series = Object.keys(by).sort().map(name => ({ name, values: months.map(mo => Math.round(by[name][mo] || 0)), total: Math.round(Object.values(by[name]).reduce((a, b) => a + b, 0)) }));
+  return { months, series };
+}
 function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
   const byRef = {}, byChannel = {};
   const add = (ref, name, ch, ca, qte) => {
@@ -2134,7 +2164,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

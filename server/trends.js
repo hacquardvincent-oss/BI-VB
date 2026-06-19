@@ -99,9 +99,13 @@ router.get('/', requireAuth, (req, res) => {
       const [y, m] = mo.split('-'); const prev = `${+y - 1}-${m}`;
       return { month: mo, n: mk(nGA[mo] || {}, nOMS[mo] || {}, nAds[mo] || {}, nRet[mo] || 0), n1: mk(n1GA[prev] || {}, n1OMS[prev] || {}, n1Ads[prev] || {}, n1Ret[prev] || 0) };
     });
+    // CA marketplace par mois et par enseigne (OMS mkt + Y2), règles figées (GL=SFS, retours exclus).
+    const omsN = store.getDataset('oms', 'N'), y2N = store.getDataset('y2', 'N');
+    const marketplace = calc.marketplaceMonthly(omsN && omsN.rows, omsN && omsN.map, y2N && y2N.rows, y2N && y2N.map);
+
     res.json({
-      url: url || null, series,
-      has: { ga: !!Object.keys(nGA).length, oms: !!Object.keys(nOMS).length, ads: !!Object.keys(nAds).length, ret: !!Object.keys(nRet).length, gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
+      url: url || null, series, marketplace,
+      has: { ga: !!Object.keys(nGA).length, oms: !!Object.keys(nOMS).length, ads: !!Object.keys(nAds).length, ret: !!Object.keys(nRet).length, marketplace: !!(marketplace.series && marketplace.series.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
