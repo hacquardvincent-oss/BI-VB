@@ -11,7 +11,7 @@ const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>'
 const MLABEL = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 const monthLabel = mo => { const [y, m] = mo.split('-'); return `${MLABEL[+m - 1]} ${y.slice(2)}`; };
 const _charts = {};
-function mk(id, cfg) { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); }
+function mk(id, cfg) { const el = document.getElementById(id); if (!el || !window.Chart) return; try { if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); } catch (e) { /* graphe non dessiné — les cartes restent visibles */ } }
 
 // Formateurs par type de métrique.
 const KIND = {
@@ -42,6 +42,7 @@ const METRICS = [
 function lineChart(id, labels, nData, n1Data, color, kind) {
   const K = KIND[kind] || KIND.int;
   mk(id, {
+    type: 'line',
     data: {
       labels,
       datasets: [
