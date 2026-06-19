@@ -60,7 +60,7 @@ function lineChart(id, labels, nData, n1Data, color, kind) {
 function render(d) {
   const body = document.getElementById('body');
   if (!d.series || !d.series.length) {
-    body.innerHTML = `<div class="card"><div class="note">Aucune donnée sur la profondeur importée${d.url ? ` pour l'URL « ${esc(d.url)} »` : ''}. Importe GA4 (et l'OMS) sur 1 an + l'année N-1 via le Reporting, puis reviens ici.${d.url && !d.has.gapagedaily ? ' Le filtre URL nécessite un nouvel import GA4 (jeu pages/jour).' : ''}</div></div>`;
+    body.innerHTML = `<div class="card"><div class="note">Aucune donnée mensuelle disponible${d.url ? ` pour l'URL « ${esc(d.url)} »` : ''}. Charge l'<b>OMS</b> et/ou <b>GA4</b> via le panneau « 2 · Chargement des données » à gauche (sur une période longue, ex. 1 an + l'année N-1), puis clique « Analyser ».${d.url && !d.has.gapagedaily ? ' Le filtre URL nécessite un import GA4 (jeu pages/jour).' : ''}</div></div>`;
     return;
   }
   const labels = d.series.map(s => monthLabel(s.month));

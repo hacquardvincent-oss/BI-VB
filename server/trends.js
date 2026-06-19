@@ -60,23 +60,34 @@ function adsMonthly(slot) {
   d.rows.forEach(r => { const mo = monthOf(r[m.date]); if (!mo) return; const e = by[mo] || (by[mo] = { spend: 0, conv: 0, convValue: 0 }); e.spend += num(r[m.cost]); if (m.conversions != null) e.conv += num(r[m.conversions]); if (m.convValue != null) e.convValue += num(r[m.convValue]); });
   return by;
 }
-// CA remboursé par mois (jeu `ret`) → taux de retour.
-function retMonthly(slot) {
-  const d = store.getDataset('ret', slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
+// CA remboursé par mois (jeu `ret`/`saisonret`) → taux de retour.
+function retMonthly(source, slot) {
+  const d = store.getDataset(source, slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
   const di = d.map.date, mi = d.map.montant, by = {};
   d.rows.forEach(r => { const mo = monthOf(r[di]); if (!mo) return; by[mo] = (by[mo] || 0) + num(r[mi]); });
   return by;
+}
+// Fusionne des cartes {mois: v} de plusieurs slots, 1ʳᵉ source qui couvre un mois gagne (anti-double-comptage).
+function mergeFirst(maps) { const out = {}; maps.forEach(by => { if (!by) return; Object.entries(by).forEach(([k, v]) => { if (out[k] == null) out[k] = v; }); }); return out; }
+// CA EShop par mois agrégé sur oms (priorité) + saisonoms, N & N-1 (comme l'historique Objectifs).
+function omsMonthlyAll() {
+  const maps = [];
+  [['oms', 'N'], ['oms', 'N1'], ['saisonoms', 'N'], ['saisonoms', 'N1']].forEach(([s, p]) => {
+    const d = store.getDataset(s, p); if (!d || !d.rows || !d.map) return;
+    calc.ensureRefExtIdx(d.hdrs, d.map); maps.push(calc.monthlyEShopCA(d.rows, d.map));
+  });
+  return mergeFirst(maps);
 }
 
 router.get('/', requireAuth, (req, res) => {
   try {
     const url = (req.query.url || '').toString().trim();
-    const nGA = gaSeries('N', url) || {}, n1GA = gaSeries('N1', url) || {};
-    const nOMS = omsMonthly('N'), n1OMS = omsMonthly('N1');
-    const nAds = adsMonthly('N'), n1Ads = adsMonthly('N1');
-    const nRet = retMonthly('N'), n1Ret = retMonthly('N1');
-    // Aligne chaque mois N avec le même mois de l'année précédente (N-1).
-    const months = [...new Set([...Object.keys(nGA), ...(url ? [] : Object.keys(nOMS))])].sort();
+    // Toutes les données disponibles, fusionnées par MOIS RÉEL (tous slots) ; N vs N-1 = même mois, année −1.
+    const gaAll = mergeFirst(['N', 'N1'].map(p => gaSeries(p, url)));
+    const omsAll = url ? {} : omsMonthlyAll();
+    const adsAll = mergeFirst(['N', 'N1'].map(p => adsMonthly(p)));
+    const retAll = mergeFirst([['ret', 'N'], ['ret', 'N1'], ['saisonret', 'N'], ['saisonret', 'N1']].map(([s, p]) => retMonthly(s, p)));
+    const months = [...new Set([...Object.keys(gaAll), ...Object.keys(omsAll)])].sort();
     const mk = (g, o, ad, retCA) => ({
       sessions: Math.round((g.sessions) || 0),
       engagementRate: g.sessions ? (g.eng || 0) / g.sessions : null,
@@ -97,19 +108,20 @@ router.get('/', requireAuth, (req, res) => {
     });
     const series = months.map(mo => {
       const [y, m] = mo.split('-'); const prev = `${+y - 1}-${m}`;
-      return { month: mo, n: mk(nGA[mo] || {}, nOMS[mo] || {}, nAds[mo] || {}, nRet[mo] || 0), n1: mk(n1GA[prev] || {}, n1OMS[prev] || {}, n1Ads[prev] || {}, n1Ret[prev] || 0) };
+      return { month: mo, n: mk(gaAll[mo] || {}, omsAll[mo] || {}, adsAll[mo] || {}, retAll[mo] || 0), n1: mk(gaAll[prev] || {}, omsAll[prev] || {}, adsAll[prev] || {}, retAll[prev] || 0) };
     });
-    // CA marketplace par mois et par enseigne (OMS mkt + Y2), règles figées (GL=SFS, retours exclus).
-    const omsN = store.getDataset('oms', 'N'), y2N = store.getDataset('y2', 'N');
-    const marketplace = calc.marketplaceMonthly(omsN && omsN.rows, omsN && omsN.map, y2N && y2N.rows, y2N && y2N.map);
+    // CA marketplace par mois et par enseigne (meilleur slot OMS dispo + Y2), règles figées (GL=SFS).
+    const omsMkt = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N') || store.getDataset('oms', 'N1') || store.getDataset('saisonoms', 'N1');
+    const y2N = store.getDataset('y2', 'N') || store.getDataset('y2', 'N1');
+    const marketplace = calc.marketplaceMonthly(omsMkt && omsMkt.rows, omsMkt && omsMkt.map, y2N && y2N.rows, y2N && y2N.map);
     // Cohortes de réachat — OMS N + N-1 combinés (clé client hashée, périmètre EShop).
-    const omsAll = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsAll.push(...d.rows); });
-    const omsMap = (omsN || store.getDataset('oms', 'N1') || {}).map;
-    const cohorts = (omsMap && omsMap.client != null && omsAll.length) ? calc.cohortRetention(omsAll, omsMap) : null;
+    const omsRows = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsRows.push(...d.rows); });
+    const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
+    const cohorts = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.cohortRetention(omsRows, omsCMap) : null;
 
     res.json({
       url: url || null, series, marketplace, cohorts,
-      has: { ga: !!Object.keys(nGA).length, oms: !!Object.keys(nOMS).length, ads: !!Object.keys(nAds).length, ret: !!Object.keys(nRet).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
+      has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
