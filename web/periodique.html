@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Reporting périodique</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting (tableaux de pilotage standard)">📊 Reporting</a>
+    <a class="pb on" href="/periodique.html" title="Reporting périodique multi-résolution (jour/semaine/mois/saison)">📅 Périodique</a>
+    <a class="pb" href="/commerciale.html" title="Pilotage d'une opération commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
+    <a class="pb" href="/objectifs.html" title="Objectifs & prévisions mensuelles">🎯 Objectifs</a>
+    <a class="pb" href="/anticipation.html" title="Prévisionnel">🔮 Prévisionnel</a>
+    <a class="pb" href="/tendances.html" title="Tendances (N vs N-1)">📈 Tendances</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a class="btn" href="/creation.html" title="Création">🧱</a>
+  <a class="btn" href="/feedback.html" title="Retours">💬</a>
+  <button class="btn hidden" id="adminBtn" title="Administration des comptes">👤 Admin</button>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap layout-side no-rightnav">
+  <aside id="setupCol">
+    <div class="card setup-card">
+      <h3>1 · Arrêté</h3>
+      <div class="note">Le reporting se calcule à partir d'<b>une date d'arrêté</b> : il empile le <b>Jour</b>, le cumul <b>Semaine</b>, le cumul <b>Mois</b> et le cumul <b>Saison</b> — chacun vs N-1.</div>
+      <div class="toolbar" style="gap:6px;margin-top:8px">
+        <button class="pb on" id="presetDaily" title="Arrêté = hier">🌅 Quotidien</button>
+        <button class="pb" id="presetWeekly" title="Arrêté = aujourd'hui (focus semaine/mois/saison)">📅 Hebdo</button>
+      </div>
+      <label class="setlabel">Date d'arrêté</label>
+      <input id="asof" type="date" class="dt" style="width:100%">
+      <button class="btn blue" id="run" style="margin-top:10px;width:100%">📅 Générer le reporting</button>
+      <div class="note" id="pnote" style="margin-top:6px"></div>
+    </div>
+    <div id="dataBar"></div>
+  </aside>
+
+  <main id="mainCol">
+    <div id="body"><div class="card"><div class="note">Choisis une date d'arrêté puis « Générer ».</div></div></div>
+  </main>
+</div>
+
+<script src="/databar.js"></script>
+<script src="/periodique.js"></script>
+</body>
+</html>
