@@ -125,7 +125,13 @@ async function run() {
   const url = document.getElementById('urlFilter').value.trim();
   document.getElementById('tnote').textContent = 'Analyse…';
   try {
-    const r = await fetch('/api/trends' + (url ? '?url=' + encodeURIComponent(url) : ''));
+    const p = periods();
+    const params = new URLSearchParams();
+    if (url) params.set('url', url);
+    if (p.n && p.n.from && p.n.to) { params.set('from', p.n.from); params.set('to', p.n.to); }
+    if (p.n1 && p.n1.from && p.n1.to) { params.set('cfrom', p.n1.from); params.set('cto', p.n1.to); }
+    const qs = params.toString();
+    const r = await fetch('/api/trends' + (qs ? '?' + qs : ''));
     const d = await r.json();
     if (!r.ok) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(d.error || 'Erreur')}</div></div>`; return; }
     document.getElementById('tnote').textContent = '';

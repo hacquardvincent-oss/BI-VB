@@ -75,6 +75,14 @@ function bisMonthly() {
 }
 // Fusionne des cartes {mois: v} de plusieurs slots, 1ʳᵉ source qui couvre un mois gagne (anti-double-comptage).
 function mergeFirst(maps) { const out = {}; maps.forEach(by => { if (!by) return; Object.entries(by).forEach(([k, v]) => { if (out[k] == null) out[k] = v; }); }); return out; }
+// Liste des mois "YYYY-MM" de [from,to] inclus (null si bornes absentes).
+function monthList(from, to) {
+  if (!/^\d{4}-\d{2}/.test(from || '') || !/^\d{4}-\d{2}/.test(to || '')) return null;
+  let [y, m] = from.slice(0, 7).split('-').map(Number); const [ey, em] = to.slice(0, 7).split('-').map(Number);
+  const out = []; let guard = 0;
+  while ((y < ey || (y === ey && m <= em)) && guard++ < 240) { out.push(`${y}-${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } }
+  return out;
+}
 // CA EShop par mois agrégé sur oms (priorité) + saisonoms, N & N-1 (comme l'historique Objectifs).
 function omsMonthlyAll() {
   const maps = [];
@@ -116,14 +124,26 @@ router.get('/', requireAuth, (req, res) => {
       roas: ad.spend ? (ad.convValue || 0) / ad.spend : null,
       cpa: ad.conv ? ad.spend / ad.conv : null,
     });
-    const series = months.map(mo => {
-      const [y, m] = mo.split('-'); const prev = `${+y - 1}-${m}`;
-      return { month: mo, n: mk(gaAll[mo] || {}, omsAll[mo] || {}, adsAll[mo] || {}, retAll[mo] || {}, bisAll[mo]), n1: mk(gaAll[prev] || {}, omsAll[prev] || {}, adsAll[prev] || {}, retAll[prev] || {}, bisAll[prev]) };
+    // Période d'analyse (saisie sur la brique) : on se LIMITE aux mois de la période N, et on aligne
+    // N-1 par POSITION sur la période N-1 saisie (sinon, repli : même mois de l'année précédente).
+    const nMonths = monthList((req.query.from || '').slice(0, 10), (req.query.to || '').slice(0, 10));
+    const n1Months = monthList((req.query.cfrom || '').slice(0, 10), (req.query.cto || '').slice(0, 10));
+    const useMonths = nMonths && nMonths.length ? nMonths : months;
+    const series = useMonths.map((mo, i) => {
+      const prev = (nMonths && n1Months && n1Months[i]) ? n1Months[i] : `${+mo.slice(0, 4) - 1}-${mo.slice(5)}`;
+      return { month: mo, n1month: prev, n: mk(gaAll[mo] || {}, omsAll[mo] || {}, adsAll[mo] || {}, retAll[mo] || {}, bisAll[mo]), n1: mk(gaAll[prev] || {}, omsAll[prev] || {}, adsAll[prev] || {}, retAll[prev] || {}, bisAll[prev]) };
     });
     // CA marketplace par mois et par enseigne (meilleur slot OMS dispo + Y2), règles figées (GL=SFS).
     const omsMkt = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N') || store.getDataset('oms', 'N1') || store.getDataset('saisonoms', 'N1');
     const y2N = store.getDataset('y2', 'N') || store.getDataset('y2', 'N1');
     const marketplace = calc.marketplaceMonthly(omsMkt && omsMkt.rows, omsMkt && omsMkt.map, y2N && y2N.rows, y2N && y2N.map);
+    // Limite le marketplace à la période N saisie (cohérent avec les courbes).
+    if (nMonths && nMonths.length && marketplace && marketplace.months && marketplace.months.length) {
+      const keep = new Set(nMonths);
+      const idx = marketplace.months.map((mo, i) => (keep.has(mo) ? i : -1)).filter(i => i >= 0);
+      marketplace.months = idx.map(i => marketplace.months[i]);
+      marketplace.series = marketplace.series.map(s => ({ name: s.name, values: idx.map(i => s.values[i]), total: idx.reduce((a, i) => a + (s.values[i] || 0), 0) })).filter(s => s.total > 0);
+    }
     // Cohortes de réachat — OMS N + N-1 combinés (clé client hashée, périmètre EShop).
     const omsRows = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsRows.push(...d.rows); });
     const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
