@@ -385,6 +385,41 @@ function weeklyHistory(rows, map, refMap = {}, opts = {}) {
   };
 }
 
+// ── Socle « Reporting périodique multi-résolution » (arrêté à une date) ──
+// kpiBundle : bloc KPI complet d'une fenêtre (Global + FR + Inter + Full + Démarque). Périmètre EShop
+// (hors mkt + Outstore). Sessions/TT au niveau Global (les splits FR/Inter nécessitent GA pays → v2).
+function kpiBundle(rows, map, sessions) {
+  const base = filterOutstore(rows, map); // calcKPIEShop exclut déjà le marketplace
+  const pvi = map.pv, pvri = map.pv_remise, pi = map.prix, ti = map.type;
+  const hasFO = pvi !== undefined && pvri !== undefined;
+  const isFP = r => hasFO ? isFullPriceLine(fN(r[pvi]), fN(r[pvri]), fN(r[pi])) : true;
+  const notMkt = r => !isMkt((r[ti] || '').trim());
+  const fr = filterDim(base, map, 'fr'), inter = filterDim(base, map, 'inter');
+  const fp = base.filter(r => notMkt(r) && isFP(r)), dem = base.filter(r => notMkt(r) && !isFP(r));
+  const k = (rs, sess) => { const x = calcKPIEShop(rs, map, sess || 0); return { ca: Math.round(x.ca), commandes: x.commandes, pieces: x.pieces, pm: Math.round(x.pm), iv: x.commandes ? Math.round(x.pieces / x.commandes * 1000) / 1000 : 0, tt: x.tt, sessions: Math.round(sess || 0), caFP: Math.round(x.caFP), caOP: Math.round(x.caOP) }; };
+  return { global: k(base, sessions), fr: k(fr), inter: k(inter), fp: k(fp), dem: k(dem) };
+}
+
+// deriveWindows : à partir d'une date d'arrêté, dérive Jour / Semaine (WTD) / Mois (MTD) / Saison-à-date
+// + leur équivalent N-1 (−364 j, jour de semaine aligné). Saison : E (SS) fév→juil, H (AW) août→janv.
+function deriveWindows(asof) {
+  const base = /^\d{4}-\d{2}-\d{2}/.test(asof || '') ? asof.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const D = s => new Date(s + 'T00:00:00Z');
+  const iso = d => d.toISOString().slice(0, 10);
+  const shift = (d, days) => { const c = new Date(d); c.setUTCDate(c.getUTCDate() + days); return c; };
+  const d = D(base);
+  const monday = shift(d, -((d.getUTCDay() + 6) % 7));
+  const m1 = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  const mo = d.getUTCMonth() + 1, y = d.getUTCFullYear();
+  let sStart, sCode;
+  if (mo >= 2 && mo <= 7) { sStart = new Date(Date.UTC(y, 1, 1)); sCode = 'E' + String(y).slice(2); }
+  else { const sy = mo >= 8 ? y : y - 1; sStart = new Date(Date.UTC(sy, 7, 1)); sCode = 'H' + String(sy).slice(2); }
+  const w = (from, to) => ({ from: iso(from), to: iso(to) });
+  const n1 = win => w(shift(D(win.from), -364), shift(D(win.to), -364));
+  const cur = { jour: w(d, d), semaine: w(monday, d), mois: w(m1, d), saison: w(sStart, d) };
+  return { asof: base, season: sCode, windows: cur, n1: { jour: n1(cur.jour), semaine: n1(cur.semaine), mois: n1(cur.mois), saison: n1(cur.saison) } };
+}
+
 // ── Stock (inventaire) : unités, répartition par famille, top réfs, couverture (jours de vente) ──
 // stock = jeu `stock`/`saisonstock` (ref_ext, qte). Couverture = unités ÷ ventes/jour (OMS EShop).
 function calcStock(stockRows, stockMap, refMap, omsRows, omsMap) {
@@ -2229,7 +2264,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
