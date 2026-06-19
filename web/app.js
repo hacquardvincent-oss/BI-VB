@@ -118,7 +118,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -135,7 +135,7 @@ const THEME_OF = {
   daily: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
   annulations: 'AN', retours: 'AN', returnreasons: 'AN', returngeo: 'AN', returnprod: 'AN',
-  stockalerts: 'SK',
+  stockalerts: 'SK', stockcouv: 'SK',
   pages: 'OS', landing: 'OS', lostpages: 'OS', itemfunnel: 'OS', gafunnel: 'OS', device: 'OS', // 🧭 Parcours on-site
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
@@ -157,7 +157,7 @@ const CARD_LABELS = {
   kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', cumul: 'Cumul mensuel & atterrissage', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
   daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
-  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock',
+  device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
   marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
@@ -165,7 +165,7 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
@@ -194,7 +194,7 @@ const VIEW_TEMPLATES = {
   matin: { label: '🌅 Matin e-commerce', cards: ['kpi', 'cumul', 'timeline', 'produits'] },
   direction: { label: '🏛️ Direction', cards: ['kpi', 'cumul', 'variance', 'famille', 'marketplace'] },
   acquisition: { label: '📡 Acquisition', cards: ['ga', 'channels', 'canaltype', 'ads', 'campaigns'] },
-  appro: { label: '📦 Appro & Stock', cards: ['stockalerts', 'famille', 'produits', 'returnprod'] },
+  appro: { label: '📦 Appro & Stock', cards: ['stockalerts', 'stockcouv', 'famille', 'produits', 'returnprod'] },
   commercial: { label: '💰 Commercial', cards: ['demarque', 'fulloff', 'promo', 'offrecompare'] },
 };
 // Donnée externe requise par carte (pour le badge + le filtre « données disponibles »). null = OMS (toujours là).
@@ -1401,6 +1401,21 @@ function renderReport(rep) {
       <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP, ou export uploadé — email écarté) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
   }
 
+  // 📦 Stock & couverture : inventaire WSHOP (jeu `stock`) → unités, familles, couverture vs ventes.
+  const stockCouvCard = (() => {
+    const s = rep.stockInv; if (!s) return '';
+    const tiles = `<div class="kgrid">
+      <div class="kc"><div class="l">Unités en stock</div><div class="v">${fInt(s.totalUnits)}</div></div>
+      <div class="kc"><div class="l">Références</div><div class="v">${fInt(s.refs)}</div></div>
+      <div class="kc"><div class="l">Ventes / jour (EShop)</div><div class="v">${fInt(s.perDay)}</div></div>
+      <div class="kc"><div class="l">Couverture</div><div class="v">${s.coverageDays != null ? s.coverageDays + ' j' : '—'}</div></div></div>`;
+    const fam = (s.byFamille || []).map(f => `<tr><td>${esc(f.fam)}</td><td style="text-align:right">${fInt(f.units)}</td></tr>`).join('');
+    const refs = (s.topRefs || []).map(r => `<tr><td>${esc(r.ref)}${r.fam ? ` <span class="note" style="font-weight:400">${esc(r.fam)}</span>` : ''}</td><td style="text-align:right">${fInt(r.units)}</td></tr>`).join('');
+    const famTbl = fam ? `<div><h3 style="margin-top:10px">Par famille</h3><table style="font-size:12px"><thead><tr><th>Famille</th><th style="text-align:right">Unités</th></tr></thead><tbody>${fam}</tbody></table></div>` : '';
+    const refTbl = refs ? `<div><h3 style="margin-top:10px">Top références stockées</h3><table style="font-size:12px"><thead><tr><th>Réf.</th><th style="text-align:right">Unités</th></tr></thead><tbody>${refs}</tbody></table></div>` : '';
+    return `<div class="card"><h3>📦 Stock & couverture</h3><div class="note">Inventaire WSHOP (jeu « stock »). Couverture = unités en stock ÷ ventes/jour EShop → nombre de jours d'écoulement au rythme actuel.</div>${tiles}<div class="grid cols2">${famTbl}${refTbl}</div></div>`;
+  })();
+
   // Top produits N vs N-1 + reconquête
   const P = rep.produits;
   let produitsCard = '', rentaCard = '';
@@ -2017,7 +2032,7 @@ function renderReport(rep) {
     kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
-    retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
+    retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, stockcouv: stockCouvCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard, metaads: metaadsCard, metasocial: metasocialCard,

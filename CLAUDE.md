@@ -122,7 +122,7 @@ manual→"Remboursement manuel", return→"Retour client"], Pays, Nb colisages, 
 **Pagination** `collectRange(from,to,onCount,extra,guard)` : pagine `orders/get` (`created_from/to`), dédup par orderId,
 convertit au fil de l'eau + **jette la page brute** (mémoire bornée) ; **si `got ≥ RESULT_CAP` → découpe la fenêtre de
 dates en deux récursivement** ; `guard=true` ne garde que les commandes créées ∈ [from,to] (sécurité delta `begin/end`).
-**`refresh`** (import COMPLET) : N et N-1 **en parallèle** (`Promise.all`) → `oms`/`ret`, puis best-effort `bis` + `retprod`.
+**`refresh`** (import COMPLET) : N et N-1 **en parallèle** (`Promise.all`) → `oms`/`ret` UNIQUEMENT (allégé). **Stock + alertes + retours produit DÉCOUPLÉS** → `refreshStockAlerts` (route `/stock-alerts`, jeux STANDARDS `stock`/`bis`/`retprod`) pour ne pas alourdir l'import OMS (temps de chargement). CTA databar séparé « 🔔 Stock & alertes stock ». Carte Reporting `stockcouv` (`calc.calcStock` : unités, par famille, top réfs, **couverture** = unités ÷ ventes/jour EShop ; `rep.stockInv`, thème SK/appro).
 **`syncIncremental`** (delta) : `begin/end` = date de **modification** depuis `.sync.since`, `mergeDelta` remplace les
 lignes des commandes ré-importées (clé `Numeros`). **Ne recalcule PAS le passé / N-1 / bis / retprod** → après un
 changement de règle, **exiger un import complet**.

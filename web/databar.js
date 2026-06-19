@@ -58,14 +58,15 @@
       await pollJob(j => `✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}) — retours & alertes inclus.`);
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
-  // Stock (inventaire) + alertes back-in-stock dans les slots STANDARDS (slot vide) → utilisables partout.
+  // Stock (inventaire) + alertes back-in-stock + retours produit dans les slots STANDARDS → utilisables
+  // partout. Endpoint DÉDIÉ (découplé de l'import OMS pour ne pas l'alourdir).
   async function importMerch() {
     const q = periodQuery(); if (!q) return;
-    note('⏳ Import stock + alertes stock (WSHOP)…');
+    note('⏳ Import stock + alertes + retours produit (WSHOP)…');
     try {
-      const r = await fetch('/api/wshop/saison-merch?slot=&' + q, { method: 'POST' });
+      const r = await fetch('/api/wshop/stock-alerts?' + q, { method: 'POST' });
       if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur')); return; }
-      await pollJob(j => { const x = j.result || {}; return `✓ Stock & alertes importés (${fInt(x.stockRefs || 0)} réf. stock, ${fInt(x.backInStock || 0)} alertes).`; });
+      await pollJob(j => { const x = j.result || {}; return `✓ Stock & alertes importés (${fInt(x.stockRefs || 0)} réf. stock, ${fInt(x.alerts || 0)} alertes${x.retprod ? ', ' + fInt(x.retprod) + ' retours' : ''}).`; });
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
   function pollJob(doneMsg) {

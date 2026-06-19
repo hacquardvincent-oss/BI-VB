@@ -13,7 +13,7 @@ const MEM = {}; // repli mémoire : { username: { key: {label, cards} } }
 
 const KNOWN = new Set(['kpi', 'actionplan', 'demarque', 'fulloff', 'offrecompare', 'comalerts', 'timeline', 'timeline2',
   'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations',
-  'retours', 'stockalerts', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays',
+  'retours', 'stockalerts', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays',
   'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca']);
 // Widgets « from scratch » : { id, title, dim, metric, form, top, n1 } — whitelists strictes.
 const W_DIMS = ['total', 'famille', 'pays', 'produit', 'saison', 'canal', 'canaltype', 'device', 'jour', 'tranche', 'campagne'];

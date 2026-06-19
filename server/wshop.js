@@ -391,9 +391,25 @@ async function refresh(opts = {}, cb = {}) {
     if (dsN1.rows.length) { store.setDataset(omsSrc, 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
     store.setDataset(retSrc, 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
   }
-  // Alertes stock (back-in-stock) sur la période — best-effort, agrégées par produit (titre + coloris).
-  let alerts = 0;
-  if (!opts.slot) {
+  // ⚠️ Stock (inventaire) / alertes back-in-stock / retours produit sont DÉCOUPLÉS de l'import OMS
+  // (allègement du temps de chargement) → endpoint dédié /stock-alerts (refreshStockAlerts), CTA databar à part.
+  return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length };
+}
+
+// Stock + alertes back-in-stock + retours produit dans les slots STANDARDS (stock/bis/retprod).
+// Découplé de l'import OMS pour ne pas alourdir ce dernier. Mêmes formats que les cartes attendent.
+async function refreshStockAlerts(opts = {}, cb = {}) {
+  if (!isConfigured()) throw new Error('WSHOP non configuré');
+  const { from, to, cfrom, cto } = opts;
+  let stockRefs = 0, alerts = 0, retprodN = 0, eanMap = {};
+  try {
+    if (cb.phase) cb.phase('Stock (inventory)…');
+    const inv = await fetchInventory();
+    store.setDataset('stock', 'N', stockDataset(inv.byRef));
+    stockRefs = Object.keys(inv.byRef).length; eanMap = inv.eanToRef || {};
+    if (cb.count) cb.count('N', stockRefs);
+  } catch (e) { /* best-effort */ }
+  if (from && to) {
     try {
       if (cb.phase) cb.phase('Alertes stock (back-in-stock)…');
       const subs = await fetchBackInStock(from, to);
@@ -410,16 +426,14 @@ async function refresh(opts = {}, cb = {}) {
       store.setDataset('bis', 'N', { hdrs: ['Produit', 'Abonnements', 'En attente', 'Dernier'], rows, map: { name: 0, count: 1, waiting: 2, last: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
       alerts = subs.length;
     } catch (e) { /* best-effort */ }
-    // Retours niveau produit (top produits retournés) via /returns/get — best-effort.
     try {
       if (cb.phase) cb.phase('Retours produits…');
-      const eanMap = Object.assign({}, (N1 && N1.eanMap) || {}, (N && N.eanMap) || {}); // N prioritaire
       const rN = await fetchReturnsRange(from, to);
-      store.setDataset('retprod', 'N', returnsProductDataset(rN, eanMap));
-      if (N1) { const rN1 = await fetchReturnsRange(cfrom, cto); store.setDataset('retprod', 'N1', returnsProductDataset(rN1, eanMap)); }
+      store.setDataset('retprod', 'N', returnsProductDataset(rN, eanMap)); retprodN = rN.length;
+      if (cfrom && cto) { const rN1 = await fetchReturnsRange(cfrom, cto); store.setDataset('retprod', 'N1', returnsProductDataset(rN1, eanMap)); }
     } catch (e) { /* best-effort */ }
   }
-  return { orders: N.count, rows: dsN.rows.length, from: dsN.date_min, to: dsN.date_max, n1, returns: N.ret.length, alerts };
+  return { stockRefs, alerts, retprod: retprodN };
 }
 
 // Fusionne un delta dans un dataset existant : retire les lignes des commandes ré-importées
@@ -930,6 +944,11 @@ router.post('/refresh', requireAuth, (req, res) => {
 router.post('/saison-merch', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
   res.status(202).json({ started: true, ...runJob('saison-merch', cb => refreshSaisonMerch(req.query, cb)) });
+});
+// Stock + alertes + retours produit (slots standards) — découplé de l'import OMS.
+router.post('/stock-alerts', requireAuth, (req, res) => {
+  if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });
+  res.status(202).json({ started: true, ...runJob('stock-alerts', cb => refreshStockAlerts(req.query, cb)) });
 });
 router.post('/sync', requireAuth, (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'WSHOP non configuré côté serveur (variables d\'environnement)' });

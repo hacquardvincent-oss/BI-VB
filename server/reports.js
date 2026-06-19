@@ -530,6 +530,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     stockAlerts = bisDs.rows.map(r => ({ name: (r[mp.name] || '').toString(), count: parseInt(r[mp.count]) || 0, waiting: parseInt(r[mp.waiting]) || 0, last: (r[mp.last] || '').toString(), rayon: mp.rayon !== undefined ? (r[mp.rayon] || '').toString() : '', saison: mp.saison !== undefined ? (r[mp.saison] || '').toString() : '' }))
       .sort((a, b) => b.count - a.count).slice(0, 300); // borne large : la carte affiche le top 20, les KPIs totalisent l'ensemble
   }
+  // Stock (inventaire WSHOP) : couverture & répartition par famille — slot standard `stock` (repli saisonstock).
+  const stockDs = store.getDataset('stock', 'N') || store.getDataset('saisonstock', 'N');
+  const stockInv = (stockDs && stockDs.rows && stockDs.rows.length) ? calc.calcStock(stockDs.rows, stockDs.map, refMap, rowsN, omsN.map) : null;
 
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
@@ -792,7 +795,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     daily,
     dailyN1,
     timeline, timeline2,
-    stockAlerts,
+    stockAlerts, stockInv,
     hourly,
     gaFunnel,
     ttPays,

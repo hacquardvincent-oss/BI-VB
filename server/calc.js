@@ -385,6 +385,38 @@ function weeklyHistory(rows, map, refMap = {}, opts = {}) {
   };
 }
 
+// ── Stock (inventaire) : unités, répartition par famille, top réfs, couverture (jours de vente) ──
+// stock = jeu `stock`/`saisonstock` (ref_ext, qte). Couverture = unités ÷ ventes/jour (OMS EShop).
+function calcStock(stockRows, stockMap, refMap, omsRows, omsMap) {
+  const ri = stockMap.ref_ext !== undefined ? stockMap.ref_ext : stockMap._refExt, qi = stockMap.qte;
+  if (ri === undefined || qi === undefined) return null;
+  let totalUnits = 0, refs = 0; const byFam = {}, byRef = {};
+  stockRows.forEach(r => {
+    const ref = (r[ri] || '').toString().trim(); if (!ref) return;
+    const q = parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    totalUnits += q; refs++;
+    const fam = (refMap && refMap[ref]) || 'Autre';
+    byFam[fam] = (byFam[fam] || 0) + q; byRef[ref] = (byRef[ref] || 0) + q;
+  });
+  let soldUnits = 0; const dset = new Set();
+  if (omsRows && omsMap && omsMap.date !== undefined && omsMap.qte !== undefined) {
+    omsRows.forEach(r => {
+      if (omsMap.type !== undefined && isMkt((r[omsMap.type] || '').trim())) return;
+      if (omsMap.lieu !== undefined && isInstore(r[omsMap.lieu])) return;
+      const d = parseFrD(r[omsMap.date]); if (!d) return;
+      soldUnits += parseInt((r[omsMap.qte] || '1').toString().replace(/\s/g, '')) || 1; dset.add(toISO(d));
+    });
+  }
+  const perDay = dset.size ? soldUnits / dset.size : 0;
+  return {
+    totalUnits, refs,
+    byFamille: Object.entries(byFam).map(([fam, units]) => ({ fam, units })).sort((a, b) => b.units - a.units).slice(0, 12),
+    topRefs: Object.entries(byRef).map(([ref, units]) => ({ ref, units, fam: (refMap && refMap[ref]) || '' })).sort((a, b) => b.units - a.units).slice(0, 15),
+    perDay: Math.round(perDay * 10) / 10,
+    coverageDays: perDay > 0 ? Math.round(totalUnits / perDay) : null,
+  };
+}
+
 // ── Cohortes de RÉACHAT (page Tendances) — clé client PSEUDONYMISÉE (hash, jamais l'email) ──
 // Cohorte = mois de la 1ʳᵉ commande du client ; réachat = 1ʳᵉ commande suivante dans 30/60/90 j.
 // Périmètre EShop (hors mkt + Outstore). Nécessite la colonne `Client` (import complet WSHOP).
@@ -2197,7 +2229,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
