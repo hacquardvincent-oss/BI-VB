@@ -51,16 +51,34 @@ function render(d) {
     + order.map(([k, t]) => blockCard(t, d.blocks[k], emph[k])).join('');
 }
 
+const BLOCKS = [['jour', '🗓️ Jour'], ['semaine', '📅 Semaine'], ['mois', '📆 Mois'], ['saison', '🏷️ Saison']];
+function buildAdv() {
+  document.getElementById('advGrid').innerHTML = BLOCKS.map(([k, lbl]) => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px">
+    <b style="width:80px">${lbl}</b>
+    N <input id="${k}From" type="date" class="dt" style="padding:3px 5px"> → <input id="${k}To" type="date" class="dt" style="padding:3px 5px">
+    <span style="color:var(--t3)">·</span> N-1 <input id="${k}N1From" type="date" class="dt" style="padding:3px 5px"> → <input id="${k}N1To" type="date" class="dt" style="padding:3px 5px"></div>`).join('');
+}
+function fillWindows(d) {
+  BLOCKS.forEach(([k]) => {
+    const b = d.blocks && d.blocks[k]; if (!b) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set(k + 'From', b.window.from); set(k + 'To', b.window.to); set(k + 'N1From', b.n1window.from); set(k + 'N1To', b.n1window.to);
+  });
+}
 async function run() {
   const asof = document.getElementById('asof').value;
   if (!asof) { document.getElementById('pnote').textContent = '⚠ Choisis une date.'; return; }
   document.getElementById('pnote').textContent = 'Calcul…';
+  const params = new URLSearchParams({ asof });
+  if (document.getElementById('advWindows').open) {
+    BLOCKS.forEach(([k]) => ['From', 'To', 'N1From', 'N1To'].forEach(suf => { const v = document.getElementById(k + suf).value; if (v) params.set(k + suf, v); }));
+  }
   try {
-    const r = await fetch('/api/periodic?asof=' + asof);
+    const r = await fetch('/api/periodic?' + params.toString());
     const d = await r.json();
     if (!r.ok) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(d.error || 'Erreur')}</div></div>`; return; }
     document.getElementById('pnote').textContent = '';
-    render(d);
+    render(d); fillWindows(d);
   } catch (e) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
 
@@ -81,6 +99,7 @@ function setPreset(weekly) {
   document.getElementById('presetDaily').addEventListener('click', () => { setPreset(false); run(); });
   document.getElementById('presetWeekly').addEventListener('click', () => { setPreset(true); run(); });
   document.getElementById('run').addEventListener('click', run);
+  buildAdv();
   setPreset(false);
   if (window.initDataBar) initDataBar({
     title: '2 · Chargement des données',

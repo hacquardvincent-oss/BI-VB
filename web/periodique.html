@@ -39,6 +39,11 @@
       <input id="asof" type="date" class="dt" style="width:100%">
       <button class="btn blue" id="run" style="margin-top:10px;width:100%">📅 Générer le reporting</button>
       <div class="note" id="pnote" style="margin-top:6px"></div>
+      <details class="fold" id="advWindows" style="margin-top:10px">
+        <summary>⚙️ Ajuster les périodes manuellement</summary>
+        <div class="note" style="margin:6px 0">Pré-rempli automatiquement ; modifie un bloc puis « Générer » (replié = automatique depuis l'arrêté).</div>
+        <div id="advGrid" style="display:flex;flex-direction:column;gap:8px;font-size:11px"></div>
+      </details>
     </div>
     <div id="dataBar"></div>
   </aside>
