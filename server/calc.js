@@ -109,6 +109,7 @@ const inRng = (o, f, t) => !!o && (!f || dcmp(o, f) >= 0) && (!t || dcmp(o, t) <
 const OMS_ALIASES = {
   date: ['date commande', 'date de commande', 'date'],
   heure: ['heure'],
+  client: ['client'], // clé client PSEUDONYMISÉE (hash) — cohortes de réachat (jamais l'email en clair)
   prix: ['prix de vente paye', 'prix de vente pay', 'prix vente pay'],
   pays: ['pays livraison', 'pays de livraison'],
   mag: ['nom magasin'],
@@ -382,6 +383,38 @@ function weeklyHistory(rows, map, refMap = {}, opts = {}) {
     topFamilles: topFam(cumFam, 10), topProduits: topProd(cumProd, 12),
     weeks: weekArr, operation,
   };
+}
+
+// ── Cohortes de RÉACHAT (page Tendances) — clé client PSEUDONYMISÉE (hash, jamais l'email) ──
+// Cohorte = mois de la 1ʳᵉ commande du client ; réachat = 1ʳᵉ commande suivante dans 30/60/90 j.
+// Périmètre EShop (hors mkt + Outstore). Nécessite la colonne `Client` (import complet WSHOP).
+function cohortRetention(rows, map) {
+  const ci = map.client, di = map.date, ni = map.num, ti = map.type, li = map.lieu;
+  if (ci === undefined || di === undefined) return null;
+  const DAY = 86400000;
+  const byClient = {};
+  rows.forEach(r => {
+    const cli = (r[ci] || '').toString().trim(); if (!cli) return;
+    if (ti !== undefined && isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const d = parseFrD(r[di]); if (!d) return;
+    const ms = Date.UTC(d.y, d.m - 1, d.d);
+    const ord = ni !== undefined ? (r[ni] || '').toString() : (cli + ':' + ms);
+    const c = byClient[cli] || (byClient[cli] = {});
+    if (c[ord] == null || ms < c[ord]) c[ord] = ms;
+  });
+  const cohorts = {}; let totCust = 0, t30 = 0, t60 = 0, t90 = 0;
+  Object.values(byClient).forEach(orders => {
+    const times = Object.values(orders).sort((a, b) => a - b); if (!times.length) return;
+    const first = times[0], fd = new Date(first);
+    const key = `${fd.getUTCFullYear()}-${String(fd.getUTCMonth() + 1).padStart(2, '0')}`;
+    const co = cohorts[key] || (cohorts[key] = { month: key, customers: 0, r30: 0, r60: 0, r90: 0 });
+    co.customers++; totCust++;
+    const re = times.find(t => t > first);
+    if (re != null) { const gap = re - first; if (gap <= 30 * DAY) { co.r30++; t30++; } if (gap <= 60 * DAY) { co.r60++; t60++; } if (gap <= 90 * DAY) { co.r90++; t90++; } }
+  });
+  const arr = Object.keys(cohorts).sort().map(k => { const c = cohorts[k]; return { month: c.month, customers: c.customers, r30: c.customers ? c.r30 / c.customers : 0, r60: c.customers ? c.r60 / c.customers : 0, r90: c.customers ? c.r90 / c.customers : 0 }; });
+  return { cohorts: arr, overall: { customers: totCust, r30: totCust ? t30 / totCust : 0, r60: totCust ? t60 / totCust : 0, r90: totCust ? t90 / totCust : 0 } };
 }
 
 // ── Agrégation MENSUELLE du CA EShop (hors mkt + Outstore) → { "YYYY-MM": {ca, commandes, pieces, caOP} }
@@ -2164,7 +2197,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

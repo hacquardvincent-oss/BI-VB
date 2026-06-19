@@ -12,9 +12,22 @@
 // classification canal/marketplace (libellés magasin WSHOP vs gl.com/printemps de l'OMS CSV).
 // ============================================================================
 const express = require('express');
+const crypto = require('crypto');
 const store = require('./store');
 const { requireAuth } = require('./auth');
 const calc = require('./calc');
+
+// Clé client PSEUDONYMISÉE : hash SHA-256 (tronqué) de l'email/identifiant — JAMAIS l'email en clair.
+// Sert UNIQUEMENT à relier les commandes d'un même client (cohortes de réachat). Non réversible (ADR-009).
+function clientKey(o) {
+  const raw = (o.customer && (o.customer.email || o.customer.id || o.customer.customerId))
+    || o.customerEmail || o.email
+    || (o.billingAddress && o.billingAddress.email)
+    || (o.shippingAddress && o.shippingAddress.email)
+    || o.customerId || o.customerReference || '';
+  const s = String(raw).toLowerCase().trim();
+  return s ? crypto.createHash('sha256').update(s).digest('hex').slice(0, 16) : '';
+}
 
 const router = express.Router();
 
@@ -157,6 +170,7 @@ function orderToRows(order) {
   let promoValue = o.couponValue != null ? o.couponValue : (promoObj.value != null ? promoObj.value : (promoObj.percentage != null ? promoObj.percentage : (promoObj.amount != null ? promoObj.amount : '')));
   if (promoValue == null) promoValue = '';
   const items = Array.isArray(o.orderItems) ? o.orderItems : [];
+  const cli = clientKey(o); // clé client hashée (cohortes) — même valeur pour toutes les lignes de la commande
   // « Quantité non livré » = STRICTEMENT comme la colonne OMS : pièces qui ne seront PAS livrées.
   // Signal = orderCustomerStatus (enum API à 22 états, calque les libellés OMS) ; orderItems sans statut.
   //   • ANNULÉE (comptée) : Annulé Stock / Annulé par le Client / Annulé Mags
@@ -211,6 +225,7 @@ function orderToRows(order) {
       'Code Promo': promoCode,
       'Type Code Promo': promoType,
       'Valeur Code Promo': promoValue,
+      'Client': cli,
     };
   });
 }
@@ -260,7 +275,7 @@ function buildReturnsDataset(orders, from, to) {
 }
 
 // ── Collecte au fil de l'eau (mémoire maîtrisée) ────────────────────────────
-const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise', 'Statut commande', 'Code Promo', 'Type Code Promo', 'Valeur Code Promo'];
+const OMS_HDRS = ['Date', 'Heure', 'Prix de vente paye', 'Pays livraison', 'NOM MAGASIN', 'Type Paiement', 'Numeros', 'Designation produit', 'quantites commandees', 'Quantité non livré', 'Ref. externe', 'Lieu de prise de commande', 'Prix Vente', 'Prix Vente Remise', 'Statut commande', 'Code Promo', 'Type Code Promo', 'Valeur Code Promo', 'Client'];
 // 'Numeros' ajouté pour le merge incrémental (clé = n° de commande) ; ignoré par calc.RET_ALIASES.
 const RET_HDRS = ['Date creation', 'Montant rembourse', 'Numero de retour', 'Raison', 'Pays livraison', 'Nb colisages rembourses', 'Numeros'];
 const nowDT = () => new Date().toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:MM:SS"

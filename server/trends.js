@@ -102,10 +102,14 @@ router.get('/', requireAuth, (req, res) => {
     // CA marketplace par mois et par enseigne (OMS mkt + Y2), règles figées (GL=SFS, retours exclus).
     const omsN = store.getDataset('oms', 'N'), y2N = store.getDataset('y2', 'N');
     const marketplace = calc.marketplaceMonthly(omsN && omsN.rows, omsN && omsN.map, y2N && y2N.rows, y2N && y2N.map);
+    // Cohortes de réachat — OMS N + N-1 combinés (clé client hashée, périmètre EShop).
+    const omsAll = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsAll.push(...d.rows); });
+    const omsMap = (omsN || store.getDataset('oms', 'N1') || {}).map;
+    const cohorts = (omsMap && omsMap.client != null && omsAll.length) ? calc.cohortRetention(omsAll, omsMap) : null;
 
     res.json({
-      url: url || null, series, marketplace,
-      has: { ga: !!Object.keys(nGA).length, oms: !!Object.keys(nOMS).length, ads: !!Object.keys(nAds).length, ret: !!Object.keys(nRet).length, marketplace: !!(marketplace.series && marketplace.series.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
+      url: url || null, series, marketplace, cohorts,
+      has: { ga: !!Object.keys(nGA).length, oms: !!Object.keys(nOMS).length, ads: !!Object.keys(nAds).length, ret: !!Object.keys(nRet).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
