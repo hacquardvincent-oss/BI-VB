@@ -569,5 +569,7 @@ document.getElementById('logout').addEventListener('click', async () => {
 
 (async () => {
   if (!(await me())) return;
+  // Récap COMMUN de la data de saison déjà en mémoire (slots saison* dédiés ; imports via le panneau ci-dessus).
+  if (window.initDataBar) initDataBar({ title: 'Données de saison en mémoire', slot: 'saison', connectors: [] });
   loadReport();
 })();

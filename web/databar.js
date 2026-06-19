@@ -33,8 +33,8 @@
       const r = await fetch('/api/ingest/status'); if (!r.ok) return;
       LOADED = await r.json();
       const byKey = {}; LOADED.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
-      const LABEL = { oms: 'OMS', saisonoms: 'OMS (saison)', ga: 'GA4', gapagedaily: 'GA4 pages', ads: 'Google Ads', metaads: 'Meta Ads', y2: 'Y2', ret: 'Retours', ref: 'Référentiel', impl: 'Implantation', offre: 'Offre' };
-      const want = ['oms', 'saisonoms', 'ga', 'ads', 'metaads', 'y2', 'ret', 'ref'];
+      const LABEL = { oms: 'OMS', saisonoms: 'OMS (saison)', saisonret: 'Retours (saison)', saisongaitem: 'GA4 produits (saison)', saisonstock: 'Stock (saison)', saisonbis: 'Alertes stock (saison)', ga: 'GA4', gapagedaily: 'GA4 pages', ads: 'Google Ads', metaads: 'Meta Ads', y2: 'Y2', ret: 'Retours', ref: 'Référentiel', impl: 'Implantation', offre: 'Offre' };
+      const want = OPTS.slot ? ['saisonoms', 'saisonret', 'saisongaitem', 'saisonstock', 'saisonbis'] : ['oms', 'saisonoms', 'ga', 'ads', 'metaads', 'y2', 'ret', 'ref'];
       const lines = want.filter(s => byKey[s]).map(s => {
         const ds = byKey[s];
         const mins = ds.map(d => d.date_min).filter(Boolean).sort(), maxs = ds.map(d => d.date_max).filter(Boolean).sort();
@@ -49,7 +49,7 @@
 
   // WSHOP : import complet (job + poll) / delta (économe).
   async function importWshop(delta) {
-    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS WSHOP…'); var url = '/api/wshop/refresh?' + q; }
+    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS WSHOP…'); var url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
     else { note('⏳ Synchronisation delta WSHOP…'); url = '/api/wshop/sync'; }
     try {
       const r = await fetch(url, { method: 'POST' });
@@ -125,8 +125,9 @@
       </details>
       <div class="note" id="db_note" style="margin-top:6px"></div>
     </div>`;
-    // Affiche les connecteurs configurés.
-    const map = [['wshop', 'db_wshop'], ['ga4', 'db_ga4'], ['googleads', 'db_ads'], ['meta', 'db_meta'], ['y2', 'db_y2']];
+    // Affiche les connecteurs configurés (filtrés par opts.connectors si fourni).
+    const allow = Array.isArray(OPTS.connectors) ? OPTS.connectors : ['wshop', 'ga4', 'googleads', 'meta', 'y2'];
+    const map = [['wshop', 'db_wshop'], ['ga4', 'db_ga4'], ['googleads', 'db_ads'], ['meta', 'db_meta'], ['y2', 'db_y2']].filter(([c]) => allow.includes(c));
     await Promise.all(map.map(async ([c, box]) => {
       try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') document.getElementById('db_wshopSync').classList.remove('hidden'); } } catch (e) { /* */ }
     }));
