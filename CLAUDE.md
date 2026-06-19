@@ -142,6 +142,9 @@ CancelledInternal, ReturnPreparation, PickupStoreProcessed, WaitingValidation, P
 ### 3.2 GA4 (`ga4.js`)
 **Env** : `GA4_SA_KEY` (JSON ou base64) ou `/etc/secrets/ga4.json` ou `GOOGLE_APPLICATION_CREDENTIALS` ; `GA4_PROPERTY_ID`.
 `post()` : `google-auth-library` JWT (scope `analytics.readonly`) → `runReport`. Retries 5xx/réseau, pas sur 4xx.
+**Jeton OAuth caché ~50 min + partagé** (`getToken`/`fetchToken`/`_tokCache`/`_authP` dédoublonne les récupérations
+concurrentes) → évite ~26 fetchs `oauth2/v4/token` par refresh (cause des « Premature close », cf §12) ; **retry dédié
+sur l'auth** + invalidation/refresh sur 401. Route **`/ping`** (force un jeton + 1 `runReport` minimal = diagnostic).
 **Fetchers (dimensions → métriques → jeu)** :
 | Jeu | Dimensions | Métriques |
 |---|---|---|
@@ -500,6 +503,7 @@ Route `GET /pdf` (`isDaily` = type `quotid|daily|jour` ou from==to).
 | **Données OMS pas mises à jour après changement de règle** | « Synchroniser le delta » ne recalcule pas le passé. | Exiger **« Importer OMS depuis WSHOP » (import complet)**. |
 | **Bilan -73% trompeur sur AUJOURD'HUI (N partiel vs N-1 full day)** | Analyse d'un jour = aujourd'hui : le N s'arrête à l'heure courante (ex. 12h) mais le N-1 comptait la **journée entière** → comparaison déloyale. | **Cumul à l'heure** : `buildReport({hourMax})` + `calc.filterTimeMax(rows,map,"HH:MM")` tronque N **ET** N-1 aux ventes ≤ heure courante quand `from===to===aujourd'hui`. Le front (`commerciale.js`) passe `hourMax=now` au rapport principal (PAS au `loadLaunch`, qui garde la trajectoire N-1 full day). ⚠️ Les sessions GA restent en journée (date-level, non sécables à l'heure) → TT du jour indicatif. |
 | **0 commande le jour de lancement (Analyse commerciale)** | `syncIncremental` réutilisait le `to` figé du dernier import complet ; `guard` (created ∈ [from,to]) **rejetait les commandes créées APRÈS** cette date → les ventes du jour J n'entraient jamais. De plus le delta **ne charge JAMAIS N-1** (« PAS DE N-1 »). | `syncIncremental` **étend `to` à aujourd'hui** (`max(to, today)`). Bouton **« ⬇️ Import complet (opération + N-1) »** sur la page commerciale → `POST /api/wshop/refresh?from&to&cfrom&cto` (charge N **et** N-1 sur la fenêtre de l'opération). |
+| **GA4 « Invalid response body … oauth2/v4/token: Premature close »** | Chaque `post()` recréait un client JWT et refaisait un fetch du **jeton OAuth** (~26 par refresh) ; `undici` (fetch natif Node, google-auth-library 9) ferme la connexion du endpoint token de façon transitoire (« Premature close »), **et ce fetch n'était PAS dans la boucle de retry**. | **Cacher le jeton ~50 min** + le **partager** entre tous les fetchers (`getToken`/`_tokCache`), **dédoublonner** les récupérations concurrentes (`_authP`), **retry dédié** (4×, backoff) sur l'auth + refresh sur 401. Route **`/ping`** (bouton « 🩺 Tester GA4 ») pour diagnostiquer. Si ça persiste = vérifier l'**egress réseau** de l'hébergeur vers `oauth2.googleapis.com`. |
 | **Conflits de merge à répétition** | Branche = sur-ensemble de `main` (squash-merges). | Résoudre `git checkout --ours <fichier>`, vérifier (`node -c`, `grep`), push, re-merge. |
 
 ---

@@ -45,13 +45,41 @@ const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisa
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
   'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier', 'Checkouts', 'Achats e-commerce'];
 
-// ── Helper bas niveau : runReport (avec retries sur 5xx / erreurs réseau) ────
+// ── Jeton OAuth GA4 : récupéré UNE fois puis caché (~50 min) et PARTAGÉ par tous les fetchers ──
+// Évite de refaire un fetch sur oauth2/v4/token à chaque appel (~26 par refresh) — cause racine des
+// « Invalid response body … Premature close » (flakiness réseau du endpoint token). Retry dédié sur l'auth.
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function post(propertyId, body, tries = 3) {
+let _tokCache = { token: null, exp: 0 };
+let _authP = null; // dédoublonne les récupérations de jeton concurrentes
+async function fetchToken() {
   const creds = loadCreds();
   if (!creds) throw new Error('Identifiants GA4 absents (Secret File ga4.json ou GA4_SA_KEY)');
-  const client = new JWT({ email: creds.client_email, key: creds.private_key, scopes: SCOPES });
-  const { token } = await client.getAccessToken();
+  let lastErr;
+  for (let i = 1; i <= 4; i++) {
+    try {
+      const client = new JWT({ email: creds.client_email, key: creds.private_key, scopes: SCOPES });
+      const { token } = await client.getAccessToken();
+      if (!token) throw new Error('jeton GA4 vide');
+      _tokCache = { token, exp: Date.now() + 50 * 60 * 1000 }; // ~50 min (jeton Google valable 1 h)
+      return token;
+    } catch (e) {
+      lastErr = e;
+      // « Premature close » / réseau / 5xx du endpoint token = transitoire → on retente avec backoff.
+      if (i < 4) { await sleep(700 * i); continue; }
+    }
+  }
+  throw new Error('Auth GA4 KO (jeton OAuth) : ' + ((lastErr && lastErr.message) || 'indisponible'));
+}
+async function getToken(force = false) {
+  if (!force && _tokCache.token && Date.now() < _tokCache.exp) return _tokCache.token;
+  if (_authP) return _authP; // une seule récupération concurrente
+  _authP = fetchToken().finally(() => { _authP = null; });
+  return _authP;
+}
+
+// ── Helper bas niveau : runReport (avec retries sur 5xx / erreurs réseau + refresh jeton sur 401) ──
+async function post(propertyId, body, tries = 3) {
+  let token = await getToken();
   let lastErr;
   for (let i = 1; i <= tries; i++) {
     try {
@@ -60,6 +88,7 @@ async function post(propertyId, body, tries = 3) {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if ((res.status === 401 || res.status === 403) && i < tries) { _tokCache = { token: null, exp: 0 }; token = await getToken(true); await sleep(200); continue; } // jeton expiré/invalide → refresh
       if (res.status >= 500) { lastErr = new Error(`GA4 API ${res.status}`); if (i < tries) { await sleep(800 * i); continue; } }
       if (!res.ok) { const txt = await res.text(); throw new Error(`GA4 API ${res.status} : ${txt.slice(0, 200)}`); }
       return res.json();
@@ -387,6 +416,18 @@ async function refresh(opts = {}) {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 router.get('/status', requireAuth, (req, res) => res.json({ configured: isConfigured(), propertyId: process.env.GA4_PROPERTY_ID || null }));
+
+// Test de connexion : force une récupération de jeton OAuth (le point qui échouait en « Premature close »)
+// + un appel runReport minimal (1 ligne) pour valider l'accès à la propriété. Diagnostic, n'importe rien.
+router.get('/ping', requireAuth, async (req, res) => {
+  try {
+    if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (GA4_SA_KEY ou /etc/secrets/ga4.json + GA4_PROPERTY_ID)' });
+    const token = await getToken(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const d = await post(process.env.GA4_PROPERTY_ID, { dateRanges: [{ startDate: today, endDate: today }], metrics: [{ name: 'sessions' }], limit: 1 });
+    res.json({ ok: true, tokenOk: !!token, propertyId: process.env.GA4_PROPERTY_ID, sampleRows: (d.rows || []).length });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
 
 router.post('/refresh', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (clé ou GA4_PROPERTY_ID manquants côté serveur)' });

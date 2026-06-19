@@ -3059,6 +3059,15 @@ async function ga4Status() {
     if (s.configured) document.getElementById('ga4box').classList.remove('hidden');
   } catch (e) { /* ignore */ }
 }
+{ const gp = document.getElementById('ga4ping'); if (gp) gp.addEventListener('click', async () => {
+  const note = document.getElementById('ga4note');
+  note.textContent = '🩺 Test GA4 (auth + appel minimal)…';
+  try {
+    const r = await fetch('/api/ga4/ping');
+    const j = await r.json().catch(() => ({}));
+    note.textContent = r.ok ? `✓ GA4 OK — jeton récupéré, propriété ${j.propertyId || '—'} accessible.` : '⚠ GA4 : ' + (j.error || 'échec');
+  } catch (e) { note.textContent = '⚠ GA4 : ' + (e.message || 'réseau'); }
+}); }
 document.getElementById('ga4refresh').addEventListener('click', async () => {
   const note = document.getElementById('ga4note');
   note.textContent = 'Récupération GA4 sur la période sélectionnée…';
