@@ -135,106 +135,6 @@ const frd = iso => (iso ? iso.split('-').reverse().join('/') : '');
 let FP_N, FP_N1;
 function rangeOf(fp) { const d = fp && fp.selectedDates; if (!d || d.length < 2) return null; return { from: ymd(d[0]), to: ymd(d[1]) }; }
 function periods() { const n = rangeOf(FP_N), n1 = rangeOf(FP_N1); return { n, n1 }; }
-function impNote(t) { const el = document.getElementById('impNote'); if (el) el.innerHTML = t; }
-
-async function setupDataPanel() {
-  const conns = [['wshop', 'wshopBox'], ['ga4', 'ga4Box'], ['googleads', 'adsBox'], ['meta', 'metaBox'], ['y2', 'y2Box']];
-  let any = false;
-  await Promise.all(conns.map(async ([c, box]) => {
-    try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); any = true; if (c === 'wshop') document.getElementById('wshopSyncBox').classList.remove('hidden'); } } catch (e) { /* indispo */ }
-  }));
-  if (any) document.getElementById('dataPanel').classList.remove('hidden');
-  const w = document.getElementById('impWshop'); if (w) w.addEventListener('click', importWshop);
-  const ws = document.getElementById('impWshopSync'); if (ws) ws.addEventListener('click', importWshopSync);
-  const g = document.getElementById('impGa4'); if (g) g.addEventListener('click', () => importDated('ga4', 'GA4'));
-  const a = document.getElementById('impAds'); if (a) a.addEventListener('click', () => importDated('googleads', 'Google Ads'));
-  const m = document.getElementById('impMeta'); if (m) m.addEventListener('click', () => importDated('meta', 'Meta Ads'));
-  const y = document.getElementById('impY2'); if (y) y.addEventListener('click', () => importDated('y2', 'Y2 Marketplace'));
-  showLoaded();
-}
-let LOADED = []; // cache de /api/ingest/status (couverture par source)
-function coverageOf(source) {
-  const ds = LOADED.filter(d => d.source === source && d.date_min && d.date_max);
-  if (!ds.length) return null;
-  return { min: ds.map(d => d.date_min).sort()[0], max: ds.map(d => d.date_max).sort().slice(-1)[0] };
-}
-const covers = (source, from, to) => { const c = coverageOf(source); return !!(c && c.min <= from && c.max >= to); };
-
-// Récap des données DÉJÀ en mémoire (partagées entre les briques) → évite de recharger.
-async function showLoaded() {
-  try {
-    const r = await fetch('/api/ingest/status'); if (!r.ok) return;
-    const list = await r.json(); LOADED = list;
-    const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
-    const LABEL = { oms: 'OMS', saisonoms: 'OMS (saison)', ga: 'GA4', gapagedaily: 'GA4 pages', ads: 'Google Ads', metaads: 'Meta Ads', y2: 'Y2', ret: 'Retours' };
-    const want = ['oms', 'saisonoms', 'ga', 'gapagedaily', 'ads', 'metaads', 'y2', 'ret'];
-    const lines = want.filter(s => byKey[s]).map(s => {
-      const ds = byKey[s];
-      const mins = ds.map(d => d.date_min).filter(Boolean).sort(), maxs = ds.map(d => d.date_max).filter(Boolean).sort();
-      const rows = ds.reduce((a, d) => a + (d.row_count || 0), 0);
-      const range = (mins[0] && maxs.length) ? `${frd(mins[0])} → ${frd(maxs[maxs.length - 1])}` : 'chargé';
-      return `<div>✅ <b>${LABEL[s] || s}</b> · ${range} · ${rows.toLocaleString('fr-FR')} l.</div>`;
-    }).join('');
-    const el = document.getElementById('loadedInfo');
-    if (el) el.innerHTML = lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire</b>${lines}</div>` : '';
-  } catch (e) { /* ignore */ }
-}
-// Delta WSHOP : ne récupère que les commandes nouvelles/modifiées (économe en bande passante).
-async function importWshopSync() {
-  impNote('⏳ Synchronisation delta WSHOP…');
-  try {
-    const r = await fetch('/api/wshop/sync', { method: 'POST' });
-    if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur')); return; }
-    await pollWshop();
-  } catch (e) { impNote('⚠ ' + esc(e.message)); }
-}
-function periodQuery() {
-  const { n, n1 } = periods();
-  if (!n) { impNote('⚠ Renseigne la période N.'); return null; }
-  let q = `from=${n.from}&to=${n.to}`;
-  if (n1) q += `&cfrom=${n1.from}&cto=${n1.to}`;
-  return q;
-}
-async function importWshop() {
-  const q = periodQuery(); if (!q) return;
-  impNote('⏳ Import OMS WSHOP…');
-  try {
-    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
-    if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
-    await pollWshop();
-  } catch (e) { impNote('⚠ ' + esc(e.message)); }
-}
-function pollWshop() {
-  return new Promise(resolve => {
-    const tick = async () => {
-      try {
-        const j = await (await fetch('/api/wshop/job')).json();
-        if (j.error) { impNote('⚠ ' + esc(j.error)); return resolve(); }
-        if (j.done) { impNote(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); showLoaded(); run(); return resolve(); }
-        impNote(`⏳ ${esc(j.phase || 'Import…')} — N : ${fInt(j.ordersN || 0)} cmd`);
-      } catch (e) { /* transitoire */ }
-      setTimeout(tick, 1500);
-    };
-    tick();
-  });
-}
-const SRC_OF = { ga4: 'ga', googleads: 'ads', meta: 'metaads', y2: 'y2' };
-async function importDated(conn, label) {
-  const q = periodQuery(); if (!q) return;
-  const { n } = periods(); const src = SRC_OF[conn];
-  // Skip si déjà couvert : les périodes passées (GA/Ads/Meta/Y2) ne changent pas → pas de retéléchargement.
-  if (n && src && covers(src, n.from, n.to)) {
-    if (!confirm(`${label} est déjà en mémoire sur cette période. Recharger quand même (consomme de la bande passante) ?`)) { impNote(`✓ ${esc(label)} déjà couvert — analyse directe (rien retéléchargé).`); run(); return; }
-  }
-  impNote(`⏳ Import ${esc(label)}…`);
-  try {
-    const r = await fetch(`/api/${conn}/refresh?` + q, { method: 'POST' });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { impNote('⚠ ' + esc(j.error || ('Erreur ' + label))); return; }
-    impNote(`✓ ${esc(label)} importé.`);
-    showLoaded(); run();
-  } catch (e) { impNote('⚠ ' + esc(e.message)); }
-}
 
 (async () => {
   let u;
@@ -255,6 +155,6 @@ async function importDated(conn, label) {
     FP_N = flatpickr('#nRange', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [nFrom, today] });
     FP_N1 = flatpickr('#n1Range', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [n1From, n1To] });
   }
-  await setupDataPanel();
+  initDataBar({ title: '2 · Chargement des données', getPeriods: periods, onLoaded: run });
   run();
 })();

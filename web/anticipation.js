@@ -159,63 +159,6 @@ async function run() {
   } catch (e) { body.innerHTML = `<div class="card"><div class="note">⚠️ ${esc(e.message)}</div></div>`; }
 }
 
-// ── Chargement des données (réutilise les connecteurs du Reporting, slots partagés) ──
-function impNote(t) { const el = document.getElementById('impNote'); if (el) el.innerHTML = t; }
-
-async function setupDataPanel() {
-  const conns = [['wshop', 'wshopBox'], ['ga4', 'ga4Box'], ['googleads', 'adsBox'], ['meta', 'metaBox']];
-  let anyConf = false;
-  await Promise.all(conns.map(async ([c, box]) => {
-    try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); anyConf = true; } } catch (e) { /* connecteur indispo */ }
-  }));
-  if (anyConf) document.getElementById('dataPanel').classList.remove('hidden');
-  const wb = document.getElementById('impWshop'); if (wb) wb.addEventListener('click', importWshop);
-  const gb = document.getElementById('impGa4'); if (gb) gb.addEventListener('click', () => importDated('ga4', 'GA4'));
-  const ab = document.getElementById('impAds'); if (ab) ab.addEventListener('click', () => importDated('googleads', 'Google Ads'));
-  const mb = document.getElementById('impMeta'); if (mb) mb.addEventListener('click', () => importDated('meta', 'Meta Ads'));
-}
-
-// WSHOP = import OMS sur la PÉRIODE N-1 sélectionnée (job asynchrone → poll). Charge aussi
-// l'année précédente (cfrom/cto = −364 j) pour un comparatif vs N-1 sur le Prévisionnel.
-async function importWshop() {
-  const from = document.getElementById('from').value, to = document.getElementById('to').value;
-  if (!from || !to) { impNote('⚠ Renseigne d\'abord la période N-1.'); return; }
-  const shift = (iso, days) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + days); return ymd(d); };
-  impNote(`⏳ Import OMS WSHOP sur ${frd(from)} → ${frd(to)}…`);
-  try {
-    const q = `from=${from}&to=${to}&cfrom=${shift(from, -364)}&cto=${shift(to, -364)}`;
-    const r = await fetch('/api/wshop/refresh?' + q, { method: 'POST' });
-    if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
-    await pollWshop();
-  } catch (e) { impNote('⚠ ' + esc(e.message)); }
-}
-function pollWshop() {
-  return new Promise(resolve => {
-    const tick = async () => {
-      try {
-        const j = await (await fetch('/api/wshop/job')).json();
-        if (j.error) { impNote('⚠ ' + esc(j.error)); return resolve(); }
-        if (j.done) { impNote(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); run(); return resolve(); }
-        impNote(`⏳ ${esc(j.phase || 'Import…')} — N : ${fInt(j.ordersN || 0)} cmd`);
-      } catch (e) { /* réseau transitoire */ }
-      setTimeout(tick, 1500);
-    };
-    tick();
-  });
-}
-// GA4 / Google Ads / Meta = import daté sur la période N-1 sélectionnée (slot N partagé).
-async function importDated(conn, label) {
-  const from = document.getElementById('from').value, to = document.getElementById('to').value;
-  if (!from || !to) { impNote('⚠ Renseigne d\'abord la période N-1.'); return; }
-  impNote(`⏳ Import ${esc(label)} sur ${frd(from)} → ${frd(to)}…`);
-  try {
-    const r = await fetch(`/api/${conn}/refresh?from=${from}&to=${to}`, { method: 'POST' });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { impNote('⚠ ' + esc(j.error || ('Erreur ' + label))); return; }
-    impNote(`✓ ${esc(label)} importé.`);
-    run();
-  } catch (e) { impNote('⚠ ' + esc(e.message)); }
-}
 
 (async () => {
   let u;
@@ -238,6 +181,16 @@ async function importDated(conn, label) {
   document.getElementById('shiftNext6').addEventListener('click', fill6);
   document.getElementById('run').addEventListener('click', run);
   ['from', 'to'].forEach(id => document.getElementById(id).addEventListener('change', eqNote));
-  setupDataPanel();
+  // Panneau de chargement COMMUN (databar) : période N = fenêtre N-1 saisie, N-1 = −364 j (pour le comparatif).
+  initDataBar({
+    title: '2 · Chargement des données',
+    getPeriods: () => {
+      const from = document.getElementById('from').value, to = document.getElementById('to').value;
+      if (!from || !to) return {};
+      const shift = (iso, d) => { const x = new Date(iso + 'T00:00:00'); x.setDate(x.getDate() + d); return ymd(x); };
+      return { n: { from, to }, n1: { from: shift(from, -364), to: shift(to, -364) } };
+    },
+    onLoaded: run,
+  });
   run();
 })();

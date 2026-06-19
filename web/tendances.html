@@ -45,21 +45,8 @@
       <div class="note" id="tnote" style="margin-top:6px"></div>
     </div>
 
-    <!-- 2 · CHARGEMENT DES DONNÉES -->
-    <div class="card setup-card hidden" id="dataPanel">
-      <h3>2 · Chargement des données</h3>
-      <div class="note">Les données sont <b>partagées et persistées</b> : charge une fois ici (ou dans le Reporting), c'est dispo dans <b>toutes les briques</b>. Inutile de recharger d'une brique à l'autre.</div>
-      <div id="loadedInfo"></div>
-      <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
-        <span class="hidden" id="wshopBox"><button class="btn blue" id="impWshop" style="width:100%" title="Importe l'OMS WSHOP sur N et N-1">🔄 Importer l'OMS (WSHOP)</button></span>
-        <span class="hidden" id="wshopSyncBox"><button class="btn" id="impWshopSync" style="width:100%" title="Récupère seulement les commandes nouvelles/modifiées depuis le dernier import (économe)">⚡ Synchroniser le delta (WSHOP)</button></span>
-        <span class="hidden" id="ga4Box"><button class="btn blue" id="impGa4" style="width:100%" title="Importe GA4 sur N et N-1">🔄 GA4</button></span>
-        <span class="hidden" id="adsBox"><button class="btn blue" id="impAds" style="width:100%" title="Importe Google Ads sur N et N-1">🔄 Google Ads</button></span>
-        <span class="hidden" id="metaBox"><button class="btn blue" id="impMeta" style="width:100%" title="Importe Meta Ads sur N et N-1">🔄 Meta Ads</button></span>
-        <span class="hidden" id="y2Box"><button class="btn blue" id="impY2" style="width:100%" title="Importe Y2 (marketplace) sur N et N-1">🔄 Y2 Marketplace</button></span>
-      </div>
-      <div class="note" id="impNote" style="margin-top:6px"></div>
-    </div>
+    <!-- 2 · CHARGEMENT DES DONNÉES (composant commun) -->
+    <div id="dataBar"></div>
   </aside>
 
   <main id="mainCol">
@@ -69,6 +56,7 @@
   </main>
 </div>
 
+<script src="/databar.js"></script>
 <script src="/tendances.js"></script>
 </body>
 </html>
