@@ -137,8 +137,14 @@ async function run() {
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const frd = iso => (iso ? iso.split('-').reverse().join('/') : '');
 let FP_N, FP_N1;
-function rangeOf(fp) { const d = fp && fp.selectedDates; if (!d || d.length < 2) return null; return { from: ymd(d[0]), to: ymd(d[1]) }; }
-function periods() { const n = rangeOf(FP_N), n1 = rangeOf(FP_N1); return { n, n1 }; }
+// Lit une période depuis le calendrier flatpickr, sinon depuis le texte « AAAA-MM-JJ → AAAA-MM-JJ » (repli si flatpickr KO).
+function rangeOf(fp, elId) {
+  const d = fp && fp.selectedDates;
+  if (d && d.length >= 2) return { from: ymd(d[0]), to: ymd(d[1]) };
+  const el = document.getElementById(elId); const m = el && el.value && el.value.match(/(\d{4}-\d{2}-\d{2})[^\d]+(\d{4}-\d{2}-\d{2})/);
+  return m ? { from: m[1], to: m[2] } : null;
+}
+function periods() { return { n: rangeOf(FP_N, 'nRange'), n1: rangeOf(FP_N1, 'n1Range') }; }
 
 (async () => {
   let u;
@@ -158,6 +164,9 @@ function periods() { const n = rangeOf(FP_N), n1 = rangeOf(FP_N1); return { n, n
     const n1From = new Date(n1To); n1From.setFullYear(n1From.getFullYear() - 1); n1From.setDate(n1From.getDate() + 1);
     FP_N = flatpickr('#nRange', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [nFrom, today] });
     FP_N1 = flatpickr('#n1Range', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [n1From, n1To] });
+  } else {
+    // Repli si flatpickr indisponible (CDN) : saisie texte « AAAA-MM-JJ → AAAA-MM-JJ ».
+    ['nRange', 'n1Range'].forEach(id => { const el = document.getElementById(id); if (el) { el.removeAttribute('readonly'); el.placeholder = 'AAAA-MM-JJ → AAAA-MM-JJ'; } });
   }
   initDataBar({ title: '2 · Chargement des données', getPeriods: periods, onLoaded: run });
   run();

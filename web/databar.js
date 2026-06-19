@@ -50,8 +50,19 @@
   // WSHOP : import complet (job + poll) / delta (économe). L'import complet charge AUSSI
   // les retours (ret/retprod) + les alertes back-in-stock (bis) → analysables dans toutes les briques.
   async function importWshop(delta) {
-    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS WSHOP (+ retours + alertes)…'); var url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
-    else { note('⏳ Synchronisation delta WSHOP…'); url = '/api/wshop/sync'; }
+    const p = periods(), n = p.n, n1 = p.n1;
+    // Skip/delta si l'OMS couvre déjà la période (oms OU saisonoms) → évite un long réimport inutile.
+    if (!delta && n) {
+      const covN = covers('oms', n.from, n.to) || covers('saisonoms', n.from, n.to);
+      const covN1 = !n1 || covers('oms', n1.from, n1.to) || covers('saisonoms', n1.from, n1.to);
+      if (covN && covN1) {
+        const ch = confirm('L\'OMS couvre déjà cette période en mémoire.\n\nOK = synchroniser seulement les nouveautés (delta, rapide).\nAnnuler = tout réimporter (long).');
+        if (ch) delta = true;
+      }
+    }
+    let url;
+    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS complet (peut être long sur une grande période)…'); url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
+    else { note('⏳ Synchronisation delta WSHOP (nouveautés seulement)…'); url = '/api/wshop/sync'; }
     try {
       const r = await fetch(url, { method: 'POST' });
       if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
@@ -70,13 +81,17 @@
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
   function pollJob(doneMsg) {
+    const start = Date.now();
     return new Promise(resolve => {
       const tick = async () => {
         try {
           const j = await (await fetch('/api/wshop/job')).json();
           if (j.error) { note('⚠ ' + esc(j.error)); return resolve(); }
           if (j.done) { note(doneMsg(j)); afterLoad(); return resolve(); }
-          note(`⏳ ${esc(j.phase || 'Import…')}${j.ordersN ? ' — N : ' + fInt(j.ordersN) + ' cmd' : ''}`);
+          const mins = Math.floor((Date.now() - start) / 60000);
+          note(`⏳ ${esc(j.phase || 'Import…')}${j.ordersN ? ' — ' + fInt(j.ordersN) + ' cmd' : ''}${mins ? ' (' + mins + ' min)' : ''}`);
+          // Borne le suivi : au-delà de ~12 min, on arrête de poller (le job CONTINUE côté serveur).
+          if (Date.now() - start > 12 * 60000) { note(`⏳ Import toujours en cours côté serveur${j.ordersN ? ' (' + fInt(j.ordersN) + ' cmd)' : ''}. Tu peux fermer ; il continue. Reviens dans quelques minutes et clique « Analyser ».`); afterLoad(); return resolve(); }
         } catch (e) { /* transitoire */ }
         setTimeout(tick, 1500);
       };
