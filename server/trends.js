@@ -60,11 +60,17 @@ function adsMonthly(slot) {
   d.rows.forEach(r => { const mo = monthOf(r[m.date]); if (!mo) return; const e = by[mo] || (by[mo] = { spend: 0, conv: 0, convValue: 0 }); e.spend += num(r[m.cost]); if (m.conversions != null) e.conv += num(r[m.conversions]); if (m.convValue != null) e.convValue += num(r[m.convValue]); });
   return by;
 }
-// CA remboursé par mois (jeu `ret`/`saisonret`) → taux de retour.
+// Retours par mois (jeu `ret`/`saisonret`) → { mois: {montant, count} } (taux de retour + suivi volume).
 function retMonthly(source, slot) {
   const d = store.getDataset(source, slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
   const di = d.map.date, mi = d.map.montant, by = {};
-  d.rows.forEach(r => { const mo = monthOf(r[di]); if (!mo) return; by[mo] = (by[mo] || 0) + num(r[mi]); });
+  d.rows.forEach(r => { const mo = monthOf(r[di]); if (!mo) return; const e = by[mo] || (by[mo] = { montant: 0, count: 0 }); e.montant += num(r[mi]); e.count += 1; });
+  return by;
+}
+// Demande back-in-stock (alertes stock) par mois (jeu daté `bisdaily`) → suivi long.
+function bisMonthly() {
+  const by = {};
+  ['N', 'N1'].forEach(p => { const d = store.getDataset('bisdaily', p); if (!d || !d.rows || !d.map) return; const di = d.map.date != null ? d.map.date : 0, qi = d.map.qte != null ? d.map.qte : 1; d.rows.forEach(r => { const mo = monthOf(r[di]); if (!mo) return; by[mo] = (by[mo] || 0) + num(r[qi]); }); });
   return by;
 }
 // Fusionne des cartes {mois: v} de plusieurs slots, 1ʳᵉ source qui couvre un mois gagne (anti-double-comptage).
@@ -87,8 +93,9 @@ router.get('/', requireAuth, (req, res) => {
     const omsAll = url ? {} : omsMonthlyAll();
     const adsAll = mergeFirst(['N', 'N1'].map(p => adsMonthly(p)));
     const retAll = mergeFirst([['ret', 'N'], ['ret', 'N1'], ['saisonret', 'N'], ['saisonret', 'N1']].map(([s, p]) => retMonthly(s, p)));
+    const bisAll = bisMonthly();
     const months = [...new Set([...Object.keys(gaAll), ...Object.keys(omsAll)])].sort();
-    const mk = (g, o, ad, retCA) => ({
+    const mk = (g, o, ad, ret, bisCount) => ({
       sessions: Math.round((g.sessions) || 0),
       engagementRate: g.sessions ? (g.eng || 0) / g.sessions : null,
       addToCarts: Math.round((g.addcart) || 0),
@@ -101,14 +108,17 @@ router.get('/', requireAuth, (req, res) => {
       purchases: Math.round((g.purchases) || 0),
       pm: o.commandes ? o.ca / o.commandes : null,
       iv: o.commandes ? o.pieces / o.commandes : null,
-      tauxRetour: o.ca ? (retCA || 0) / o.ca : null,
+      tauxRetour: o.ca ? ((ret.montant || 0)) / o.ca : null,
+      retMontant: Math.round(ret.montant || 0),
+      nbRetours: Math.round(ret.count || 0),
+      stockAlerts: bisCount != null ? Math.round(bisCount) : null,
       spend: Math.round((ad.spend) || 0),
       roas: ad.spend ? (ad.convValue || 0) / ad.spend : null,
       cpa: ad.conv ? ad.spend / ad.conv : null,
     });
     const series = months.map(mo => {
       const [y, m] = mo.split('-'); const prev = `${+y - 1}-${m}`;
-      return { month: mo, n: mk(gaAll[mo] || {}, omsAll[mo] || {}, adsAll[mo] || {}, retAll[mo] || 0), n1: mk(gaAll[prev] || {}, omsAll[prev] || {}, adsAll[prev] || {}, retAll[prev] || 0) };
+      return { month: mo, n: mk(gaAll[mo] || {}, omsAll[mo] || {}, adsAll[mo] || {}, retAll[mo] || {}, bisAll[mo]), n1: mk(gaAll[prev] || {}, omsAll[prev] || {}, adsAll[prev] || {}, retAll[prev] || {}, bisAll[prev]) };
     });
     // CA marketplace par mois et par enseigne (meilleur slot OMS dispo + Y2), règles figées (GL=SFS).
     const omsMkt = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N') || store.getDataset('oms', 'N1') || store.getDataset('saisonoms', 'N1');

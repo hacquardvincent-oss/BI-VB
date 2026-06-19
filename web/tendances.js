@@ -30,6 +30,9 @@ const METRICS = [
   { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A' },
   { key: 'iv', label: 'Indice de vente (pièces/commande)', kind: 'num', color: '#6E7B8B' },
   { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D', inv: true },
+  { key: 'retMontant', label: 'Retours (€ remboursés)', kind: 'eur', color: '#E2574D', inv: true },
+  { key: 'nbRetours', label: 'Nb de retours', kind: 'int', color: '#E2574D', inv: true },
+  { key: 'stockAlerts', label: 'Alertes stock (demande back-in-stock)', kind: 'int', color: '#A8854A' },
   { key: 'shareNew', label: 'Part de nouveaux visiteurs', kind: 'pct', color: '#6E7B8B' },
   { key: 'roas', label: 'ROAS (Ads)', kind: 'x', color: '#1B9E6A' },
   { key: 'cpa', label: 'CPA — coût d\'acquisition (Ads)', kind: 'eur', color: '#E2574D', inv: true },
@@ -99,7 +102,8 @@ function render(d) {
   } else if (!d.has.cohorts) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${mktCard}${cohCard}<div class="grid cols2">${cards}</div>`;
+  // Ordre : KPI eshop + acquisition (grille) → marketplace → cohortes.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${cohCard}`;
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
   if (coh && coh.cohorts && coh.cohorts.length) {
     const cl = coh.cohorts.map(c => monthLabel(c.month));

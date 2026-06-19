@@ -412,9 +412,12 @@ async function refreshStockAlerts(opts = {}, cb = {}) {
   if (from && to) {
     try {
       if (cb.phase) cb.phase('Alertes stock (back-in-stock)…');
-      const subs = await fetchBackInStock(from, to);
+      const subsN = await fetchBackInStock(from, to);
+      let subsN1 = [];
+      if (cfrom && cto) { try { subsN1 = await fetchBackInStock(cfrom, cto); } catch (e) { /* best-effort */ } }
+      // Agrégé par produit (carte « Alertes stock ») — période courante.
       const by = {};
-      subs.forEach(s => {
+      subsN.forEach(s => {
         const it = s.item || {};
         const name = [(it.title || '').toString().trim(), (it.color || '').toString().trim()].filter(Boolean).join(' - ') || (it.ean || '').toString();
         if (!name) return;
@@ -424,7 +427,12 @@ async function refreshStockAlerts(opts = {}, cb = {}) {
       });
       const rows = Object.values(by).map(v => [v.name, String(v.count), String(v.waiting), v.last]);
       store.setDataset('bis', 'N', { hdrs: ['Produit', 'Abonnements', 'En attente', 'Dernier'], rows, map: { name: 0, count: 1, waiting: 2, last: 3 }, row_count: rows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
-      alerts = subs.length;
+      alerts = subsN.length;
+      // Série DATÉE (demandes par jour, sur les deux fenêtres) → jeu `bisdaily` = suivi long en Tendances.
+      const byDay = {};
+      subsN.concat(subsN1).forEach(s => { const d = (s.subscriptionDate || '').toString().slice(0, 10); if (d) byDay[d] = (byDay[d] || 0) + 1; });
+      const drows = Object.keys(byDay).sort().map(d => [d, String(byDay[d])]);
+      if (drows.length) store.setDataset('bisdaily', 'N', { hdrs: ['Date', 'Demandes'], rows: drows, map: { date: 0, qte: 1 }, date_min: drows[0][0], date_max: drows[drows.length - 1][0], row_count: drows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
     } catch (e) { /* best-effort */ }
     try {
       if (cb.phase) cb.phase('Retours produits…');
