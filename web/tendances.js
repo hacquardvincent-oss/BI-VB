@@ -152,11 +152,19 @@ async function setupDataPanel() {
   const y = document.getElementById('impY2'); if (y) y.addEventListener('click', () => importDated('y2', 'Y2 Marketplace'));
   showLoaded();
 }
+let LOADED = []; // cache de /api/ingest/status (couverture par source)
+function coverageOf(source) {
+  const ds = LOADED.filter(d => d.source === source && d.date_min && d.date_max);
+  if (!ds.length) return null;
+  return { min: ds.map(d => d.date_min).sort()[0], max: ds.map(d => d.date_max).sort().slice(-1)[0] };
+}
+const covers = (source, from, to) => { const c = coverageOf(source); return !!(c && c.min <= from && c.max >= to); };
+
 // Récap des données DÉJÀ en mémoire (partagées entre les briques) → évite de recharger.
 async function showLoaded() {
   try {
     const r = await fetch('/api/ingest/status'); if (!r.ok) return;
-    const list = await r.json();
+    const list = await r.json(); LOADED = list;
     const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
     const LABEL = { oms: 'OMS', saisonoms: 'OMS (saison)', ga: 'GA4', gapagedaily: 'GA4 pages', ads: 'Google Ads', metaads: 'Meta Ads', y2: 'Y2', ret: 'Retours' };
     const want = ['oms', 'saisonoms', 'ga', 'gapagedaily', 'ads', 'metaads', 'y2', 'ret'];
@@ -210,8 +218,14 @@ function pollWshop() {
     tick();
   });
 }
+const SRC_OF = { ga4: 'ga', googleads: 'ads', meta: 'metaads', y2: 'y2' };
 async function importDated(conn, label) {
   const q = periodQuery(); if (!q) return;
+  const { n } = periods(); const src = SRC_OF[conn];
+  // Skip si déjà couvert : les périodes passées (GA/Ads/Meta/Y2) ne changent pas → pas de retéléchargement.
+  if (n && src && covers(src, n.from, n.to)) {
+    if (!confirm(`${label} est déjà en mémoire sur cette période. Recharger quand même (consomme de la bande passante) ?`)) { impNote(`✓ ${esc(label)} déjà couvert — analyse directe (rien retéléchargé).`); run(); return; }
+  }
   impNote(`⏳ Import ${esc(label)}…`);
   try {
     const r = await fetch(`/api/${conn}/refresh?` + q, { method: 'POST' });
