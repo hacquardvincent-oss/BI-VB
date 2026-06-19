@@ -141,14 +141,44 @@ async function setupDataPanel() {
   const conns = [['wshop', 'wshopBox'], ['ga4', 'ga4Box'], ['googleads', 'adsBox'], ['meta', 'metaBox'], ['y2', 'y2Box']];
   let any = false;
   await Promise.all(conns.map(async ([c, box]) => {
-    try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); any = true; } } catch (e) { /* indispo */ }
+    try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); any = true; if (c === 'wshop') document.getElementById('wshopSyncBox').classList.remove('hidden'); } } catch (e) { /* indispo */ }
   }));
   if (any) document.getElementById('dataPanel').classList.remove('hidden');
   const w = document.getElementById('impWshop'); if (w) w.addEventListener('click', importWshop);
+  const ws = document.getElementById('impWshopSync'); if (ws) ws.addEventListener('click', importWshopSync);
   const g = document.getElementById('impGa4'); if (g) g.addEventListener('click', () => importDated('ga4', 'GA4'));
   const a = document.getElementById('impAds'); if (a) a.addEventListener('click', () => importDated('googleads', 'Google Ads'));
   const m = document.getElementById('impMeta'); if (m) m.addEventListener('click', () => importDated('meta', 'Meta Ads'));
   const y = document.getElementById('impY2'); if (y) y.addEventListener('click', () => importDated('y2', 'Y2 Marketplace'));
+  showLoaded();
+}
+// Récap des données DÉJÀ en mémoire (partagées entre les briques) → évite de recharger.
+async function showLoaded() {
+  try {
+    const r = await fetch('/api/ingest/status'); if (!r.ok) return;
+    const list = await r.json();
+    const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
+    const LABEL = { oms: 'OMS', saisonoms: 'OMS (saison)', ga: 'GA4', gapagedaily: 'GA4 pages', ads: 'Google Ads', metaads: 'Meta Ads', y2: 'Y2', ret: 'Retours' };
+    const want = ['oms', 'saisonoms', 'ga', 'gapagedaily', 'ads', 'metaads', 'y2', 'ret'];
+    const lines = want.filter(s => byKey[s]).map(s => {
+      const ds = byKey[s];
+      const mins = ds.map(d => d.date_min).filter(Boolean).sort(), maxs = ds.map(d => d.date_max).filter(Boolean).sort();
+      const rows = ds.reduce((a, d) => a + (d.row_count || 0), 0);
+      const range = (mins[0] && maxs.length) ? `${frd(mins[0])} → ${frd(maxs[maxs.length - 1])}` : 'chargé';
+      return `<div>✅ <b>${LABEL[s] || s}</b> · ${range} · ${rows.toLocaleString('fr-FR')} l.</div>`;
+    }).join('');
+    const el = document.getElementById('loadedInfo');
+    if (el) el.innerHTML = lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire</b>${lines}</div>` : '';
+  } catch (e) { /* ignore */ }
+}
+// Delta WSHOP : ne récupère que les commandes nouvelles/modifiées (économe en bande passante).
+async function importWshopSync() {
+  impNote('⏳ Synchronisation delta WSHOP…');
+  try {
+    const r = await fetch('/api/wshop/sync', { method: 'POST' });
+    if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); impNote('⚠ ' + (j.error || 'Erreur')); return; }
+    await pollWshop();
+  } catch (e) { impNote('⚠ ' + esc(e.message)); }
 }
 function periodQuery() {
   const { n, n1 } = periods();
@@ -172,7 +202,7 @@ function pollWshop() {
       try {
         const j = await (await fetch('/api/wshop/job')).json();
         if (j.error) { impNote('⚠ ' + esc(j.error)); return resolve(); }
-        if (j.done) { impNote(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); run(); return resolve(); }
+        if (j.done) { impNote(`✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}).`); showLoaded(); run(); return resolve(); }
         impNote(`⏳ ${esc(j.phase || 'Import…')} — N : ${fInt(j.ordersN || 0)} cmd`);
       } catch (e) { /* transitoire */ }
       setTimeout(tick, 1500);
@@ -188,7 +218,7 @@ async function importDated(conn, label) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { impNote('⚠ ' + esc(j.error || ('Erreur ' + label))); return; }
     impNote(`✓ ${esc(label)} importé.`);
-    run();
+    showLoaded(); run();
   } catch (e) { impNote('⚠ ' + esc(e.message)); }
 }
 
