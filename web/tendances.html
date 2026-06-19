@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Tendances</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting (tableaux de pilotage standard)">📊 Reporting</a>
+    <a class="pb" href="/commerciale.html" title="Pilotage d'une opération commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison (période longue)">🏷️ Analyse de saison</a>
+    <a class="pb" href="/objectifs.html" title="Objectifs & prévisions mensuelles">🎯 Objectifs</a>
+    <a class="pb" href="/anticipation.html" title="Prévisionnel : préparer la période N à partir de l'historique N-1">🔮 Prévisionnel</a>
+    <a class="pb on" href="/tendances.html" title="Analyses sur le temps long (N vs N-1)">📈 Tendances</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a class="btn" href="/creation.html" title="Création & atelier de tableaux">🧱</a>
+  <a class="btn" href="/feedback.html" title="Retours & idées">💬</a>
+  <button class="btn hidden" id="adminBtn" title="Administration des comptes">👤 Admin</button>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap layout-side no-rightnav">
+  <aside id="setupCol">
+    <div class="card setup-card">
+      <h3>📈 Tendances longue durée</h3>
+      <div class="note">Évolution <b>mois par mois</b> des indicateurs d'audience & de conversion, <b>N vs N-1</b>, sur toute la profondeur GA4/OMS importée. Trait plein = N, pointillé = N-1.</div>
+      <label class="setlabel">Filtre URL (optionnel — comme GA4)</label>
+      <input id="urlFilter" class="dt" style="width:100%" placeholder="Ex. /soldes, /robes, /collection…">
+      <div class="note" style="margin-top:3px">Laisse vide = tout le site. Filtre sur le chemin de page (sous-chaîne).</div>
+      <button class="btn blue" id="run" style="margin-top:10px;width:100%">📈 Analyser</button>
+      <div class="note" id="tnote" style="margin-top:8px"></div>
+    </div>
+  </aside>
+
+  <main id="mainCol">
+    <div id="body">
+      <div class="card"><div class="note">Chargement…</div></div>
+    </div>
+  </main>
+</div>
+
+<script src="/tendances.js"></script>
+</body>
+</html>

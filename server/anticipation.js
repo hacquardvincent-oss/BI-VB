@@ -18,6 +18,7 @@ const numUS = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[^
 function isoDate(v) {
   const s = String(v == null ? '' : v).trim();
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{4})(\d{2})(\d{2})$/); if (m) return `${m[1]}-${m[2]}-${m[3]}`; // GA4 (YYYYMMDD)
   m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
   if (m) { let y = +m[3]; if (y < 100) y += 2000; return `${y}-${String(+m[2]).padStart(2, '0')}-${String(+m[1]).padStart(2, '0')}`; }
   return '';

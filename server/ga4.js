@@ -275,6 +275,21 @@ async function fetchSessionsTotal(propertyId, startDate, endDate) {
   return { hdrs: ['Date', 'Sessions'], rows };
 }
 
+// ── Pages par JOUR : date × pagePath (séries longues filtrables par URL, comme GA4) ──
+async function fetchPageDaily(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'pagePath' }],
+    metrics: [{ name: 'sessions' }, { name: 'engagedSessions' }, { name: 'addToCarts' }, { name: 'ecommercePurchases' }],
+    limit: 100000,
+  });
+  const rows = (data.rows || []).map(r => [
+    r.dimensionValues[0].value, r.dimensionValues[1].value,
+    r.metricValues[0].value, r.metricValues[1].value, r.metricValues[2].value, r.metricValues[3].value,
+  ]);
+  return { hdrs: ['Date', 'Page', 'Sessions', 'Sessions engagées', 'Ajouts panier', 'Achats'], rows };
+}
+
 // ── Campagnes par jour : date × campagne (pour le suivi temporel des meilleures campagnes) ──
 async function fetchCampaignsDaily(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
@@ -349,6 +364,7 @@ async function refresh(opts = {}) {
   await safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campaignland N', async () => store.setDataset('gacampaignland', 'N', { rows: await fetchCampaignLanding(propertyId, nStart, nEnd), uploaded_at: ts() }));
   await safe('campdaily N', async () => store.setDataset('gacampdaily', 'N', toDataset(await fetchCampaignsDaily(propertyId, nStart, nEnd), nStart, nEnd)));
+  await safe('pagedaily N', async () => store.setDataset('gapagedaily', 'N', toDataset(await fetchPageDaily(propertyId, nStart, nEnd), nStart, nEnd)));
   await safe('emailhour N', async () => store.setDataset('gaemailhour', 'N', toDataset(await fetchHourlyChannel(propertyId, nStart, nEnd), nStart, nEnd)));
   let n1Count = null;
   if (n1) {
@@ -363,6 +379,7 @@ async function refresh(opts = {}) {
     await safe('campnr N-1', async () => store.setDataset('gacampnr', 'N1', { rows: await fetchCampaignsNewReturning(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('campaignland N-1', async () => store.setDataset('gacampaignland', 'N1', { rows: await fetchCampaignLanding(propertyId, n1.start, n1.end), uploaded_at: ts() }));
     await safe('campdaily N-1', async () => store.setDataset('gacampdaily', 'N1', toDataset(await fetchCampaignsDaily(propertyId, n1.start, n1.end), n1.start, n1.end)));
+    await safe('pagedaily N-1', async () => store.setDataset('gapagedaily', 'N1', toDataset(await fetchPageDaily(propertyId, n1.start, n1.end), n1.start, n1.end)));
     await safe('emailhour N-1', async () => store.setDataset('gaemailhour', 'N1', toDataset(await fetchHourlyChannel(propertyId, n1.start, n1.end), n1.start, n1.end)));
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count, warnings };
