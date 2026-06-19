@@ -13,18 +13,34 @@ const monthLabel = mo => { const [y, m] = mo.split('-'); return `${MLABEL[+m - 1
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el) return; if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); }
 
-// Métriques affichées : clé dans n/n1, libellé, formateur, couleur.
+// Formateurs par type de métrique.
+const KIND = {
+  pct: { fmt: fPct, y: v => (Math.round(v * 1000) / 10) + '%', agg: 'avg' },
+  int: { fmt: fInt, y: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : v, agg: 'sum' },
+  eur: { fmt: fEur, y: v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, agg: 'sum' },
+  num: { fmt: v => (v == null ? '—' : (Math.round(v * 100) / 100).toLocaleString('fr-FR')), y: v => Math.round(v * 10) / 10, agg: 'avg' },
+  x: { fmt: v => (v == null ? '—' : (Math.round(v * 100) / 100) + '×'), y: v => Math.round(v * 10) / 10, agg: 'avg' },
+};
+// Métriques affichées (inv = une hausse est défavorable → delta inversé : retour, CPA).
 const METRICS = [
-  { key: 'tt', label: 'Taux de transfo (commandes ÷ sessions)', kind: 'pct', color: '#1B9E6A' },
-  { key: 'engagementRate', label: 'Taux d\'engagement', kind: 'pct', color: '#A8854A' },
+  { key: 'tt', label: 'Taux de transfo', kind: 'pct', color: '#1B9E6A' },
   { key: 'addRate', label: 'Taux d\'ajout panier', kind: 'pct', color: '#9B8AA3' },
-  { key: 'addToCarts', label: 'Ajouts panier (volume)', kind: 'int', color: '#9B8AA3' },
+  { key: 'cartToPurchase', label: 'Taux panier → achat', kind: 'pct', color: '#1B9E6A' },
+  { key: 'engagementRate', label: 'Taux d\'engagement', kind: 'pct', color: '#A8854A' },
+  { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A' },
+  { key: 'iv', label: 'Indice de vente (pièces/commande)', kind: 'num', color: '#6E7B8B' },
+  { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D', inv: true },
+  { key: 'shareNew', label: 'Part de nouveaux visiteurs', kind: 'pct', color: '#6E7B8B' },
+  { key: 'roas', label: 'ROAS (Ads)', kind: 'x', color: '#1B9E6A' },
+  { key: 'cpa', label: 'CPA — coût d\'acquisition (Ads)', kind: 'eur', color: '#E2574D', inv: true },
+  { key: 'spend', label: 'Dépense Ads', kind: 'eur', color: '#6E7B8B' },
   { key: 'sessions', label: 'Sessions', kind: 'int', color: '#6E7B8B' },
   { key: 'newUsers', label: 'Nouveaux utilisateurs (proxy base client)', kind: 'int', color: '#6E7B8B' },
+  { key: 'addToCarts', label: 'Ajouts panier (volume)', kind: 'int', color: '#9B8AA3' },
 ];
 
 function lineChart(id, labels, nData, n1Data, color, kind) {
-  const yFmt = kind === 'pct' ? (v => (Math.round(v * 1000) / 10) + '%') : (v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v);
+  const K = KIND[kind] || KIND.int;
   mk(id, {
     data: {
       labels,
@@ -35,8 +51,8 @@ function lineChart(id, labels, nData, n1Data, color, kind) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { boxWidth: 18, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${kind === 'pct' ? fPct(c.parsed.y) : fInt(c.parsed.y)}` } } },
-      scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: yFmt, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } },
+      plugins: { legend: { labels: { boxWidth: 18, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${K.fmt(c.parsed.y)}` } } },
+      scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: K.y, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } },
     },
   });
 }
@@ -48,25 +64,26 @@ function render(d) {
     return;
   }
   const labels = d.series.map(s => monthLabel(s.month));
-  // Cartes : 1 graphe par métrique + variation globale N vs N-1.
-  const sum = (arr, k) => arr.reduce((a, s) => a + (s[k] || 0), 0);
-  const avgRate = (arr, k) => { const v = arr.filter(s => s[k] != null); return v.length ? v.reduce((a, s) => a + s[k], 0) / v.length : null; };
   const nArr = d.series.map(s => s.n), n1Arr = d.series.map(s => s.n1);
-  const cards = METRICS.map(m => {
-    const nV = d.series.map(s => s.n[m.key]); const n1V = d.series.map(s => s.n1[m.key]);
-    const gN = m.kind === 'pct' ? avgRate(nArr, m.key) : sum(nArr, m.key);
-    const gN1 = m.kind === 'pct' ? avgRate(n1Arr, m.key) : sum(n1Arr, m.key);
-    const fmt = m.kind === 'pct' ? fPct : fInt;
+  const agg = (arr, k, mode) => { const v = arr.filter(s => s[k] != null); if (!v.length) return null; const tot = v.reduce((a, s) => a + s[k], 0); return mode === 'avg' ? tot / v.length : tot; };
+  const visible = METRICS.filter(m => nArr.some(s => s[m.key] != null));
+  const cards = visible.map(m => {
+    const K = KIND[m.kind] || KIND.int;
+    const gN = agg(nArr, m.key, K.agg), gN1 = agg(n1Arr, m.key, K.agg);
     let delta = '<span class="na">—</span>';
-    if (gN != null && gN1 != null && gN1 !== 0) { const p = (gN - gN1) / gN1 * 100; delta = `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; }
+    if (gN != null && gN1 != null && gN1 !== 0) { let p = (gN - gN1) / gN1 * 100; const good = m.inv ? p <= 0 : p >= 0; delta = `<span class="${good ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; }
     return `<div class="card">
       <h3>${esc(m.label)}</h3>
-      <div class="note" style="margin:-6px 0 8px">${m.kind === 'pct' ? 'Moyenne' : 'Cumul'} N : <b>${fmt(gN)}</b> · N-1 : ${fmt(gN1)} ${delta}</div>
-      <div style="height:200px"><canvas id="ch_${m.key}"></canvas></div>
+      <div class="note" style="margin:-6px 0 8px">${K.agg === 'avg' ? 'Moyenne' : 'Cumul'} N : <b>${K.fmt(gN)}</b> · N-1 : ${K.fmt(gN1)} ${delta}</div>
+      <div style="height:190px"><canvas id="ch_${m.key}"></canvas></div>
     </div>`;
   }).join('');
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1.${!d.has.oms ? ' (OMS absent → taux de transfo indisponible)' : ''}</div></div>${cards}`;
-  METRICS.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
+  const miss = [];
+  if (!d.has.oms) miss.push('OMS (taux de transfo, panier, indice de vente, retour)');
+  if (!d.has.ads) miss.push('Google Ads (ROAS, CPA, dépense)');
+  const missNote = miss.length ? ` · ⚠️ non importé : ${miss.map(esc).join(' · ')}` : '';
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>`;
+  visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
 }
 
 async function run() {
