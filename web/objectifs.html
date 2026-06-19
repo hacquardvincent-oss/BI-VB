@@ -26,27 +26,32 @@
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap">
-  <div class="card">
-    <h3>🎯 Objectifs & prévisions mensuelles</h3>
-    <div class="note">Anticipe les mois à venir : l'outil propose un objectif de CA par mois à partir du <b>réalisé N-1</b> × un <b>taux de croissance</b>, que tu ajustes manuellement. Ensuite il suit le <b>réalisé vs objectif</b> et le <b>reste à faire</b>. Les historiques viennent des imports OMS (plus tu importes large, plus l'historique mensuel est complet).</div>
-    <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase">Année</span>
-      <select id="yearSel" class="dt" style="min-width:100px"></select>
-      <span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;margin-left:8px" title="Croissance visée vs N-1 (appliquée à la proposition automatique)">Croissance vs N-1</span>
-      <input id="growth" type="number" step="1" class="dt" style="width:80px"> <span style="color:var(--t3)">%</span>
-      <button class="pb" id="propose" title="Remplir les objectifs = CA N-1 du mois × (1 + croissance)">✨ Proposer les objectifs (N-1 + croissance)</button>
-      <div class="spacer" style="flex:1"></div>
-      <button class="btn blue" id="save">💾 Enregistrer les objectifs</button>
-      <span class="note" id="saveNote" style="margin:0"></span>
+<div class="wrap layout-side no-rightnav">
+  <aside id="setupCol">
+    <!-- 1 · PARAMÉTRAGE -->
+    <div class="card setup-card">
+      <h3>🎯 Objectifs mensuels</h3>
+      <div class="note">Objectif de CA par mois à partir du <b>réalisé N-1</b> × un <b>taux de croissance</b>, ajustable. Suivi réalisé vs objectif + reste à faire. Plus tu importes d'OMS, plus l'historique est complet.</div>
+      <label class="setlabel">Année</label>
+      <select id="yearSel" class="dt" style="width:100%"></select>
+      <label class="setlabel">Croissance vs N-1</label>
+      <div class="toolbar" style="gap:6px"><input id="growth" type="number" step="1" class="dt" style="width:80px"> <span style="color:var(--t3)">%</span></div>
+      <button class="pb" id="propose" style="margin-top:10px;width:100%" title="Remplir les objectifs = CA N-1 du mois × (1 + croissance)">✨ Proposer (N-1 + croissance)</button>
+      <button class="btn blue" id="save" style="margin-top:8px;width:100%">💾 Enregistrer les objectifs</button>
+      <span class="note" id="saveNote" style="display:block;margin-top:6px"></span>
     </div>
-  </div>
+    <!-- 2 · CHARGEMENT DES DONNÉES (composant commun) -->
+    <div id="dataBar"></div>
+  </aside>
 
-  <div id="body">
-    <div class="card"><div class="note">Chargement…</div></div>
-  </div>
+  <main id="mainCol">
+    <div id="body">
+      <div class="card"><div class="note">Chargement…</div></div>
+    </div>
+  </main>
 </div>
 
+<script src="/databar.js"></script>
 <script src="/objectifs.js"></script>
 </body>
 </html>

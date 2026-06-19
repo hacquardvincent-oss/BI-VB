@@ -651,5 +651,16 @@ async function syncDelta() {
   const fi = document.getElementById('fullImport'); if (fi) fi.addEventListener('click', fullImport);
   const g4 = document.getElementById('ga4Refresh'); if (g4) g4.addEventListener('click', ga4Refresh);
   const wp = document.getElementById('wshopPing'); if (wp) wp.addEventListener('click', wshopPing);
+  // Panneau de chargement COMMUN (databar) — période = fenêtre de l'opération (N + N-1).
+  if (window.initDataBar) initDataBar({
+    title: '3 · Chargement des données',
+    getPeriods: () => {
+      const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;
+      const cf = document.getElementById('dCFrom').value, ct = document.getElementById('dCTo').value;
+      const n = (from && to) ? { from, to } : null, n1 = (cf && ct) ? { from: cf, to: ct } : null;
+      return { n, n1 };
+    },
+    onLoaded: () => analyze(),
+  });
   analyze();
 })();

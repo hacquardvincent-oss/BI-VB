@@ -244,5 +244,11 @@ async function save() {
   document.getElementById('propose').addEventListener('click', proposeAll);
   document.getElementById('save').addEventListener('click', save);
   document.getElementById('growth').addEventListener('change', () => { const g = Number(document.getElementById('growth').value) / 100; if (Number.isFinite(g)) GROWTH = g; render(); });
+  // Panneau de chargement COMMUN (databar) — période = année sélectionnée (N) + année précédente (N-1).
+  if (window.initDataBar) initDataBar({
+    title: 'Chargement des données',
+    getPeriods: () => ({ n: { from: `${YEAR}-01-01`, to: `${YEAR}-12-31` }, n1: { from: `${YEAR - 1}-01-01`, to: `${YEAR - 1}-12-31` } }),
+    onLoaded: () => load(),
+  });
   await load();
 })();
