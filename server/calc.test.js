@@ -45,12 +45,14 @@ assert.strictEqual(mkt.total, 80, 'Total marketplace (OMS seul)');
 // Règle métier : GL e-commerce = 674SFS UNIQUEMENT ; le corner (autres 674*) = retail → EXCLU du CA.
 const y2Hdrs = ['Etablissement ligne doc.', 'Commercial du doc.', 'Total TTC ligne', 'Code article', 'Référence interne doc.'];
 const y2Map2 = calc.autoMap(y2Hdrs, calc.Y2_ALIASES);
+// Code Mag (3 premiers car. de « Référence interne doc. ») = « 100 » → retail NON digital → EXCLU.
 const y2Rows2 = [
   ['GL AC Haussmann', '674SFS', '100', 'A1', '005X'],       // ship-from-store
   ['GL AC Haussmann', '674GUM01', '300', 'A2', '005Y'],      // corner (vendeur)
-  ['GL AC Haussmann', '674MAELLE01', '200', 'A3', '100Z'],   // corner (autre vendeur)
+  ['GL AC Haussmann', '674MAELLE01', '200', 'A3', '008Z'],   // corner (autre vendeur)
   ['Place des tendances', '686001', '150', 'A4', '005W'],
-  ['Lulli Eshop', '610LULLI', '80', 'A5', '1000080'],        // réf NON 005 → doit compter quand même
+  ['Lulli Eshop', '610LULLI', '80', 'A5', '008080'],         // réf NON 005 → doit compter quand même
+  ['Lulli Eshop', '610LULLI', '40', 'A7', '1000080'],        // Code Mag 100 (retail) → EXCLU
   ['GL AC Haussmann', '674GUM01', '-50', 'A6', '005R'],      // retour (TTC<0) → exclu
 ];
 const mkt2 = calc.calcMarketplace(rows, map, y2Rows2, y2Map2);
@@ -59,7 +61,7 @@ assert.strictEqual(mkt2.glCorner, 500, 'GL corner (674* hors SFS, retour exclu) 
 assert.strictEqual(mkt2.glY2, 100, 'GL Y2 compté = 674SFS uniquement (corner retail exclu)');
 assert.strictEqual(mkt2.glTotal, 130, 'GL total = dropshipping OMS (30) + SFS Y2 (100)');
 assert.strictEqual(mkt2.pdt, 150, 'Place des Tendances');
-assert.strictEqual(mkt2.lulli, 80, 'Lulli compté par établissement (réf non-005 incluse)');
+assert.strictEqual(mkt2.lulli, 80, 'Lulli par établissement, Code Mag 100 exclu (40 écarté, réf non-005 incluse)');
 
 const pays = calc.calcByCountry(rows, map);
 // hors marketplace : France (row1, 100€, 1 cmd, 1 pièce) et Royaume-Uni (row2, 80€, 1 cmd, 2 pièces)

@@ -159,6 +159,10 @@ const Y2_ALIASES = {
   etab: ['etablissement ligne doc', 'etablissement ligne doc.', 'etablissement'],
   ttc: ['total ttc ligne', 'total ttc'],
   commercial: ['commercial du doc.', 'commercial du doc', 'commercial'],
+  // Code « Commercial du doc. » = le CODE marketplace/SFS (674SFS, 610LULLI, 686001), à NE PAS confondre
+  // avec « Commercial » (= nom du vendeur). Clé dédiée pour la détection GL 674SFS (sinon autoMap, en
+  // exact-match, attrape « Commercial » vendeur et la part SFS tombe à ~0).
+  commercialdoc: ['commercial du doc.', 'commercial du doc'],
   ref: ['reference interne doc.', 'reference interne doc', 'ref. interne doc', 'ref interne doc', 'reference interne'],
   code: ['code article'],
   libdim2: ['libdim2'],
@@ -847,10 +851,11 @@ function calcMarketplace(omsRows, omsMap, y2Rows, y2Map) {
   // physique (vendeurs nommés) = RETAIL → exclu du CA marketplace e-commerce (choix métier, cf. §12).
   let glCorner = 0, glSFS = 0, pdt = 0, lulli = 0;
   if (y2Rows && y2Map && y2Map.ttc !== undefined) {
-    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
+    const ti2 = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercialdoc !== undefined ? y2Map.commercialdoc : y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[ti2]);
       if (ttc <= 0) return; // exclure les retours (valeurs négatives)
+      if (y2NonDigital(r, y2Map)) return; // Code Mag « 100 » = retail non digital → exclu
       const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
       if (ch === 'GL') {
         const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase();
@@ -900,6 +905,7 @@ function calcMarketplaceCancelRefund(omsRows, omsMap, y2Rows, y2Map) {
     y2Rows.forEach(r => {
       const ttc = fN(r[tci]);
       if (ttc >= 0) return; // uniquement les retours/avoirs (négatifs)
+      if (y2NonDigital(r, y2Map)) return; // Code Mag « 100 » = retail non digital → exclu
       const ch = y2ChannelOf(ei !== undefined ? r[ei] : '');
       const e = refund[ch] || (refund[ch] = { ca: 0, count: 0 });
       e.ca += ttc; e.count += 1;
@@ -2129,6 +2135,16 @@ function y2ChannelOf(etab) {
 }
 const CHANNEL_ORDER = ['EShop', 'GL', 'Printemps', 'PDT', 'Lulli'];
 
+// Code Mag Y2 = 3 premiers caractères de « Référence interne doc. » (y2Map.ref). Le code « 100 »
+// = canal NON digital (retail) → EXCLU du CA marketplace e-commerce (règle client, validée sur
+// l'export Y2 : reproduit le TCD à l'euro — ex. Lulli 83 975 → 58 799 hors « 100 »).
+// ⚠️ « Commercial 2 du doc. » est souvent vide dans l'export ; la valeur opérante est « Référence interne doc. ».
+function y2NonDigital(r, map) {
+  const ri = map && map.ref;
+  if (ri === undefined) return false;
+  return String(r[ri] || '').trim().slice(0, 3) === '100';
+}
+
 // CA marketplace par MOIS et par enseigne (page Tendances). Respecte les règles figées :
 // OMS = lignes marketplace (type de paiement) ; Y2 = par établissement, GL = 674SFS UNIQUEMENT
 // (corner exclu = retail), retours Y2 (ttc ≤ 0) exclus.
@@ -2145,9 +2161,10 @@ function marketplaceMonthly(omsRows, omsMap, y2Rows, y2Map) {
     });
   }
   if (y2Rows && y2Map && y2Map.date !== undefined && y2Map.ttc !== undefined) {
-    const di = y2Map.date, ti = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercial;
+    const di = y2Map.date, ti = y2Map.ttc, ei = y2Map.etab, ci = y2Map.commercialdoc !== undefined ? y2Map.commercialdoc : y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[ti]); if (ttc <= 0) return;
+      if (y2NonDigital(r, y2Map)) return; // Code Mag « 100 » = retail non digital → exclu
       const d = parseFrD(r[di]); if (!d) return;
       const ens = y2ChannelOf(ei !== undefined ? r[ei] : '');
       if (ens === 'GL') { const com = (ci !== undefined ? r[ci] : '').toString().toLowerCase(); if (!com.includes('sfs')) return; }
@@ -2175,10 +2192,11 @@ function ccAccumulate(omsRows, omsMap, y2Rows, y2Map) {
       fN(r[pi]), parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1));
   }
   if (y2Rows && y2Map && y2Map.code !== undefined) {
-    const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab, comi = y2Map.commercial;
+    const ci = y2Map.code, li = y2Map.libdim2, tci = y2Map.ttc, q2 = y2Map.qte, ei = y2Map.etab, comi = y2Map.commercialdoc !== undefined ? y2Map.commercialdoc : y2Map.commercial;
     y2Rows.forEach(r => {
       const ttc = fN(r[tci]);
       if (ttc <= 0) return; // exclure les retours (Total TTC ≤ 0) → pas de CA négatif par famille
+      if (y2NonDigital(r, y2Map)) return; // Code Mag « 100 » = retail non digital → exclu
       const etab = ei !== undefined ? r[ei] : '';
       // GL : seul 674SFS = e-commerce ; le corner (autres codes) = retail → exclu du cross-canal.
       if (y2ChannelOf(etab) === 'GL' && !(comi !== undefined ? r[comi] : '').toString().toLowerCase().includes('sfs')) return;
