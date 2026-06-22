@@ -8,13 +8,30 @@
 // Sans base : comportement mémoire d'origine (perdu au redémarrage).
 // ============================================================================
 const db = require('./db');
+const zlib = require('zlib');
 const STORE = new Map(); // clé `${source}-${period}` → dataset
+
+// Compression du payload pour la BASE uniquement (la RAM garde l'objet vif décompressé).
+// Les jeux tabulaires (OMS/Y2/GA) compressent ~7-10× → tient largement dans un Neon gratuit
+// (0,5 Go) et réduit d'autant l'historique/WAL généré à chaque ré-import.
+function packForDb(data) {
+  try { return { gz: zlib.gzipSync(Buffer.from(JSON.stringify(data))).toString('base64') }; }
+  catch (e) { return data; } // repli : stockage brut si la compression échoue
+}
+// Lecture : décompresse si payload { gz } ; sinon ancien format brut (rétro-compatible).
+function unpackFromDb(raw) {
+  if (raw && typeof raw === 'object' && typeof raw.gz === 'string') {
+    try { return JSON.parse(zlib.gunzipSync(Buffer.from(raw.gz, 'base64')).toString()); }
+    catch (e) { return raw; }
+  }
+  return raw;
+}
 
 // Hydratation au démarrage (no-op sans base)
 async function hydrate() {
   if (!db.enabled) return 0;
   const { rows } = await db.query('SELECT source, period, data FROM datasets');
-  rows.forEach(r => STORE.set(`${r.source}-${r.period}`, r.data));
+  rows.forEach(r => STORE.set(`${r.source}-${r.period}`, unpackFromDb(r.data)));
   if (rows.length) console.log(`[store] ${rows.length} jeu(x) de données restauré(s) depuis la base.`);
   return rows.length;
 }
@@ -25,7 +42,7 @@ function setDataset(source, period, data) {
     db.query(
       `INSERT INTO datasets (source, period, data, updated_at) VALUES ($1, $2, $3, now())
        ON CONFLICT (source, period) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-      [source, period, data],
+      [source, period, packForDb(data)],
     ).catch(e => console.error('[store] persist KO:', e.message));
   }
 }
