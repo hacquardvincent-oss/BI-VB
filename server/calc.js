@@ -101,6 +101,32 @@ const parseFrD = s => {
   return null;
 };
 const toISO = o => o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : '';
+// Normalise une colonne date à l'IMPORT : si elle est CLAIREMENT au format US M/J/AAAA
+// (un 2ᵉ composant > 12 quelque part, et jamais de 1ᵉʳ composant > 12), réécrit chaque
+// cellule en ISO AAAA-MM-JJ (non ambigu). Sinon (français J/M/AAAA ou ambigu : tous ≤ 12),
+// NE TOUCHE À RIEN → comportement historique préservé (zéro régression OMS). parseFrD lit
+// l'ISO sans ambiguïté ensuite. Cas réel : export Y2 « 6/1/26 » = 1ᵉʳ juin (et non 6 janvier).
+function normalizeDateColumn(rows, dateIdx) {
+  if (dateIdx === undefined || !rows || !rows.length) return false;
+  const re = /^\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/;
+  let dm = 0, md = 0;
+  for (const r of rows) {
+    const m = (r[dateIdx] == null ? '' : String(r[dateIdx])).match(re);
+    if (!m) continue;
+    const a = +m[1], b = +m[2];
+    if (a > 12 && b <= 12) dm++;       // 1ᵉʳ composant > 12 → c'est un jour → J/M (FR)
+    else if (b > 12 && a <= 12) md++;  // 2ᵉ composant > 12 → c'est un jour → M/J (US)
+  }
+  if (!(md > 0 && dm === 0)) return false; // pas clairement US → on laisse tel quel
+  for (const r of rows) {
+    const v = (r[dateIdx] == null ? '' : String(r[dateIdx]));
+    const m = v.match(re);
+    if (!m) continue;
+    let y = +m[3]; if (y < 100) y += 2000;
+    r[dateIdx] = `${y}-${String(+m[1]).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
+  }
+  return true;
+}
 const isoToD = s => { if (!s) return null; const p = s.split('-'); return { y: +p[0], m: +p[1], d: +p[2] }; };
 const dcmp = (a, b) => a.y !== b.y ? a.y - b.y : a.m !== b.m ? a.m - b.m : a.d - b.d;
 const inRng = (o, f, t) => !!o && (!f || dcmp(o, f) >= 0) && (!t || dcmp(o, t) <= 0);
@@ -2256,7 +2282,7 @@ function dateBounds(rows, map) {
 
 module.exports = {
   norm, fN, fGA, parseCSV, parseGAcsv, makeSplitLine,
-  parseFrD, toISO, isoToD, dcmp, inRng,
+  parseFrD, toISO, isoToD, dcmp, inRng, normalizeDateColumn,
   OMS_ALIASES, Y2_ALIASES, GA_ALIASES, ADS_ALIASES, REF_ALIASES, RET_ALIASES, IMPL_ALIASES, STOCK_ALIASES, BIS_ALIASES, OFFRE_ALIASES,
   aggregateBackInStock,
   calcDiscountDepth, calcFullOffAudit, calcPromoImpact, calcOffreCompare, calcOffreCAByListing, offreItems,

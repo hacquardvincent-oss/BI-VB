@@ -144,6 +144,7 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy) {
   if (ANONYMIZE.has(source)) ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
   const map = calc.autoMap(hdrs, aliasesFor(source));
   if (OMS_LIKE.has(source)) calc.ensureRefExtIdx(hdrs, map);
+  calc.normalizeDateColumn(rows, map.date); // dates US M/J/AAAA (ex. export Y2) → ISO, si clairement US
   let dateMin = null, dateMax = null;
   if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
   store.setDataset(source, period, {
@@ -164,6 +165,7 @@ function ingestTable(source, period, hdrs, rows, filename, uploadedBy) {
   ({ hdrs, rows, dropped } = anonymize(hdrs, rows));
   const map = calc.autoMap(hdrs, aliasesFor(source));
   if (OMS_LIKE.has(source)) calc.ensureRefExtIdx(hdrs, map);
+  calc.normalizeDateColumn(rows, map.date); // dates US M/J/AAAA (ex. connecteur Y2) → ISO, si clairement US
   let dateMin = null, dateMax = null;
   if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
   store.setDataset(source, period, {
