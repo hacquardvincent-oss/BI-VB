@@ -2109,9 +2109,13 @@ const y2Ref = (code, libdim2) => {
   return c ? (col ? `${c}-${col}` : c) : '';
 };
 function omsChannelOf(mag, type) {
-  const m = (mag || '').toString().toLowerCase(), t = (type || '').toString().toLowerCase();
-  if (t.includes('gl.com') || m.includes('galeries lafayette')) return 'GL';
-  if (t.includes('printemps') || m.includes('printemps')) return 'Printemps';
+  const t = (type || '').toString().toLowerCase();
+  // RÈGLE FIGÉE (§5/§13) : l'appartenance marketplace se lit TOUJOURS sur le TYPE DE PAIEMENT,
+  // JAMAIS sur le magasin. Une vente expédiée depuis un corner GL/Printemps mais payée via l'eshop
+  // (CB) est du CA EShop (ship-from-store), pas du marketplace → ne PAS la classer GL/Printemps sur
+  // le seul nom de magasin (sinon divergence avec calcMarketplace, cf. carte récap CA Marketplace).
+  if (t.includes('gl.com')) return 'GL';
+  if (t.includes('printemps')) return 'Printemps';
   // EShop = entrepôt (WEBSTORE) + ship-from-store (boutiques) : la distinction entrepôt/SFS
   // est une méthode d'expédition, pas un canal → tout regroupé dans EShop.
   return 'EShop';
