@@ -73,6 +73,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const omsN1 = await loadN1('oms');
   const gaN = await loadDataset('ga', 'N'), gaN1 = await loadN1('ga');
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadN1('y2');
+  // Recale le mapping de colonnes Y2 depuis les en-têtes stockés : un jeu importé AVANT une évolution
+  // d'alias (ex. ajout de `commercialdoc` pour le code 674SFS) garde sinon un map obsolète → la règle
+  // ne s'applique pas tant qu'on n'a pas ré-importé. Recalculer ici = correctif sans ré-import.
+  [y2N, y2N1].forEach(d => { if (d && d.hdrs) d.map = calc.autoMap(d.hdrs, calc.Y2_ALIASES); });
   const ref = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
   const retN = await loadDataset('ret', 'N'), retN1 = await loadN1('ret');
   const retProdN = await loadDataset('retprod', 'N');
