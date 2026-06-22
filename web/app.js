@@ -100,7 +100,7 @@ const MODULES = {
     icon: '🏬', label: 'Marketplace', preset: 'all',
     intro: 'Marketplaces : CA par enseigne (GL/Printemps/PDT/Lulli) vs N-1 et lecture cross-canal.',
     files: { required: ['oms'], optional: ['y2'] },
-    layout: ['marketplace', 'crosschannel'],
+    layout: ['marketplace', 'mpfamilles', 'crosschannel'],
   },
   omnicanal: {
     icon: '🔄', label: 'Omnicanal', preset: 'all',
@@ -112,13 +112,13 @@ const MODULES = {
     icon: '🔀', label: 'Cross-canal', preset: 'all',
     intro: 'Analyse cross-canal : famille × produit par canal (EShop / Boutiques / Marketplaces).',
     files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
-    layout: ['crosschannel'],
+    layout: ['mpfamilles', 'crosschannel'],
   },
   full: {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -140,7 +140,7 @@ const THEME_OF = {
   ga: 'AQ', canaltype: 'AQ', channels: 'AQ', ads: 'AQ', metaads: 'AQ', metasocial: 'AQ', campaigns: 'AQ',
   pagesrc: 'CR', // top sources × pages → Analyses croisées
   zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
-  marketplace: 'MP', crosschannel: 'MP',
+  marketplace: 'MP', crosschannel: 'MP', mpfamilles: 'MP',
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
@@ -160,13 +160,13 @@ const CARD_LABELS = {
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
-  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
 // Sert à la pop-in de sélection (liste compacte par catégorie + format) et à la page Création.
@@ -1723,6 +1723,23 @@ function renderReport(rep) {
       <div class="note">EShop = entrepôt + ship-from-store regroupés. Les CA par canal ne se somment pas (clients différents) ; on les compare. Réf. unifiée OMS « Ref. externe » = RC ; Y2 = code[0..13] + couleur LIBDIM2.</div></div>`;
   }
 
+  // Top familles par MARKETPLACE (CA vs N-1) — une enseigne isolée par bloc (GL / Printemps / PDT / Lulli)
+  let mpFamCard = '';
+  if (cc && cc.famByMarketplace && cc.famByMarketplace.length) {
+    const naC = '<span class="na">—</span>';
+    const blocks = cc.famByMarketplace.map(m => {
+      const rows = m.familles.map(f => `<tr><td title="${esc(f.famille)}">${esc((f.famille || '').slice(0, 26))}</td>
+        <td style="text-align:right">${fEur(f.ca)}</td>
+        <td style="text-align:right">${f.caN1 ? fEur(f.caN1) : naC}</td>
+        <td style="text-align:right">${delta(f.ca, f.caN1)}</td></tr>`).join('');
+      return `<div><div class="note" style="margin:0 0 6px"><b>${esc(m.channel)}</b> · ${fEur(m.ca)} <span style="font-weight:400">vs ${m.caN1 ? fEur(m.caN1) : naC} ${delta(m.ca, m.caN1)}</span></div>
+        <table style="font-size:11px"><thead><tr><th>Famille</th><th style="text-align:right">CA</th><th style="text-align:right">N-1</th><th style="text-align:right">Δ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }).join('');
+    mpFamCard = `<div class="card"><h3>🏷️ Top familles par marketplace (CA vs N-1)</h3>
+      <div class="note">Chaque enseigne <b>isolée</b> : ce qui marche / recule par famille, sur la période sélectionnée. CA = Total TTC (retours exclus). Règle GL = 674SFS uniquement (corner exclu).</div>
+      <div class="grid cols2" style="margin-top:8px">${blocks}</div></div>`;
+  }
+
   // Google Ads — coût & ROAS (croisé CA EShop) + efficacité par campagne
   let adsCard = '';
   if (rep.ads && rep.ads.n) {
@@ -2030,7 +2047,7 @@ function renderReport(rep) {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
     kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
-    channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard,
+    channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard, mpfamilles: mpFamCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, stockcouv: stockCouvCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,

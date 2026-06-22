@@ -14,7 +14,7 @@ let LAYOUTS = {}; // { moduleKey: [cardKeys] }
 // Clés de cartes connues (anti-injection / cohérence avec le front ALL_CARDS).
 const KNOWN = new Set(['kpi', 'actionplan', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages',
   'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'stockalerts', 'stockcouv', 'ga',
-  'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'crosschannel',
+  'canaltype', 'channels', 'ads', 'campaigns', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel',
   'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca',
   'fulloff', 'demarque', 'offrecompare', 'comalerts']);
 

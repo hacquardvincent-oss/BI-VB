@@ -2233,7 +2233,18 @@ function calcCrossChannel(omsN, omsMapN, y2N, y2MapN, famByRef, omsN1, omsMapN1,
   }).filter(x => (x.eshop > 300 && x.mkt < x.eshop * 0.15) || (x.mkt > 300 && x.eshop < x.mkt * 0.15))
     .map(x => ({ ...x, sens: x.eshop >= x.mkt ? 'eshop' : 'mkt', gap: Math.abs(x.eshop - x.mkt) }))
     .sort((a, b) => b.gap - a.gap).slice(0, 15);
-  return { channels, totals, familles, topByMarketplace, arbitrage, recos: buildCrossRecos(products, channels) };
+  // Top familles par MARKETPLACE (CA N vs N-1) — isole chaque enseigne (GL/Printemps/PDT/Lulli)
+  // pour voir ce qui marche / ne marche pas chez chacune, sans croiser toutes les marketplaces.
+  const famByMarketplace = channels.filter(ch => ch !== 'EShop').map(ch => {
+    const accN = {}, accN1 = {};
+    Object.entries(A.byRef).forEach(([ref, v]) => { const ca = v.byChannel[ch] || 0; if (ca) { const f = fam(ref); accN[f] = (accN[f] || 0) + ca; } });
+    Object.entries(B.byRef).forEach(([ref, v]) => { const ca = v.byChannel[ch] || 0; if (ca) { const f = fam(ref); accN1[f] = (accN1[f] || 0) + ca; } });
+    const familles = [...new Set([...Object.keys(accN), ...Object.keys(accN1)])]
+      .map(f => ({ famille: f, ca: accN[f] || 0, caN1: accN1[f] || 0 }))
+      .sort((a, b) => b.ca - a.ca).slice(0, 12);
+    return { channel: ch, ca: (A.byChannel[ch] || {}).ca || 0, caN1: (B.byChannel[ch] || {}).ca || 0, familles };
+  }).filter(x => x.familles.length);
+  return { channels, totals, familles, topByMarketplace, famByMarketplace, arbitrage, recos: buildCrossRecos(products, channels) };
 }
 
 // ── Top produits ────────────────────────────────────────────────────────────
