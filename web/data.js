@@ -82,13 +82,15 @@ async function renderState() {
       const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0];
       const maj = t ? new Date(t).toLocaleDateString('fr-FR') : '—';
       let covCell = nMonths ? `${nMonths} mois` : '—';
-      if (gaps.length) covCell = `<span style="color:#E1A33B">${nMonths} mois <b>· ${gaps.length} mois manquant${gaps.length > 1 ? 's' : ''} ⚠</b></span>`;
+      if (gaps.length) covCell = `<span title="Mois vides entre le 1er et le dernier mois chargés">${nMonths} mois <span style="color:#C9A24B">· ${gaps.length} trou${gaps.length > 1 ? 's' : ''}</span></span>`;
       return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:center">${covCell}</td><td style="text-align:right">${esc(maj)}</td></tr>`;
     }).join('');
     const missing = SOURCES.filter(([s]) => !byKey[s]).map(([, lbl]) => lbl);
-    // Détail des trous OMS (le plus important) si présents.
+    // Détail OMS : on liste les mois PRÉSENTS (cadrage positif = on voit le remplissage), et on explique
+    // les trous sans alarmer (l'amplitude peut être étirée par d'anciennes données isolées).
+    const omsMonths = Object.keys(cov.oms || {}).sort().map(frMonth);
     const omsGaps = gapsOf(cov.oms || {});
-    const gapNote = omsGaps.length ? `<div class="note" style="margin-top:8px;color:#E1A33B">⚠ <b>Trous dans l'OMS</b> : aucune vente en base pour ${esc(omsGaps.map(frMonth).join(', '))}. Ta « période en base » affiche l'amplitude (du 1er au dernier jour), mais des mois sont vides → charge les plages manquantes à gauche pour compléter.</div>` : '';
+    const gapNote = omsMonths.length ? `<div class="note" style="margin-top:8px"><b>📅 OMS — ${omsMonths.length} mois en base :</b> ${esc(omsMonths.join(', '))}.${omsGaps.length ? `<br><span style="color:var(--t3)">Les mois non listés entre le 1ᵉʳ et le dernier sont vides (l'amplitude est souvent étirée par d'anciennes données isolées, ex. un mois chargé bien plus tard). Charge les plages voulues à gauche pour compléter — chaque bloc s'ajoute sans rien écraser.</span>` : ''}</div>` : '';
     el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Amplitude</th><th style="text-align:right">Lignes</th><th style="text-align:center">Couverture</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>
       ${gapNote}
       <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
