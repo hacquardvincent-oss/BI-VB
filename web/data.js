@@ -70,6 +70,7 @@ async function renderState() {
       (await fetch('/api/ingest/coverage')).json().catch(() => ({})),
     ]);
     const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
+    renderFresh(byKey);
     const rows = SOURCES.filter(([s]) => byKey[s]).map(([s, lbl]) => {
       const ds = byKey[s];
       const mins = ds.map(d => d.date_min).filter(Boolean).sort();
@@ -107,6 +108,28 @@ const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'a
 function frMonth(k) { const [y, m] = k.split('-'); return `${MONTHS_FR[+m - 1]} ${y}`; }
 
 function refreshAll() { renderCapacity(); renderState(); }
+
+// Rappel de fraîcheur : depuis quand l'OMS (et les Retours) n'ont pas été rafraîchis ? Les retours/
+// annulations peuvent encore bouger ~2 mois → si le dernier import date, on suggère le refresh récent.
+function renderFresh(byKey) {
+  const el = document.getElementById('freshBanner'); if (!el) return;
+  const lastOf = src => { const ds = byKey[src] || []; const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0]; return t ? new Date(t) : null; };
+  const oms = lastOf('oms'); if (!oms) { el.innerHTML = ''; return; }
+  const days = Math.floor((Date.now() - oms.getTime()) / 86400000);
+  const ret = lastOf('ret');
+  if (days <= 2) {
+    el.innerHTML = `<div class="card" style="border-color:var(--g)"><div class="note" style="margin:0">✅ <b>OMS à jour</b> — dernier import il y a ${days === 0 ? 'moins d\'un jour' : days + ' j'}. ${ret ? `Retours rafraîchis le ${ret.toLocaleDateString('fr-FR')}.` : ''}</div></div>`;
+    return;
+  }
+  const col = days >= 7 ? 'var(--r)' : '#C9A24B';
+  el.innerHTML = `<div class="card" style="border-color:${col}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="note" style="margin:0">⏳ <b>Dernier import OMS il y a ${days} jours</b> (${oms.toLocaleDateString('fr-FR')}). Les retours/annulations peuvent encore changer ~2 mois → pense à <b>rafraîchir le récent</b>.</div>
+      <button class="btn primary" id="freshRefresh" style="white-space:nowrap">🔁 Rafraîchir les 2 derniers mois</button>
+    </div></div>`;
+  const b = document.getElementById('freshRefresh');
+  if (b) b.onclick = () => { setPreset('2m'); const imp = document.getElementById('db_impWshop'); if (imp) { imp.scrollIntoView({ behavior: 'smooth', block: 'center' }); imp.style.outline = '2px solid var(--a)'; setTimeout(() => imp.style.outline = '', 2500); } };
+}
 
 function setPreset(kind) {
   const now = new Date(); const to = new Date(now);
