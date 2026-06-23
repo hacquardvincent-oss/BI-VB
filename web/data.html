@@ -31,7 +31,7 @@
   <aside id="setupCol">
     <div class="card setup-card">
       <h3>1 · Période à charger / ajouter</h3>
-      <div class="note">La base est <b>continue</b> : tu peux <b>ajouter de la profondeur</b> (ex. charger 2025 en plus de 2026) ou <b>rafraîchir</b> seulement les derniers jours. Seuls les jours rechargés sont remplacés — le reste est conservé.</div>
+      <div class="note">La base est <b>continue</b> : tu choisis <b>une plage</b> (début → fin) et tu charges. Tu peux <b>ajouter de la profondeur</b> (ex. décembre 2024 → juin 2025 pour compléter l'année) ou <b>rafraîchir</b> les derniers jours. Seuls les jours rechargés sont remplacés — le reste est conservé.</div>
       <label class="setlabel">Du</label>
       <input id="dfrom" type="date" class="dt" style="width:100%">
       <label class="setlabel">Au</label>
@@ -40,12 +40,10 @@
         <button class="pb" id="presetYesterday" title="Hier">🌅 Hier</button>
         <button class="pb" id="presetWeek" title="7 derniers jours">7 j</button>
         <button class="pb" id="presetYTD" title="Depuis le 1er janvier">Année</button>
+        <button class="pb" id="preset12m" title="12 derniers mois">12 mois</button>
       </div>
-      <div class="note" style="margin-top:8px">Comparaison N-1 (optionnel, pour charger aussi l'historique) :</div>
-      <label class="setlabel">N-1 du</label>
-      <input id="cfrom" type="date" class="dt" style="width:100%">
-      <label class="setlabel">N-1 au</label>
-      <input id="cto" type="date" class="dt" style="width:100%">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px"><input type="checkbox" id="withN1" style="width:16px;height:16px;accent-color:var(--a)"> Charger aussi l'année <b>N‑1</b> (−364 j) en même temps</label>
+      <div class="note" style="font-size:11px;margin-top:4px">Utile pour GA4 / Ads / Meta (comparaison N‑1). Pour l'OMS, inutile : son N‑1 se déduit des dates — charge simplement les périodes voulues, elles s'accumulent.</div>
     </div>
     <div id="dataBar"></div>
   </aside>

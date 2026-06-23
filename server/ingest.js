@@ -301,6 +301,20 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
 
 router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
 
+// Couverture RÉELLE par source : mois (YYYY-MM) qui contiennent effectivement des lignes.
+// Révèle les trous (ex. une base qui « va de juin 2025 à juin 2026 » mais n'a QUE ces 2 mois).
+router.get('/coverage', requireAuth, (req, res) => {
+  const out = {};
+  for (const d of store.listDatasets()) {
+    const ds = store.getDataset(d.source, d.period);
+    if (!ds || !ds.map || ds.map.date === undefined || !ds.rows) continue;
+    const di = ds.map.date;
+    const months = out[d.source] || (out[d.source] = {});
+    for (const r of ds.rows) { const o = calc.parseFrD(r[di]); if (!o || o.y < 2000) continue; const k = `${o.y}-${String(o.m).padStart(2, '0')}`; months[k] = (months[k] || 0) + 1; }
+  }
+  res.json(out);
+});
+
 // Capacité de la base : taille Postgres actuelle vs limite (env NEON_LIMIT_MB, défaut 512 = Neon free).
 // Sans base (mode mémoire) → hasDb:false (rien n'est persisté). Sert la jauge de la page Données.
 router.get('/dbsize', requireAuth, async (req, res) => {

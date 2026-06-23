@@ -133,6 +133,17 @@
   async function initDataBar(opts) {
     OPTS = opts || {};
     const cont = document.getElementById(OPTS.container || 'dataBar'); if (!cont) return;
+    // Mode LECTURE SEULE : le module n'affiche QUE la période en base + le lien vers la page centrale
+    // « Données ». Le chargement se fait à un seul endroit → moins de confusion (cf. demande utilisateur).
+    if (OPTS.readonly) {
+      cont.innerHTML = `<div class="card setup-card">
+        <h3>📦 Données en base</h3>
+        <div class="note">Données <b>partagées</b> entre tous les modules. Le chargement se fait à un seul endroit, la page <b>🗄️ Données</b>.</div>
+        <div id="db_loaded"></div>
+      </div>`;
+      showLoaded();
+      return;
+    }
     cont.innerHTML = `<div class="card setup-card">
       <h3>${esc(OPTS.title || 'Chargement des données')}</h3>
       <div class="note">Données <b>partagées et persistées</b> : charge une fois, c'est dispo dans toutes les briques. Inutile de recharger d'une brique à l'autre.</div>

@@ -9,6 +9,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/fr.min.js"></script>
 <link rel="stylesheet" href="/styles.css">
+<style>
+/* Le chargement des données est centralisé sur la page « 🗄️ Données ». On masque les contrôles
+   de chargement/diagnostic ici (les éléments restent présents pour la compatibilité du JS). */
+#ga4box,#wshopbox,#adsbox,#metabox,#sftpbox,#y2box,#noApiNote,#persistNote,#qualityFold,#specsBox,#filesToggle,#filesBody{display:none!important}
+</style>
 </head>
 <body>
 <div id="hdr">
@@ -95,9 +100,12 @@
     <div class="note" id="metaNote" style="margin-top:8px"></div>
   </div>
 
-  <!-- 3 · CHARGEMENT DES DONNÉES (API + import manuel) -->
+  <!-- Données en base (lecture seule) — chargement centralisé sur la page « 🗄️ Données » -->
+  <div id="dataBar"></div>
+
+  <!-- 3 · OPTIONS DU REPORT (PDF, cookies RGPD, cible COS) — le chargement est sur la page Données -->
   <div class="card setup-card" id="setupData">
-    <h3 class="ch-toggle">3 · Chargement des données — sur la période sélectionnée<span class="ch-caret">▾</span></h3>
+    <h3 class="ch-toggle">3 · Options du report (PDF, cookies, COS)<span class="ch-caret">▾</span></h3>
     <div class="note" id="persistNote"></div>
     <div id="ga4box" class="toolbar hidden" style="margin-top:8px">
       <button class="btn blue" id="ga4refresh">🔄 Rafraîchir GA4 (API)</button>
@@ -207,6 +215,8 @@
   </main>
 </div>
 
+<script src="/databar.js"></script>
+<script>if (window.initDataBar) initDataBar({ readonly: true });</script>
 <script src="/app.js"></script>
 </body>
 </html>

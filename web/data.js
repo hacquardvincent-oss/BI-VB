@@ -46,10 +46,29 @@ async function renderCapacity() {
   } catch (e) { el.innerHTML = `<div class="note">Capacité indisponible.</div>`; }
 }
 
+// Liste les mois manquants entre le 1er et le dernier mois couverts (révèle les trous).
+function gapsOf(monthsObj) {
+  const keys = Object.keys(monthsObj || {}).sort();
+  if (keys.length < 2) return [];
+  const [fy, fm] = keys[0].split('-').map(Number);
+  const [ly, lm] = keys[keys.length - 1].split('-').map(Number);
+  const gaps = [];
+  let y = fy, m = fm;
+  while (y < ly || (y === ly && m <= lm)) {
+    const k = `${y}-${String(m).padStart(2, '0')}`;
+    if (!monthsObj[k]) gaps.push(k);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return gaps;
+}
+
 async function renderState() {
   const el = document.getElementById('stateBody');
   try {
-    const list = await (await fetch('/api/ingest/status')).json();
+    const [list, cov] = await Promise.all([
+      (await fetch('/api/ingest/status')).json(),
+      (await fetch('/api/ingest/coverage')).json().catch(() => ({})),
+    ]);
     const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
     const rows = SOURCES.filter(([s]) => byKey[s]).map(([s, lbl]) => {
       const ds = byKey[s];
@@ -57,16 +76,27 @@ async function renderState() {
       const maxs = ds.map(d => d.date_max).filter(Boolean).sort();
       const totRows = ds.reduce((a, d) => a + (d.row_count || 0), 0);
       const range = (mins[0] && maxs.length) ? `${frd(mins[0])} → ${frd(maxs[maxs.length - 1])}` : 'chargé';
+      const months = cov[s] || {};
+      const nMonths = Object.keys(months).length;
+      const gaps = gapsOf(months);
       const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0];
       const maj = t ? new Date(t).toLocaleDateString('fr-FR') : '—';
-      return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:right">${esc(maj)}</td></tr>`;
+      let covCell = nMonths ? `${nMonths} mois` : '—';
+      if (gaps.length) covCell = `<span style="color:#E1A33B">${nMonths} mois <b>· ${gaps.length} mois manquant${gaps.length > 1 ? 's' : ''} ⚠</b></span>`;
+      return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:center">${covCell}</td><td style="text-align:right">${esc(maj)}</td></tr>`;
     }).join('');
     const missing = SOURCES.filter(([s]) => !byKey[s]).map(([, lbl]) => lbl);
-    el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Période en base</th><th style="text-align:right">Lignes</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="note" style="margin-top:8px">La <b>période en base</b> est la couverture totale chargée. Pour OMS / Retours / Y2, le N‑1 d'un report se déduit automatiquement des dates que tu sélectionnes dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
+    // Détail des trous OMS (le plus important) si présents.
+    const omsGaps = gapsOf(cov.oms || {});
+    const gapNote = omsGaps.length ? `<div class="note" style="margin-top:8px;color:#E1A33B">⚠ <b>Trous dans l'OMS</b> : aucune vente en base pour ${esc(omsGaps.map(frMonth).join(', '))}. Ta « période en base » affiche l'amplitude (du 1er au dernier jour), mais des mois sont vides → charge les plages manquantes à gauche pour compléter.</div>` : '';
+    el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Amplitude</th><th style="text-align:right">Lignes</th><th style="text-align:center">Couverture</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>
+      ${gapNote}
+      <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
       : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>`;
   } catch (e) { el.innerHTML = `<div class="note">État indisponible.</div>`; }
 }
+const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+function frMonth(k) { const [y, m] = k.split('-'); return `${MONTHS_FR[+m - 1]} ${y}`; }
 
 function refreshAll() { renderCapacity(); renderState(); }
 
@@ -76,9 +106,11 @@ function setPreset(kind) {
   if (kind === 'yesterday') { from.setDate(from.getDate() - 1); to.setDate(to.getDate() - 1); }
   else if (kind === 'week') { from.setDate(from.getDate() - 7); }
   else if (kind === 'ytd') { from = new Date(now.getFullYear(), 0, 1); }
+  else if (kind === '12m') { from.setDate(from.getDate() - 364); }
   document.getElementById('dfrom').value = ymd(from);
   document.getElementById('dto').value = ymd(to);
 }
+const shift364 = iso => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 364); return d.toISOString().slice(0, 10); };
 
 (async () => {
   let u;
@@ -90,6 +122,7 @@ function setPreset(kind) {
   document.getElementById('presetYesterday').addEventListener('click', () => setPreset('yesterday'));
   document.getElementById('presetWeek').addEventListener('click', () => setPreset('week'));
   document.getElementById('presetYTD').addEventListener('click', () => setPreset('ytd'));
+  document.getElementById('preset12m').addEventListener('click', () => setPreset('12m'));
   setPreset('yesterday');
 
   if (window.initDataBar) initDataBar({
@@ -98,8 +131,10 @@ function setPreset(kind) {
     merge: true,      // « ajouter une période » : fusion sans écraser le reste
     getPeriods: () => {
       const n = { from: document.getElementById('dfrom').value, to: document.getElementById('dto').value };
-      const c = { from: document.getElementById('cfrom').value, to: document.getElementById('cto').value };
-      const out = {}; if (n.from && n.to) out.n = n; if (c.from && c.to) out.n1 = c; return out;
+      const out = {}; if (n.from && n.to) out.n = n;
+      // N-1 optionnel (−364 j) : surtout pour GA4/Ads/Meta qui ont besoin de la période de comparaison.
+      if (out.n && document.getElementById('withN1').checked) out.n1 = { from: shift364(n.from), to: shift364(n.to) };
+      return out;
     },
     onLoaded: refreshAll,
   });

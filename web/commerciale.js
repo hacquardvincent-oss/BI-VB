@@ -652,7 +652,7 @@ async function syncDelta() {
   const g4 = document.getElementById('ga4Refresh'); if (g4) g4.addEventListener('click', ga4Refresh);
   const wp = document.getElementById('wshopPing'); if (wp) wp.addEventListener('click', wshopPing);
   // Panneau de chargement COMMUN (databar) — période = fenêtre de l'opération (N + N-1).
-  if (window.initDataBar) initDataBar({
+  if (window.initDataBar) initDataBar({ readonly: true,
     title: '3 · Chargement des données',
     getPeriods: () => {
       const from = document.getElementById('dFrom').value, to = document.getElementById('dTo').value;

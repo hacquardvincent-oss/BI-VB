@@ -176,7 +176,7 @@ function periods() { return { n: rangeOf(FP_N, 'nRange'), n1: rangeOf(FP_N1, 'n1
   }
   // Chargement : on charge la fenêtre LARGE couvrant N + N-1 dans le slot N (rien n'est écrasé/perdu,
   // tous les mois deviennent disponibles) ; l'ANALYSE, elle, filtre sur les périodes N / N-1 saisies.
-  initDataBar({
+  initDataBar({ readonly: true,
     title: '2 · Chargement des données',
     getPeriods: () => {
       const p = periods(), n = p.n, n1 = p.n1;

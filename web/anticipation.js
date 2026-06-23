@@ -182,7 +182,7 @@ async function run() {
   document.getElementById('run').addEventListener('click', run);
   ['from', 'to'].forEach(id => document.getElementById(id).addEventListener('change', eqNote));
   // Panneau de chargement COMMUN (databar) : période N = fenêtre N-1 saisie, N-1 = −364 j (pour le comparatif).
-  initDataBar({
+  initDataBar({ readonly: true,
     title: '2 · Chargement des données',
     getPeriods: () => {
       const from = document.getElementById('from').value, to = document.getElementById('to').value;

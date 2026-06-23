@@ -101,7 +101,7 @@ function setPreset(weekly) {
   document.getElementById('run').addEventListener('click', run);
   buildAdv();
   setPreset(false);
-  if (window.initDataBar) initDataBar({
+  if (window.initDataBar) initDataBar({ readonly: true,
     title: '2 · Chargement des données',
     getPeriods: () => { const a = document.getElementById('asof').value; if (!a) return {}; return { n: { from: `${+a.slice(0, 4) - 1}-01-01`, to: a } }; },
     onLoaded: run,
