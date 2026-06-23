@@ -460,6 +460,7 @@ document.getElementById('wshoprefresh').addEventListener('click', async () => {
 });
 
 document.getElementById('loadBtn').addEventListener('click', loadReport);
+{ const ab = document.getElementById('applySaison'); if (ab) ab.addEventListener('click', loadReport); }
 
 // ── Détail produits d'une famille (déroulé en ligne, sous la famille) ───────
 function familleDetailHTML(fam) {
