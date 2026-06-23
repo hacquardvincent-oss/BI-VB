@@ -84,11 +84,16 @@ function filterBar(d, o) {
   if (!sais.length) return '';
   const sOpt = `<option value="">Toutes saisons</option>` + sais.map(s => `<option value="${esc(s)}"${s === o.saison ? ' selected' : ''}>${esc(s)}</option>`).join('');
   const dOpt = `<option value="">Tous les drops</option>` + (d.drops || []).map(dr => `<option value="${esc(dr)}"${dr === o.drop ? ' selected' : ''}>${esc(dr)}</option>`).join('');
+  const cmpNote = o.saison
+    ? (d.prevSeasonMissing
+      ? `<span style="font-size:12px;color:var(--r)">⚠ Référentiel <b>${esc(d.prevSeason)}</b> non chargé → comparatif N-1 incomplet</span>`
+      : (d.prevSeason ? `<span class="note" style="margin:0">Comparatif collection : <b>${esc(o.saison)}</b> (N) vs <b>${esc(d.prevSeason)}</b> (N-1) — chaque période sur son propre référentiel ; permanents comptés des deux côtés.</span>` : ''))
+    : `<span class="note" style="margin:0">Filtre les ventes sur les références d'une saison (implantation) puis d'un drop.</span>`;
   return `<div class="card" style="padding:8px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <b style="font-size:12px">🔎 Isoler</b>
     <label style="font-size:12px">Saison <select id="fmSaison" class="dt" style="font-size:12px">${sOpt}</select></label>
     <label style="font-size:12px">Drop <select id="fmDrop" class="dt" style="font-size:12px"${o.saison ? '' : ' disabled'}>${dOpt}</select></label>
-    <span class="note" style="margin:0">Filtre les ventes sur les références d'une saison (implantation) puis d'un drop.</span></div>`;
+    ${cmpNote}</div>`;
 }
 function wireFilter(root, o, country) {
   const s = root.querySelector('#fmSaison'), dd = root.querySelector('#fmDrop');

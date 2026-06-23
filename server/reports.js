@@ -1174,15 +1174,19 @@ router.get('/families', requireAuth, (req, res) => {
     const refMap = refov.fullRefMap();
     const pai = map.pays;
     const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
-    // Filtre SAISON → DROP : isole les ventes des références d'une saison (implantation) et, au besoin, d'un drop précis.
-    const sdx = (saison && saison !== 'ALL') ? refov.seasonDropIndex() : null;
-    const bySeason = rows => { if (!sdx || refIdx === undefined) return rows; return rows.filter(r => { const e = sdx[(r[refIdx] || '').trim()]; if (!e || e.saison !== saison) return false; if (drop && drop !== 'ALL' && (e.drop || '(sans drop)') !== drop) return false; return true; }); };
+    // Filtre SAISON → DROP, COLLECTION-AWARE : N rattaché à la saison choisie (ex. E26 sur l'été 2026),
+    // N-1 rattaché à la saison ÉQUIVALENTE de l'an dernier (E25 sur l'été 2025). Une réf permanente
+    // (présente dans les deux implantations) compte dans les DEUX. Le drop est propre à chaque saison.
+    const seasonOn = saison && saison !== 'ALL';
+    const sdx = seasonOn ? refov.seasonDropIndex() : null;
+    const prevSeason = seasonOn ? (refov.prevSeasonCode(saison) || saison) : '';
+    const bySeasonCode = (rows, sc) => { if (!sdx || refIdx === undefined) return rows; return rows.filter(r => { const e = sdx[(r[refIdx] || '').trim()]; if (!e || !(sc in e)) return false; if (drop && drop !== 'ALL' && ((e[sc] || '(sans drop)') !== drop)) return false; return true; }); };
     const byCountry = rows => { if (!country || pai === undefined) return rows; const c = country.toLowerCase().trim(); return rows.filter(r => (r[pai] || '').toString().trim().toLowerCase() === c); };
-    const prep = (f, t) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return bySeason(rs); };
+    const prep = (f, t, sc) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return seasonOn ? bySeasonCode(rs, sc) : rs; };
     const useRef = rows => calc.calcFamilleMarket(rows, map, refMap);
     const noN1 = compare === '0';
-    const mN = useRef(prep(from, to));
-    const mN1b = noN1 ? { fam: {}, total: 0 } : useRef(prep(cfrom, cto));
+    const mN = useRef(prep(from, to, saison));
+    const mN1b = noN1 ? { fam: {}, total: 0 } : useRef(prep(cfrom, cto, prevSeason));
     const fams = [...new Set([...Object.keys(mN.fam), ...Object.keys(mN1b.fam)])];
     const familles = fams.map(f => {
       const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
@@ -1203,9 +1207,9 @@ router.get('/families', requireAuth, (req, res) => {
       calc.filterOutstore(calc.filterRows(oms.rows, map, from, to, false), map).forEach(r => { if (calc.isMkt((r[map.type] || '').trim())) return; const c = (r[pai] || '').toString().trim(); const cl = c.toLowerCase(); if (c && cl !== 'france' && !seen.has(cl)) { seen.add(cl); countries.push(c); } });
       countries.sort((a, b) => a.localeCompare(b, 'fr'));
     }
-    const saisons = refov.seasonDropIndex ? [...new Set(Object.values(refov.seasonDropIndex()).map(e => e.saison))].sort() : [];
-    const drops = (saison && saison !== 'ALL') ? refov.seasonDropsOf(saison) : [];
-    res.json({ familles, total: Math.round(mN.total), totalN1: Math.round(mN1b.total), countries, hasN1: !noN1, dim: dim || 'global', country: country || '', saisons, drops, saison: saison || '', drop: drop || '' });
+    const saisons = refov.seasonCodes ? refov.seasonCodes() : [];
+    const drops = seasonOn ? refov.seasonDropsOf(saison) : [];
+    res.json({ familles, total: Math.round(mN.total), totalN1: Math.round(mN1b.total), countries, hasN1: !noN1, dim: dim || 'global', country: country || '', saisons, drops, saison: saison || '', drop: drop || '', prevSeason: seasonOn ? prevSeason : '', prevSeasonMissing: seasonOn && !!prevSeason && !store.getDataset('ref', prevSeason) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

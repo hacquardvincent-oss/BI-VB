@@ -76,17 +76,23 @@ function seasonsList() {
   }
   return out.sort((a, b) => (a.bible === b.bible ? a.code.localeCompare(b.code) : a.bible ? -1 : 1));
 }
-// ref → { saison, drop } depuis les slots de saison (implantations) → filtrer les VENTES par saison/drop.
+// ref → { saison: drop, … } depuis les slots de saison (implantations). Une réf PEUT appartenir à
+// plusieurs saisons (permanent présent dans E25 ET E26) → on garde toutes ses saisons, avec son drop
+// PROPRE à chacune. Permet de rattacher les ventes de chaque période au bon référentiel.
 function seasonDropIndex() {
   const idx = {};
   for (const d of store.listDatasets()) {
     if (d.source !== 'ref' || d.period === 'N' || d.period === 'N1') continue;
     const ds = store.getDataset('ref', d.period); if (!ds) continue;
     const det = calc.buildSeasonDetail(ds);
-    for (const [ref, v] of Object.entries(det)) { if (!idx[ref]) idx[ref] = { saison: d.period, drop: (v.drop || '').trim() }; }
+    for (const [ref, v] of Object.entries(det)) { (idx[ref] || (idx[ref] = {}))[d.period] = (v.drop || '').trim(); }
   }
   return idx;
 }
+// Codes de saison disponibles (slots, hors bible), ex. ['E25','E26','H25','H26'].
+function seasonCodes() { return seasonsList().filter(s => !s.bible).map(s => s.code); }
+// Saison équivalente N-1 : E26 → E25, H26 → H25 (même lettre, année −1).
+function prevSeasonCode(code) { const m = (code || '').match(/^([EHeh])\s*(\d{2})$/); return m ? m[1].toUpperCase() + String(+m[2] - 1).padStart(2, '0') : ''; }
 // Drops distincts d'une saison (slot ref-<code>), triés.
 function seasonDropsOf(code) {
   const ds = store.getDataset('ref', (code || '').toUpperCase()); if (!ds) return [];
@@ -279,4 +285,4 @@ router.post('/import', requireAuth, requireEdit, (req, res) => {
   res.json({ ok: true, applied: n });
 });
 
-module.exports = { router, hydrate, effectiveMap, fullRefMap, currentRefMap, seasonDropIndex, seasonDropsOf };
+module.exports = { router, hydrate, effectiveMap, fullRefMap, currentRefMap, seasonDropIndex, seasonDropsOf, seasonCodes, prevSeasonCode };
