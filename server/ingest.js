@@ -104,6 +104,18 @@ function repairFormulaCells(sheet) {
   }
 }
 
+// Choisit la feuille de DONNÉES d'un classeur : celle qui a le plus de lignes. Évite de tomber sur
+// une feuille de TCD/récap placée en premier (ex. export Y2 « Feuil1 » = pivot, « Page 1 » = données).
+function pickDataSheet(wb) {
+  let best = wb.SheetNames[0], bestRows = -1;
+  for (const name of wb.SheetNames) {
+    const ref = wb.Sheets[name] && wb.Sheets[name]['!ref'];
+    const m = ref && ref.match(/(\d+)\s*$/);
+    const rows = m ? +m[1] : 0;
+    if (rows > bestRows) { bestRows = rows; best = name; }
+  }
+  return best;
+}
 function parseBuffer(buf, filename, source) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (source === 'ads' || source === 'metaads') {
@@ -115,9 +127,10 @@ function parseBuffer(buf, filename, source) {
     return buildAdsTable(csvToAoa(buf.toString('utf8')));
   }
   if (ext === 'xlsx' || ext === 'xls') {
-    // sheets:0 → ne parse que la 1ère feuille (classeurs lourds multi-feuilles : perf)
-    const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: 0 });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
+    // On lit le classeur et on choisit la feuille de DONNÉES (la plus remplie) → tolère un TCD/récap
+    // placé en 1ʳᵉ feuille (cas export Y2 « Feuil1 » pivot + « Page 1 » données).
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const sheet = wb.Sheets[pickDataSheet(wb)];
     repairFormulaCells(sheet); // récupère les valeurs perdues (formule = constante numérique, valeur cachée NaN/absente)
     if (source === 'ga') {
       return calc.parseGAcsv(XLSX.utils.sheet_to_csv(sheet, { FS: ',' }));

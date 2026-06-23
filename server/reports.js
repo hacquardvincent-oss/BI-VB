@@ -897,9 +897,11 @@ function detectDemarque(byDayN, byDayN1, threshold) {
 // sur ses variantes couleur.
 async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   dim = dim || 'global';
-  const omsN = await loadDataset('saisonoms', 'N');
-  if (!omsN) return { empty: true, message: 'Aucun OMS de saison chargé. Lance l\'import WSHOP depuis cette page.' };
-  const omsN1 = await loadDataset('saisonoms', 'N1');
+  // Données de saison : jeux dédiés `saison*` SINON la base continue (oms/y2/ret/stock) chargée dans
+  // la page « 🗄️ Données » → plus besoin d'importer depuis la page Saison (chargement centralisé).
+  const omsN = (await loadDataset('saisonoms', 'N')) || (await loadDataset('oms', 'N'));
+  if (!omsN) return { empty: true, message: 'Aucun OMS chargé. Charge tes ventes sur la page 🗄️ Données.' };
+  const omsN1 = (await loadDataset('saisonoms', 'N1')) || (await loadDataset('oms', 'N1')) || omsN;
   // Référentiel : on croise avec le référentiel du repo (specs) ou le référentiel de saison déposé.
   // Pour les FAMILLES, on retient la 1re source qui produit un mapping non vide (robustesse :
   // un saisonref sans colonne « Regroupement » ne casse plus le tableau famille).
@@ -919,9 +921,9 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   const saisonMap = [saisonRefN, saisonRefN1, repoRef].map(refSaisonMap).find(m => Object.keys(m).length) || {};
   const saisonsDispo = [...new Set(Object.values(saisonMap))].sort();
   const implN = await loadDataset('impl', 'N'), implN1 = await loadDataset('impl', 'N1');
-  const y2N = await loadDataset('saisony2', 'N'), y2N1 = await loadDataset('saisony2', 'N1');
-  const stockN = await loadDataset('saisonstock', 'N'), stockN1 = await loadDataset('saisonstock', 'N1');
-  const retDsN = await loadDataset('saisonret', 'N'), retDsN1 = await loadDataset('saisonret', 'N1');
+  const y2N = (await loadDataset('saisony2', 'N')) || (await loadDataset('y2', 'N')), y2N1 = (await loadDataset('saisony2', 'N1')) || (await loadDataset('y2', 'N1'));
+  const stockN = (await loadDataset('saisonstock', 'N')) || (await loadDataset('stock', 'N')), stockN1 = await loadDataset('saisonstock', 'N1');
+  const retDsN = (await loadDataset('saisonret', 'N')) || (await loadDataset('ret', 'N')), retDsN1 = (await loadDataset('saisonret', 'N1')) || (await loadDataset('ret', 'N1'));
   // Stock par référence (ref. externe → quantité dispo) et retours (ref → {qté, montant})
   const stockMap = ds => { if (!ds || !ds.rows) return {}; const mp = (ds.map && Object.keys(ds.map).length) ? ds.map : calc.autoMap(ds.hdrs, calc.STOCK_ALIASES); const ri = mp.ref_ext, qi = mp.qte; if (ri === undefined || qi === undefined) return {}; const o = {}; ds.rows.forEach(r => { const k = (r[ri] || '').toString().trim(); if (!k) return; o[k] = (o[k] || 0) + (parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0); }); return o; };
   const retMap = ds => { if (!ds || !ds.rows) return {}; const mp = (ds.map && Object.keys(ds.map).length) ? ds.map : calc.autoMap(ds.hdrs, calc.RET_ALIASES); const ri = mp.ref_ext, qi = mp.qte, mi = mp.montant; if (ri === undefined) return {}; const o = {}; ds.rows.forEach(r => { const k = (r[ri] || '').toString().trim(); if (!k) return; const e = o[k] || (o[k] = { qte: 0, montant: 0 }); e.qte += qi !== undefined ? (parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0) : 0; e.montant += mi !== undefined ? calc.fN(r[mi]) : 0; }); return o; };

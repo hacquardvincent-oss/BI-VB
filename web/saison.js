@@ -569,7 +569,8 @@ document.getElementById('logout').addEventListener('click', async () => {
 
 (async () => {
   if (!(await me())) return;
-  // Récap COMMUN de la data de saison déjà en mémoire (slots saison* dédiés ; imports via le panneau ci-dessus).
-  if (window.initDataBar) initDataBar({ title: 'Données de saison en mémoire', slot: 'saison', connectors: [] });
+  // Lecture seule : le chargement des données est centralisé sur la page « 🗄️ Données » (la saison
+  // lit la base continue oms/y2/ret/stock, ou ses jeux saison* dédiés s'ils existent).
+  if (window.initDataBar) initDataBar({ readonly: true });
   loadReport();
 })();

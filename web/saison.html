@@ -59,8 +59,10 @@
     </div>
   </div>
 
-  <!-- 2 · CHARGEMENT -->
-  <div class="card">
+  <!-- 2 · CHARGEMENT — masqué : le chargement est centralisé sur la page « 🗄️ Données ».
+       Les éléments restent dans le DOM (référencés par saison.js) ; l'analyse se rafraîchit au
+       changement de période/saison. La saison lit la base continue (oms/y2/ret/stock). -->
+  <div class="card" style="display:none">
     <h3>2 · Chargement des données — saison E26 (N) vs E25 (N-1)</h3>
 
     <!-- Import par fichier (recommandé) -->

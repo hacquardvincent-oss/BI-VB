@@ -157,18 +157,21 @@
       note(`✓ ${esc(label)} importé.`); afterLoad();
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
-  // Import de FICHIER (manuel) : source × période × fichier → /api/ingest.
+  // Import de FICHIER (manuel) → base continue (slot N) : pas de notion N/N-1 à l'import, la plage
+  // du fichier se FUSIONNE (remplace seulement ses propres dates). Un re-import du même mois = pas de
+  // doublon (la fenêtre est remplacée). Le N-1 d'analyse se déduit ensuite des dates dans les modules.
   async function importFile() {
-    const src = document.getElementById('db_fsrc').value, per = document.getElementById('db_fper').value, f = document.getElementById('db_ffile').files[0];
+    const src = document.getElementById('db_fsrc').value, f = document.getElementById('db_ffile').files[0];
     if (!f) { note('⚠ Choisis un fichier.'); return; }
-    note(`⏳ Import fichier ${src} ${per}…`);
+    note(`⏳ Import fichier ${src}…`);
     try {
       const fd = new FormData(); fd.append('file', f);
-      const q = OPTS.merge ? '?merge=1' : ''; // base continue : ajoute la plage du fichier sans écraser le reste
-      const r = await fetch(`/api/ingest/${src}/${per}${q}`, { method: 'POST', body: fd });
+      const q = OPTS.merge ? '?merge=1' : ''; // base continue : ajoute/remplace la plage du fichier sans écraser le reste
+      const r = await fetch(`/api/ingest/${src}/N${q}`, { method: 'POST', body: fd });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { note('⚠ ' + esc(j.error || 'Erreur import')); return; }
-      note(`✓ ${src} ${per} : ${fInt(j.rows)} lignes.`); afterLoad();
+      const win = (j.dateMin && j.dateMax) ? ` (${frd(j.dateMin)} → ${frd(j.dateMax)} ${j.merged ? 'fusionné' : 'chargé'})` : '';
+      note(`✓ ${src} : ${fInt(j.rows)} lignes${win}.`); afterLoad();
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
 
@@ -203,7 +206,6 @@
       <details class="fold" style="margin-top:8px"><summary>📁 Importer un fichier</summary>
         <div class="toolbar" style="gap:6px;margin-top:6px;flex-wrap:wrap">
           <select id="db_fsrc" class="dt"><option value="oms">OMS</option><option value="ga">GA4</option><option value="ads">Google Ads</option><option value="ret">Retours</option><option value="bis">Alertes stock</option><option value="y2">Y2</option><option value="ref">Référentiel</option><option value="impl">Implantation</option><option value="offre">Offre</option></select>
-          <select id="db_fper" class="dt"><option value="N">N</option><option value="N1">N-1</option></select>
           <input type="file" id="db_ffile" class="dt" style="flex:1;min-width:120px">
           <button class="btn" id="db_impFile">Importer</button>
         </div>
