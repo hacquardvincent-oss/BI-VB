@@ -88,6 +88,7 @@ async function renderState() {
       const detail = present.length ? `<tr class="cov-detail" id="covd_${esc(s)}" style="display:none"><td colspan="5" style="background:var(--s2)"><div style="font-size:11px;line-height:1.9;padding:4px 2px">
         <b style="color:var(--g)">✅ Mois en base (${present.length})</b> : ${present.map(k => `${frMonth(k)} <span style="color:var(--t3)">(${fInt(months[k])} l.)</span>`).join(' · ')}
         ${gaps.length ? `<br><b style="color:#C9A24B">⚠ Mois vides (${gaps.length})</b> : ${gaps.map(frMonth).join(' · ')} <span style="color:var(--t3)">→ à charger à gauche pour combler</span>` : ''}
+        <div id="covdays_${esc(s)}" data-loaded="0" style="margin-top:8px"></div>
       </div></td></tr>` : '';
       return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:center">${clickable}</td><td style="text-align:right">${esc(maj)}</td></tr>${detail}`;
     }).join('');
@@ -101,11 +102,75 @@ async function renderState() {
       ${gapNote}
       <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
       : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>`;
-    el.querySelectorAll('.cov-toggle').forEach(a => { a.onclick = ev => { ev.preventDefault(); const d = document.getElementById('covd_' + a.dataset.src); if (d) d.style.display = d.style.display === 'none' ? '' : 'none'; }; });
+    el.querySelectorAll('.cov-toggle').forEach(a => {
+      a.onclick = ev => {
+        ev.preventDefault(); const src = a.dataset.src; const d = document.getElementById('covd_' + src);
+        if (!d) return; const open = d.style.display === 'none'; d.style.display = open ? '' : 'none';
+        if (open) { const dd = document.getElementById('covdays_' + src); if (dd && dd.dataset.loaded === '0') { dd.dataset.loaded = '1'; loadDayDetail(src, dd); } }
+      };
+    });
   } catch (e) { el.innerHTML = `<div class="note">État indisponible.</div>`; }
 }
 const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 function frMonth(k) { const [y, m] = k.split('-'); return `${MONTHS_FR[+m - 1]} ${y}`; }
+const addDays = (d, n) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; };
+const isoOf = d => d.toISOString().slice(0, 10);
+
+// Calendrier « heatmap » (style GitHub) : colonnes = semaines, lignes = jours (lun→dim).
+// Vert = jour avec données (foncé = + de lignes) ; gris bordé = jour MANQUANT ; transparent = hors plage.
+function renderHeatmap(days, from, to) {
+  const start = new Date(from + 'T00:00:00Z'), end = new Date(to + 'T00:00:00Z');
+  const startDow = (start.getUTCDay() + 6) % 7; // lundi = 0
+  let gridStart = addDays(start, -startDow);
+  let max = 0; for (const v of Object.values(days)) if (v > max) max = v;
+  const cols = []; const monthSpans = [];
+  let cur = new Date(gridStart);
+  while (cur <= end) {
+    const col = []; let colMonth = null;
+    for (let dow = 0; dow < 7; dow++) {
+      const iso = isoOf(cur); const inR = iso >= from && iso <= to; const c = days[iso] || 0;
+      if (inR && colMonth === null) colMonth = iso.slice(0, 7);
+      col.push({ iso, inR, c });
+      cur = addDays(cur, 1);
+    }
+    monthSpans.push(colMonth);
+    cols.push(col);
+  }
+  const color = cell => {
+    if (!cell.inR) return 'transparent';
+    if (!cell.c) return 'var(--s2)';
+    const t = max ? cell.c / max : 0;
+    return `rgba(27,158,106,${(0.28 + 0.62 * Math.min(1, t)).toFixed(2)})`;
+  };
+  // Bandeau mois (étiquette au 1er changement de mois)
+  let lastM = ''; const labels = monthSpans.map(m => { if (m && m !== lastM) { lastM = m; return MONTHS_FR[+m.slice(5, 7) - 1]; } return ''; });
+  const labelRow = `<div style="display:flex;gap:2px;margin-left:0">${labels.map(l => `<div style="width:11px;font-size:8px;color:var(--t3);text-align:left;white-space:nowrap;overflow:visible">${l}</div>`).join('')}</div>`;
+  const grid = cols.map(col => `<div style="display:flex;flex-direction:column;gap:2px">${col.map(cell => `<div title="${cell.iso}${cell.inR ? ' : ' + cell.c + ' l.' : ''}" style="width:11px;height:11px;border-radius:2px;background:${color(cell)};${cell.inR && !cell.c ? 'border:1px solid var(--br)' : ''}"></div>`).join('')}</div>`).join('');
+  return `<div style="overflow-x:auto;padding:2px 0">${labelRow}<div style="display:flex;gap:2px;align-items:flex-start">${grid}</div>
+    <div class="note" style="font-size:10px;margin-top:4px">▢ gris bordé = jour manquant · ▣ vert = jour avec ventes (foncé = volume).</div></div>`;
+}
+// Plages de jours MANQUANTS (consécutifs regroupés) — actionnable pour savoir quoi recharger.
+function renderMissingRanges(days, from, to) {
+  const miss = []; let runStart = null, prev = null;
+  for (let cur = new Date(from + 'T00:00:00Z'), end = new Date(to + 'T00:00:00Z'); cur <= end; cur = addDays(cur, 1)) {
+    const iso = isoOf(cur);
+    if (!days[iso]) { if (!runStart) runStart = iso; prev = iso; }
+    else if (runStart) { miss.push([runStart, prev]); runStart = null; }
+  }
+  if (runStart) miss.push([runStart, prev]);
+  if (!miss.length) return '<div class="note" style="color:var(--g);margin-top:4px">✅ Aucun jour manquant sur la plage chargée.</div>';
+  const fmt = r => r[0] === r[1] ? frd(r[0]) : `${frd(r[0])} → ${frd(r[1])}`;
+  return `<div class="note" style="margin-top:4px"><b style="color:#C9A24B">⚠ Jours manquants (${miss.length} plage${miss.length > 1 ? 's' : ''})</b> : ${miss.map(fmt).join(' · ')}</div>`;
+}
+async function loadDayDetail(src, el) {
+  el.innerHTML = '<div class="note">Chargement du calendrier…</div>';
+  try {
+    const days = await (await fetch('/api/ingest/coverage-days?source=' + encodeURIComponent(src))).json();
+    const keys = Object.keys(days).sort();
+    if (!keys.length) { el.innerHTML = '<div class="note">Pas de dates exploitables.</div>'; return; }
+    el.innerHTML = renderHeatmap(days, keys[0], keys[keys.length - 1]) + renderMissingRanges(days, keys[0], keys[keys.length - 1]);
+  } catch (e) { el.innerHTML = '<div class="note">Détail indisponible.</div>'; }
+}
 
 function refreshAll() { renderCapacity(); renderState(); }
 

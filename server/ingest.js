@@ -315,6 +315,21 @@ router.get('/coverage', requireAuth, (req, res) => {
   res.json(out);
 });
 
+// Couverture JOUR par jour d'UNE source (?source=oms) : { 'YYYY-MM-DD': nbLignes }. Chargé à la
+// demande (clic sur la couverture) → calendrier heatmap + plages manquantes côté front.
+router.get('/coverage-days', requireAuth, (req, res) => {
+  const source = (req.query.source || '').toString();
+  const out = {};
+  for (const d of store.listDatasets()) {
+    if (d.source !== source) continue;
+    const ds = store.getDataset(d.source, d.period);
+    if (!ds || !ds.map || ds.map.date === undefined || !ds.rows) continue;
+    const di = ds.map.date;
+    for (const r of ds.rows) { const o = calc.parseFrD(r[di]); if (!o || o.y < 2000) continue; const k = `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}`; out[k] = (out[k] || 0) + 1; }
+  }
+  res.json(out);
+});
+
 // Capacité de la base : taille Postgres actuelle vs limite (env NEON_LIMIT_MB, défaut 512 = Neon free).
 // Sans base (mode mémoire) → hasDb:false (rien n'est persisté). Sert la jauge de la page Données.
 router.get('/dbsize', requireAuth, async (req, res) => {
