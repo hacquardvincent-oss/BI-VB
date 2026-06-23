@@ -113,15 +113,15 @@
     for (const rg of ranges) { const ok = await loadWshopRange(rg.from, rg.to); if (!ok) return; }
     note(`✓ OMS chargé par blocs mensuels (fusionnés dans la base continue, retours & alertes inclus).`); afterLoad();
   }
-  // Stock (inventaire) + alertes back-in-stock + retours produit dans les slots STANDARDS → utilisables
-  // partout. Endpoint DÉDIÉ (découplé de l'import OMS pour ne pas l'alourdir).
-  async function importMerch() {
+  // Alertes stock (inventaire + back-in-stock) OU Retours produit, dans les slots STANDARDS →
+  // utilisables partout. Endpoints DÉDIÉS (découplés de l'import OMS pour ne pas l'alourdir).
+  async function importMerch(only, label) {
     const q = periodQuery(); if (!q) return;
-    note('⏳ Import stock + alertes + retours produit (WSHOP)…');
+    note(`⏳ Import ${esc(label)} (WSHOP)…`);
     try {
-      const r = await fetch('/api/wshop/stock-alerts?' + q, { method: 'POST' });
+      const r = await fetch(`/api/wshop/stock-alerts?${q}&only=${only}`, { method: 'POST' });
       if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur')); return; }
-      await pollJob(j => { const x = j.result || {}; return `✓ Stock & alertes importés (${fInt(x.stockRefs || 0)} réf. stock, ${fInt(x.alerts || 0)} alertes${x.retprod ? ', ' + fInt(x.retprod) + ' retours' : ''}).`; });
+      await pollJob(j => { const x = j.result || {}; return only === 'returns' ? `✓ Retours importés (${fInt(x.retprod || 0)} lignes).` : `✓ Alertes stock importées (${fInt(x.stockRefs || 0)} réf. stock, ${fInt(x.alerts || 0)} alertes).`; });
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
   function pollJob(doneMsg) {
@@ -193,7 +193,8 @@
       <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
         <span class="hidden" id="db_wshop"><button class="btn blue" id="db_impWshop" style="width:100%">🔄 Importer l'OMS (WSHOP)</button></span>
         <span class="hidden" id="db_wshopSync"><button class="btn" id="db_impSync" style="width:100%" title="Récupère seulement les commandes nouvelles/modifiées (économe)">⚡ Synchroniser le delta (WSHOP)</button></span>
-        <span class="hidden" id="db_merch"><button class="btn" id="db_impMerch" style="width:100%" title="Charge le stock (inventaire) + les alertes back-in-stock dans les slots standards → analysables dans toutes les briques">🔔 Stock & alertes stock (WSHOP)</button></span>
+        <span class="hidden" id="db_merch"><button class="btn" id="db_impReturns" style="width:100%" title="Charge les retours produit (motifs, top produits retournés) sur la période">↩️ Retours (WSHOP)</button></span>
+        <span class="hidden" id="db_merch2"><button class="btn" id="db_impAlerts" style="width:100%" title="Charge le stock (inventaire) + les alertes back-in-stock sur la période">🔔 Alertes stock (WSHOP)</button></span>
         <span class="hidden" id="db_ga4"><button class="btn blue" id="db_impGa4" style="width:100%">🔄 GA4</button></span>
         <span class="hidden" id="db_ads"><button class="btn blue" id="db_impAds" style="width:100%">🔄 Google Ads</button></span>
         <span class="hidden" id="db_meta"><button class="btn blue" id="db_impMeta" style="width:100%">🔄 Meta Ads</button></span>
@@ -213,12 +214,13 @@
     const allow = Array.isArray(OPTS.connectors) ? OPTS.connectors : ['wshop', 'ga4', 'googleads', 'meta', 'y2'];
     const map = [['wshop', 'db_wshop'], ['ga4', 'db_ga4'], ['googleads', 'db_ads'], ['meta', 'db_meta'], ['y2', 'db_y2']].filter(([c]) => allow.includes(c));
     await Promise.all(map.map(async ([c, box]) => {
-      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') { document.getElementById('db_wshopSync').classList.remove('hidden'); if (!OPTS.slot) document.getElementById('db_merch').classList.remove('hidden'); } } } catch (e) { /* */ }
+      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') { document.getElementById('db_wshopSync').classList.remove('hidden'); if (!OPTS.slot) { document.getElementById('db_merch').classList.remove('hidden'); document.getElementById('db_merch2').classList.remove('hidden'); } } } } catch (e) { /* */ }
     }));
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
     on('db_impWshop', () => importWshop(false));
     on('db_impSync', () => importWshop(true));
-    on('db_impMerch', importMerch);
+    on('db_impReturns', () => importMerch('returns', 'Retours'));
+    on('db_impAlerts', () => importMerch('alerts', 'Alertes stock'));
     on('db_impGa4', () => importDated('ga4', 'GA4'));
     on('db_impAds', () => importDated('googleads', 'Google Ads'));
     on('db_impMeta', () => importDated('meta', 'Meta Ads'));

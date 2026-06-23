@@ -424,16 +424,21 @@ async function refresh(opts = {}, cb = {}) {
 async function refreshStockAlerts(opts = {}, cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré');
   const { from, to, cfrom, cto } = opts;
+  // opts.only : 'alerts' (stock + back-in-stock) | 'returns' (retours produit) | absent = les deux.
+  const doAlerts = !opts.only || opts.only === 'alerts';
+  const doReturns = !opts.only || opts.only === 'returns';
   let stockRefs = 0, alerts = 0, retprodN = 0, eanMap = {};
-  try {
-    if (cb.phase) cb.phase('Stock (inventory)…');
-    const inv = await fetchInventory();
-    store.setDataset('stock', 'N', stockDataset(inv.byRef));
-    stockRefs = Object.keys(inv.byRef).length; eanMap = inv.eanToRef || {};
-    if (cb.count) cb.count('N', stockRefs);
-  } catch (e) { /* best-effort */ }
-  if (from && to) {
+  if (doAlerts) {
     try {
+      if (cb.phase) cb.phase('Stock (inventory)…');
+      const inv = await fetchInventory();
+      store.setDataset('stock', 'N', stockDataset(inv.byRef));
+      stockRefs = Object.keys(inv.byRef).length; eanMap = inv.eanToRef || {};
+      if (cb.count) cb.count('N', stockRefs);
+    } catch (e) { /* best-effort */ }
+  }
+  if (from && to) {
+    if (doAlerts) try {
       if (cb.phase) cb.phase('Alertes stock (back-in-stock)…');
       const subsN = await fetchBackInStock(from, to);
       let subsN1 = [];
@@ -457,7 +462,7 @@ async function refreshStockAlerts(opts = {}, cb = {}) {
       const drows = Object.keys(byDay).sort().map(d => [d, String(byDay[d])]);
       if (drows.length) store.setDataset('bisdaily', 'N', { hdrs: ['Date', 'Demandes'], rows: drows, map: { date: 0, qte: 1 }, date_min: drows[0][0], date_max: drows[drows.length - 1][0], row_count: drows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
     } catch (e) { /* best-effort */ }
-    try {
+    if (doReturns) try {
       if (cb.phase) cb.phase('Retours produits…');
       const rN = await fetchReturnsRange(from, to);
       store.setDataset('retprod', 'N', returnsProductDataset(rN, eanMap)); retprodN = rN.length;

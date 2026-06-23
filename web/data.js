@@ -77,13 +77,18 @@ async function renderState() {
       const totRows = ds.reduce((a, d) => a + (d.row_count || 0), 0);
       const range = (mins[0] && maxs.length) ? `${frd(mins[0])} → ${frd(maxs[maxs.length - 1])}` : 'chargé';
       const months = cov[s] || {};
-      const nMonths = Object.keys(months).length;
+      const present = Object.keys(months).sort();
       const gaps = gapsOf(months);
       const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0];
       const maj = t ? new Date(t).toLocaleDateString('fr-FR') : '—';
-      let covCell = nMonths ? `${nMonths} mois` : '—';
-      if (gaps.length) covCell = `<span title="Mois vides entre le 1er et le dernier mois chargés">${nMonths} mois <span style="color:#C9A24B">· ${gaps.length} trou${gaps.length > 1 ? 's' : ''}</span></span>`;
-      return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:center">${covCell}</td><td style="text-align:right">${esc(maj)}</td></tr>`;
+      let covCell = present.length ? `${present.length} mois` : '—';
+      if (gaps.length) covCell = `${present.length} mois <span style="color:#C9A24B">· ${gaps.length} trou${gaps.length > 1 ? 's' : ''}</span>`;
+      const clickable = present.length ? `<a href="#" class="cov-toggle" data-src="${esc(s)}" style="color:var(--a);text-decoration:none" title="Voir le détail des mois">${covCell} ▾</a>` : covCell;
+      const detail = present.length ? `<tr class="cov-detail" id="covd_${esc(s)}" style="display:none"><td colspan="5" style="background:var(--s2)"><div style="font-size:11px;line-height:1.9;padding:4px 2px">
+        <b style="color:var(--g)">✅ Mois en base (${present.length})</b> : ${present.map(k => `${frMonth(k)} <span style="color:var(--t3)">(${fInt(months[k])} l.)</span>`).join(' · ')}
+        ${gaps.length ? `<br><b style="color:#C9A24B">⚠ Mois vides (${gaps.length})</b> : ${gaps.map(frMonth).join(' · ')} <span style="color:var(--t3)">→ à charger à gauche pour combler</span>` : ''}
+      </div></td></tr>` : '';
+      return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:center">${clickable}</td><td style="text-align:right">${esc(maj)}</td></tr>${detail}`;
     }).join('');
     const missing = SOURCES.filter(([s]) => !byKey[s]).map(([, lbl]) => lbl);
     // Détail OMS : on liste les mois PRÉSENTS (cadrage positif = on voit le remplissage), et on explique
@@ -95,6 +100,7 @@ async function renderState() {
       ${gapNote}
       <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
       : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>`;
+    el.querySelectorAll('.cov-toggle').forEach(a => { a.onclick = ev => { ev.preventDefault(); const d = document.getElementById('covd_' + a.dataset.src); if (d) d.style.display = d.style.display === 'none' ? '' : 'none'; }; });
   } catch (e) { el.innerHTML = `<div class="note">État indisponible.</div>`; }
 }
 const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -107,6 +113,7 @@ function setPreset(kind) {
   let from = new Date(now);
   if (kind === 'yesterday') { from.setDate(from.getDate() - 1); to.setDate(to.getDate() - 1); }
   else if (kind === 'week') { from.setDate(from.getDate() - 7); }
+  else if (kind === '2m') { to.setDate(to.getDate() - 1); from.setDate(from.getDate() - 62); } // rafraîchir le récent (retours tardifs)
   else if (kind === 'ytd') { from = new Date(now.getFullYear(), 0, 1); }
   else if (kind === '12m') { from.setDate(from.getDate() - 364); }
   document.getElementById('dfrom').value = ymd(from);
@@ -123,6 +130,7 @@ const shift364 = iso => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   document.getElementById('presetYesterday').addEventListener('click', () => setPreset('yesterday'));
   document.getElementById('presetWeek').addEventListener('click', () => setPreset('week'));
+  document.getElementById('preset2m').addEventListener('click', () => setPreset('2m'));
   document.getElementById('presetYTD').addEventListener('click', () => setPreset('ytd'));
   document.getElementById('preset12m').addEventListener('click', () => setPreset('12m'));
   setPreset('yesterday');
