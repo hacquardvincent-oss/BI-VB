@@ -140,13 +140,42 @@ router.get('/stats', requireAuth, (req, res) => {
     const ds = store.getDataset(d.source, d.period); if (!ds) continue;
     const ri = ds.map ? ds.map.ref_ext : undefined;
     const fi = ds.map ? (ds.map.regroupement !== undefined ? ds.map.regroupement : ds.map.famille) : undefined;
-    let total = 0, withFam = 0;
-    if (ri !== undefined) { const seen = new Set(); (ds.rows || []).forEach(r => { const k = (r[ri] || '').trim(); if (!k || seen.has(k)) return; seen.add(k); total++; if (fi !== undefined && (r[fi] || '').trim()) withFam++; }); }
+    const di = ds.map ? ds.map.drop : undefined;
+    let total = 0, withFam = 0, withDrop = 0;
+    if (ri !== undefined) { const seen = new Set(); (ds.rows || []).forEach(r => { const k = (r[ri] || '').trim(); if (!k || seen.has(k)) return; seen.add(k); total++; if (fi !== undefined && (r[fi] || '').trim()) withFam++; if (di !== undefined && (r[di] || '').trim()) withDrop++; }); }
     const isBible = d.period === 'N' || d.period === 'N1';
-    slots.push({ code: d.period, label: isBible ? 'Bible (globale)' : d.period, bible: isBible, total, withFam, missing: total - withFam });
+    slots.push({ code: d.period, label: isBible ? 'Bible (globale)' : d.period, bible: isBible, total, withFam, missing: total - withFam, hasDrop: di !== undefined, noDrop: di !== undefined ? total - withDrop : 0 });
   }
   slots.sort((a, b) => (a.bible === b.bible ? a.code.localeCompare(b.code) : a.bible ? -1 : 1));
   res.json({ slots, classified: Object.keys(fullRefMap()).length, corrections: Object.keys(OV).length });
+});
+
+// Référentiel d'une saison REGROUPÉ PAR DROP : drop → familles → références (avec nom).
+// + highlight des données manquantes (réfs sans regroupement / sans drop).
+router.get('/season/:code/drops', requireAuth, (req, res) => {
+  const code = (req.params.code || '').toUpperCase();
+  const ds = store.getDataset('ref', code);
+  if (!ds) return res.json({ drops: [], missing: { noFam: 0, noDrop: 0 }, total: 0 });
+  const detail = calc.buildSeasonDetail(ds);
+  const ov = effectiveMap();
+  const desOms = desByRefFromOms();
+  const drops = {}; let noFam = 0, noDrop = 0;
+  for (const [ref, v] of Object.entries(detail)) {
+    const fam = ov[ref] || v.regroupement || '(sans regroupement)';
+    const drop = v.drop || '(sans drop)';
+    if (!ov[ref] && !v.regroupement) noFam++;
+    if (!v.drop) noDrop++;
+    const d = drops[drop] || (drops[drop] = { drop: drop, count: 0, families: {} });
+    const f = d.families[fam] || (d.families[fam] = { famille: fam, refs: [] });
+    f.refs.push({ ref, name: v.name || desOms[ref] || '', fam, drop, ov: !!ov[ref], noFam: !ov[ref] && !v.regroupement });
+    d.count++;
+  }
+  const out = Object.values(drops).map(d => ({
+    drop: d.drop, count: d.count,
+    noFam: Object.values(d.families).reduce((a, f) => a + f.refs.filter(r => r.noFam).length, 0),
+    families: Object.values(d.families).map(f => ({ famille: f.famille, count: f.refs.length, refs: f.refs.sort((a, b) => (a.name || a.ref).localeCompare(b.name || b.ref)) })).sort((a, b) => b.count - a.count),
+  })).sort((a, b) => (a.drop === '(sans drop)' ? 1 : b.drop === '(sans drop)' ? -1 : a.drop.localeCompare(b.drop)));
+  res.json({ drops: out, missing: { noFam, noDrop }, total: Object.keys(detail).length, code });
 });
 
 // Ajout/édition direct d'une référence (même si absente des fichiers/OMS) → override.

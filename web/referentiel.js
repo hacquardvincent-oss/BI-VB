@@ -33,7 +33,35 @@ function renderSeasonBar() {
   });
   syncSeasonActions();
 }
-function setSeason(code) { SEASON = code; renderSeasonBar(); if (MODE === 'all') loadAll(); }
+function setSeason(code) { SEASON = code; renderSeasonBar(); if (code) loadDrops(); else (MODE === 'all' ? loadAll() : render()); }
+
+// Vue d'une saison REGROUPÉE PAR DROP : drop → familles → références (éditables).
+async function loadDrops() {
+  document.getElementById('list').innerHTML = '<div class="card"><div class="note">Chargement de la saison…</div></div>';
+  try { const r = await fetch('/api/referentiel/season/' + encodeURIComponent(SEASON) + '/drops'); renderDropTree(await r.json()); }
+  catch (e) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
+}
+function renderDropTree(d) {
+  const el = document.getElementById('list');
+  if (!d.drops || !d.drops.length) { document.getElementById('summary').innerHTML = ''; el.innerHTML = `<div class="card"><div class="note">Aucune donnée pour <b>${esc(SEASON)}</b> — importe son fichier d'implantation ci-dessus (zone « Saisons »).</div></div>`; return; }
+  document.getElementById('summary').innerHTML = `📦 <b>${esc(d.code)}</b> : ${fInt(d.total)} réfs · ${d.drops.length} drops${d.missing.noFam ? ` · <span style="color:#C9A24B">${fInt(d.missing.noFam)} sans regroupement ⚠</span>` : ''}${d.missing.noDrop ? ` · <span style="color:#C9A24B">${fInt(d.missing.noDrop)} sans drop</span>` : ''}`;
+  const allFams = new Set(); d.drops.forEach(dr => dr.families.forEach(f => { if (f.famille && f.famille !== '(sans regroupement)') allFams.add(f.famille); }));
+  document.getElementById('famList').innerHTML = [...allFams].sort().map(f => `<option value="${esc(f)}">`).join('');
+  el.innerHTML = d.drops.map((dr, di) => `<div class="card" style="padding:8px 12px">
+    <div class="dropHead" data-d="${di}" style="cursor:pointer;font-weight:700"><span class="cr">▸</span> DROP <b>${esc(dr.drop)}</b> <span class="note" style="margin:0;font-weight:400">· ${fInt(dr.count)} réfs · ${dr.families.length} familles${dr.noFam ? ` · <span style="color:#C9A24B">${dr.noFam} à classer</span>` : ''}</span></div>
+    <div class="dropBody" id="db_${di}" style="display:none;margin-top:6px">${dr.families.map((f, fi) => `
+      <div style="margin:4px 0 4px 8px">
+        <div class="famHead" data-d="${di}" data-f="${fi}" style="cursor:pointer;font-weight:600"><span class="cr">▸</span> ${esc(f.famille)} <span class="note" style="margin:0;font-weight:400">(${f.count})</span></div>
+        <div id="fb_${di}_${fi}" style="display:none;margin-left:14px"><table style="font-size:11px;width:100%"><tbody>${f.refs.map(r => `<tr data-ref="${esc(r.ref)}">
+          <td title="${esc(r.name)}">${esc((r.name || '').slice(0, 32) || '—')}</td>
+          <td><code style="font-size:10px">${esc(r.ref)}</code></td>
+          <td><input class="dt famInput" list="famList" value="${esc(r.fam === '(sans regroupement)' ? '' : r.fam)}" style="width:150px;font-size:11px${r.noFam ? ';border-color:#C9A24B' : ''}"></td>
+          <td style="white-space:nowrap"><button class="btn save" style="padding:2px 7px">💾</button> <span class="rowNote note" style="margin:0"></span></td></tr>`).join('')}</tbody></table></div>
+      </div>`).join('')}</div></div>`).join('');
+  el.querySelectorAll('.dropHead').forEach(h => h.addEventListener('click', () => { const b = document.getElementById('db_' + h.dataset.d); const open = b.style.display === 'none'; b.style.display = open ? '' : 'none'; h.querySelector('.cr').textContent = open ? '▾' : '▸'; }));
+  el.querySelectorAll('.famHead').forEach(h => h.addEventListener('click', () => { const b = document.getElementById('fb_' + h.dataset.d + '_' + h.dataset.f); const open = b.style.display === 'none'; b.style.display = open ? '' : 'none'; h.querySelector('.cr').textContent = open ? '▾' : '▸'; }));
+  el.querySelectorAll('tr[data-ref]').forEach(tr => { const ref = tr.dataset.ref, inp = tr.querySelector('.famInput'), note = tr.querySelector('.rowNote'); const save = () => saveOverride(ref, (inp.value || '').trim(), note, tr); tr.querySelector('.save').addEventListener('click', save); inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); }); });
+}
 function syncSeasonActions() {
   const isBible = SEASON === '';
   document.getElementById('seasonImportLbl').textContent = isBible ? 'la bible (globale)' : `la saison ${SEASON}`;
@@ -159,7 +187,7 @@ async function loadDash() {
     const d = await (await fetch('/api/referentiel/stats')).json();
     const el = document.getElementById('dash'); if (!el) return;
     const totalRows = (d.slots || []).reduce((a, s) => a + s.total, 0);
-    const slotLine = s => `<span style="display:inline-block;margin:2px 8px 2px 0;padding:3px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--br)"><b>${esc(s.bible ? '📖 Bible' : s.code)}</b> : ${fInt(s.withFam)} classées${s.missing ? ` <span style="color:#C9A24B">· ${fInt(s.missing)} sans regroupement ⚠</span>` : ''}</span>`;
+    const slotLine = s => `<span style="display:inline-block;margin:2px 8px 2px 0;padding:3px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--br)"><b>${esc(s.bible ? '📖 Bible' : s.code)}</b> : ${fInt(s.withFam)} classées${s.missing ? ` <span style="color:#C9A24B">· ${fInt(s.missing)} sans regroupement ⚠</span>` : ''}${s.hasDrop && s.noDrop ? ` <span style="color:#C9A24B">· ${fInt(s.noDrop)} sans drop</span>` : ''}</span>`;
     el.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
         <div><span style="font-size:22px;font-weight:700;font-family:var(--disp)">${fInt(d.classified)}</span> <span class="note" style="margin:0">références classées</span></div>
         <div class="note" style="margin:0">${fInt(totalRows)} lignes dans les fichiers · ${fInt(d.corrections)} corrections manuelles</div>
@@ -179,7 +207,7 @@ async function loadAll() {
   catch (e) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
 function setMode(m) {
-  MODE = m;
+  MODE = m; SEASON = ''; renderSeasonBar();
   document.getElementById('modeTodo').classList.toggle('on', m === 'todo');
   document.getElementById('modeAll').classList.toggle('on', m === 'all');
   document.getElementById('search').value = '';

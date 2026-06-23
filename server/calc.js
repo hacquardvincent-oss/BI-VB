@@ -198,7 +198,19 @@ const REF_ALIASES = {
   famille: ['familles principales', 'famille principale', 'famille'],
   regroupement: ['regroupement'],
   saison: ['saison', 'season'],
+  drop: ['drop'], // mini-collection (P1, P2, S31…) dans l'implantation
+  name: ['titre', 'name referentiel', 'libelle complementaire ligne', 'libelle complementaire', 'ombrelle'], // nom produit/modèle
 };
+// Détail d'un référentiel de SAISON (implantation) : RC → { regroupement, drop, nom }. Pour la vue par drop.
+function buildSeasonDetail(ds) {
+  if (!ds || !ds.rows || !ds.hdrs) return {};
+  const map = (ds.map && Object.keys(ds.map).length) ? ds.map : autoMap(ds.hdrs, REF_ALIASES);
+  const ri = map.ref_ext, fi = map.regroupement !== undefined ? map.regroupement : map.famille, di = map.drop, ni = map.name;
+  if (ri === undefined) return {};
+  const out = {};
+  ds.rows.forEach(r => { const k = (r[ri] || '').trim(); if (!k || out[k]) return; out[k] = { regroupement: fi !== undefined ? (r[fi] || '').trim() : '', drop: di !== undefined ? (r[di] || '').trim() : '', name: ni !== undefined ? (r[ni] || '').trim() : '' }; });
+  return out;
+}
 // Export de retours wshop (export_retours_client_produit)
 const RET_ALIASES = {
   date: ['date creation', 'date de creation'],
@@ -2345,7 +2357,7 @@ module.exports = {
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
-  buildRefMap, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, gaMetricsByZone, calcZoneCompare, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,
