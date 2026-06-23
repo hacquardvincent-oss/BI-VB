@@ -8,6 +8,44 @@ const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const esc = s => (s || '').toString().replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 let DATA = { todo: [], familles: [] };
+let ALL = null, MODE = 'todo';
+
+// Sauvegarde inline d'une correction (commune aux deux modes).
+async function saveOverride(ref, val, note, tr) {
+  if (!val) { note.textContent = '⚠ vide'; return false; }
+  note.textContent = '⏳';
+  try {
+    const r = await fetch('/api/referentiel/override', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref, regroupement: val }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || 'erreur'); return false; }
+    note.textContent = '✓'; if (tr) { tr.style.transition = 'opacity .4s'; }
+    return true;
+  } catch (e) { note.textContent = '⚠ ' + e.message; return false; }
+}
+
+function renderAll() {
+  const q = (document.getElementById('search').value || '').toLowerCase().trim();
+  const fams = (ALL && ALL.familles) || [];
+  document.getElementById('famList').innerHTML = fams.map(f => `<option value="${esc(f)}">`).join('');
+  document.getElementById('summary').innerHTML = ALL
+    ? `📋 <b>${fInt(ALL.count)} références</b> classées (${fInt(ALL.baseCount)} via fichiers + ${fInt(ALL.ovCount)} corrections). ${fams.length} familles.`
+    : 'Chargement…';
+  const items = (ALL ? ALL.entries : []).filter(e => !q || (e.ref || '').toLowerCase().includes(q) || (e.des || '').toLowerCase().includes(q) || (e.famille || '').toLowerCase().includes(q)).slice(0, 400);
+  if (!items.length) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">${ALL && ALL.count ? 'Aucune réf ne correspond.' : 'Aucun référentiel chargé — importe la bible sur la page 🗄️ Données (source « Référentiel »).'}</div></div>`; return; }
+  const rows = items.map(e => `<tr data-ref="${esc(e.ref)}">
+    <td><code style="font-size:11px">${esc(e.ref)}</code></td>
+    <td title="${esc(e.des)}">${esc((e.des || '').slice(0, 38))}</td>
+    <td><input class="dt famInput" list="famList" value="${esc(e.famille)}" style="width:100%;min-width:150px">${e.ov ? ' <span class="note" style="margin:0;color:var(--a)" title="Correction manuelle">✎</span>' : ''}</td>
+    <td style="white-space:nowrap"><button class="btn primary save">💾</button> <span class="note rowNote" style="margin:0"></span></td>
+  </tr>`).join('');
+  document.getElementById('list').innerHTML = `<div class="card"><div class="note" style="margin-top:0">${items.length} affichées${ALL.count > items.length ? ` (sur ${fInt(ALL.count)} — affine la recherche)` : ''}. ✎ = correction manuelle.</div><div style="overflow-x:auto"><table style="font-size:12px;width:100%">
+    <thead><tr><th>Référence</th><th>Désignation (OMS)</th><th>Famille / regroupement</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  document.querySelectorAll('#list tr[data-ref]').forEach(tr => {
+    const ref = tr.dataset.ref, inp = tr.querySelector('.famInput'), note = tr.querySelector('.rowNote');
+    const save = () => saveOverride(ref, (inp.value || '').trim(), note, tr);
+    tr.querySelector('.save').addEventListener('click', save);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+  });
+}
 
 function render() {
   const q = (document.getElementById('search').value || '').toLowerCase().trim();
@@ -71,6 +109,19 @@ async function load() {
     DATA = await r.json(); render();
   } catch (e) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
+async function loadAll() {
+  document.getElementById('list').innerHTML = '<div class="card"><div class="note">Chargement du référentiel…</div></div>';
+  try { const r = await fetch('/api/referentiel/all'); ALL = await r.json(); renderAll(); }
+  catch (e) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
+}
+function setMode(m) {
+  MODE = m;
+  document.getElementById('modeTodo').classList.toggle('on', m === 'todo');
+  document.getElementById('modeAll').classList.toggle('on', m === 'all');
+  document.getElementById('search').value = '';
+  if (m === 'all') { ALL ? renderAll() : loadAll(); } else { render(); }
+}
+const renderCurrent = () => (MODE === 'all' ? renderAll() : render());
 
 (async () => {
   let u;
@@ -79,7 +130,9 @@ async function load() {
   document.getElementById('who').textContent = u.username;
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
-  document.getElementById('reload').addEventListener('click', load);
-  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('reload').addEventListener('click', () => (MODE === 'all' ? loadAll() : load()));
+  document.getElementById('search').addEventListener('input', renderCurrent);
+  document.getElementById('modeTodo').addEventListener('click', () => setMode('todo'));
+  document.getElementById('modeAll').addEventListener('click', () => setMode('all'));
   await load();
 })();

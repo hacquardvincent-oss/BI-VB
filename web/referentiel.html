@@ -30,12 +30,18 @@
 
 <div class="wrap" style="max-width:1000px;margin:0 auto;padding:18px">
   <div class="card">
-    <h3>📚 Référentiel — références à compléter</h3>
-    <div class="note">Les références <b>vues dans tes ventes (OMS)</b> mais <b>sans famille / regroupement</b> tombent en « (n.c.) » dans le CA par famille. Classe-les ici : ta correction est <b>persistée</b> et appliquée par‑dessus les fichiers importés (priorité), donc un réimport ne l'écrase pas. Triées par <b>CA décroissant</b> — commence par ce qui pèse.</div>
+    <h3>📚 Référentiel produit (familles / regroupements)</h3>
+    <div class="note">La « bible » (Ref. externe → Regroupement) + tes corrections en ligne. <b>Importe</b> un fichier sur la page 🗄️ Données (source « Référentiel »), <b>édite</b> ici, <b>exporte</b> le tout fusionné en CSV. Les corrections sont prioritaires et persistées (un réimport ne les écrase pas).</div>
+    <div class="toolbar" style="margin-top:8px;gap:6px;flex-wrap:wrap">
+      <button class="pb on" id="modeTodo">⚠️ À compléter</button>
+      <button class="pb" id="modeAll">📋 Tout le référentiel</button>
+      <div class="spacer" style="flex:1"></div>
+      <a class="btn" href="/api/referentiel/export" title="Exporter le référentiel fusionné (base + corrections) en CSV">⬇ Exporter (CSV)</a>
+      <button class="btn" id="reload">↻ Rafraîchir</button>
+    </div>
     <div id="summary" class="note" style="margin-top:8px"></div>
     <div class="toolbar" style="margin-top:8px;gap:8px">
-      <input id="search" class="dt" placeholder="🔎 Rechercher une réf ou une désignation" style="flex:1;min-width:180px">
-      <button class="btn" id="reload">↻ Rafraîchir</button>
+      <input id="search" class="dt" placeholder="🔎 Rechercher une réf, une désignation ou une famille" style="flex:1;min-width:180px">
     </div>
   </div>
   <div id="list"><div class="card"><div class="note">Chargement…</div></div></div>

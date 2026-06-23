@@ -94,6 +94,40 @@ router.get('/todo', requireAuth, (req, res) => {
 
 router.get('/overrides', requireAuth, (req, res) => res.json(OV));
 
+// Tout le référentiel effectif (fichiers + corrections) — pour la grille « formulaire » éditable.
+function desByRefFromOms() {
+  const des = {}; const oms = store.getDataset('oms', 'N');
+  if (oms && oms.rows && oms.map) {
+    const map = oms.map; calc.ensureRefExtIdx(oms.hdrs, map);
+    const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt, di = map.des;
+    if (ri !== undefined && di !== undefined) oms.rows.forEach(r => { const k = (r[ri] || '').trim(); if (k && !des[k]) des[k] = (r[di] || '').trim(); });
+  }
+  return des;
+}
+router.get('/all', requireAuth, (req, res) => {
+  const ref = store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N');
+  const base = ref ? calc.buildRefMap(ref) : {};
+  const eff = Object.assign({}, base, effectiveMap());
+  const des = desByRefFromOms();
+  const entries = Object.entries(eff).map(([r, f]) => ({ ref: r, famille: f, des: des[r] || '', ov: !!OV[r] }))
+    .sort((a, b) => a.famille.localeCompare(b.famille, 'fr') || a.ref.localeCompare(b.ref));
+  const familles = [...new Set(Object.values(eff))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'));
+  res.json({ entries, familles, count: entries.length, baseCount: Object.keys(base).length, ovCount: Object.keys(OV).length });
+});
+
+// Export CSV du référentiel fusionné (base fichiers + corrections) → round-trip Excel.
+router.get('/export', requireAuth, (req, res) => {
+  const ref = store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N');
+  const base = ref ? calc.buildRefMap(ref) : {};
+  const eff = Object.assign({}, base, effectiveMap());
+  const esc = s => { s = (s == null ? '' : String(s)); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = ['Ref. Externe;Regroupement;Source'];
+  Object.keys(eff).sort().forEach(r => lines.push(`${esc(r)};${esc(eff[r])};${OV[r] ? 'correction' : 'fichier'}`));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="referentiel_VB.csv"');
+  res.send('﻿' + lines.join('\r\n'));
+});
+
 router.put('/override', requireAuth, requireEdit, (req, res) => {
   const { ref, famille, regroupement, saison } = req.body || {};
   if (!ref || (!famille && !regroupement)) return res.status(400).json({ error: 'ref + famille (ou regroupement) requis' });
