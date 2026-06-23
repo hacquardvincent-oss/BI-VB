@@ -200,15 +200,16 @@ const REF_ALIASES = {
   saison: ['saison', 'season'],
   drop: ['drop'], // mini-collection (P1, P2, S31…) dans l'implantation
   name: ['titre', 'name referentiel', 'libelle complementaire ligne', 'libelle complementaire', 'ombrelle'], // nom produit/modèle
+  cycle: ['cycle de vie', 'permanent/saisonnier', 'permanent / saisonnier', 'perm/saiso', 'cycle', 'permanent', 'saisonnier'], // permanent vs saisonnier (colonne dédiée)
 };
 // Détail d'un référentiel de SAISON (implantation) : RC → { regroupement, drop, nom }. Pour la vue par drop.
 function buildSeasonDetail(ds) {
   if (!ds || !ds.rows || !ds.hdrs) return {};
   const map = (ds.map && Object.keys(ds.map).length) ? ds.map : autoMap(ds.hdrs, REF_ALIASES);
-  const ri = map.ref_ext, fi = map.regroupement !== undefined ? map.regroupement : map.famille, di = map.drop, ni = map.name;
+  const ri = map.ref_ext, fi = map.regroupement !== undefined ? map.regroupement : map.famille, di = map.drop, ni = map.name, ci = map.cycle;
   if (ri === undefined) return {};
   const out = {};
-  ds.rows.forEach(r => { const k = (r[ri] || '').trim(); if (!k || out[k]) return; out[k] = { regroupement: fi !== undefined ? (r[fi] || '').trim() : '', drop: di !== undefined ? (r[di] || '').trim() : '', name: ni !== undefined ? (r[ni] || '').trim() : '' }; });
+  ds.rows.forEach(r => { const k = (r[ri] || '').trim(); if (!k || out[k]) return; out[k] = { regroupement: fi !== undefined ? (r[fi] || '').trim() : '', drop: di !== undefined ? (r[di] || '').trim() : '', name: ni !== undefined ? (r[ni] || '').trim() : '', cycle: ci !== undefined ? (r[ci] || '').trim() : '' }; });
   return out;
 }
 // Export de retours wshop (export_retours_client_produit)

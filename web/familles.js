@@ -85,11 +85,18 @@ function offerSection(b) {
   const t = b.total, pct = (n, d) => d ? Math.round(n / d * 100) : 0;
   const dlt = (n, n1) => { if (!n1) return ''; const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
   const tile = (lbl, val, sub, col) => `<div style="background:var(--s2);border:1px solid var(--br);border-radius:8px;padding:8px 10px"><div style="font-size:11px;color:var(--t3);text-transform:uppercase">${lbl}</div><div style="font-size:20px;font-weight:700${col ? ';color:' + col : ''}">${val}</div><div style="font-size:11px">${sub || ''}</div></div>`;
+  const cyc = b.hasCycle;   // colonne « Cycle » présente → permanents/saisonniers par colonne dédiée
+  const permTile = cyc
+    ? tile('Permanents', t.permCol, pct(t.permCol, t.refsN) + '% de l\'offre')
+    : tile('Permanents', t.perm, pct(t.perm, t.refsN) + '% (∩ collections)');
+  const saisoTile = cyc
+    ? tile('Saisonniers', t.saisoCol, pct(t.saisoCol, t.refsN) + '% de l\'offre', 'var(--a)')
+    : '';
   const rows = b.familles.filter(f => f.refsN || f.refsN1).map(f => `<tr>
     <td><b>${esc(f.famille)}</b></td>
     <td style="text-align:right">${f.refsN}</td><td style="text-align:right">${f.refsN1}</td>
     <td style="text-align:right">${dlt(f.refsN, f.refsN1)}</td>
-    <td style="text-align:right">${f.perm}</td>
+    ${cyc ? `<td style="text-align:right">${f.permCol}</td><td style="text-align:right;color:var(--a)">${f.saisoCol}</td>` : `<td style="text-align:right">${f.perm}</td>`}
     <td style="text-align:right;color:var(--g)">${f.nouv}</td>
     <td style="text-align:right;color:var(--r)">${f.sortie}</td></tr>`).join('');
   return `<div class="card">
@@ -98,13 +105,13 @@ function offerSection(b) {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin:8px 0">
       ${tile('Réfs ' + esc(b.season), t.refsN, dlt(t.refsN, t.refsN1) + ' vs ' + esc(b.prev))}
       ${tile('Réfs ' + esc(b.prev), t.refsN1, 'largeur N-1')}
-      ${tile('Permanents', t.perm, pct(t.perm, t.refsN) + '% de l\'offre')}
-      ${tile('Nouveautés', t.nouv, pct(t.nouv, t.refsN) + '% de l\'offre', 'var(--g)')}
-      ${tile('Sorties (N-1 seul)', t.sortie, 'non reconduits', 'var(--r)')}
+      ${permTile}${saisoTile}
+      ${tile('Nouveautés', t.nouv, pct(t.nouv, t.refsN) + '% (' + esc(b.season) + ' seule)', 'var(--g)')}
+      ${tile('Sorties', t.sortie, 'non reconduits (' + esc(b.prev) + ' seule)', 'var(--r)')}
     </div>
-    <div class="note" style="margin:0 0 6px">Permanent = réf présente dans les 2 implantations (${esc(b.season)} ∩ ${esc(b.prev)}) · Nouveauté = ${esc(b.season)} seule · Sortie = ${esc(b.prev)} seule.</div>
+    <div class="note" style="margin:0 0 6px">${cyc ? `Permanents/Saisonniers = colonne <b>Cycle</b> du référentiel. ` : `Permanent = réf présente dans les 2 implantations (${esc(b.season)} ∩ ${esc(b.prev)}) — <i>ajoute une colonne « Cycle » (Permanent/Saisonnier) pour une vraie distinction</i>. `}Nouveauté = ${esc(b.season)} seule · Sortie = ${esc(b.prev)} seule.</div>
     <div style="overflow-x:auto"><table style="font-size:12px;width:100%">
-      <thead><tr><th>Famille</th><th style="text-align:right">Réfs ${esc(b.season)}</th><th style="text-align:right">Réfs ${esc(b.prev)}</th><th style="text-align:right">Δ largeur</th><th style="text-align:right">Perm.</th><th style="text-align:right">Nouv.</th><th style="text-align:right">Sorties</th></tr></thead>
+      <thead><tr><th>Famille</th><th style="text-align:right">Réfs ${esc(b.season)}</th><th style="text-align:right">Réfs ${esc(b.prev)}</th><th style="text-align:right">Δ largeur</th>${cyc ? '<th style="text-align:right">Perm.</th><th style="text-align:right">Saiso.</th>' : '<th style="text-align:right">Perm.</th>'}<th style="text-align:right">Nouv.</th><th style="text-align:right">Sorties</th></tr></thead>
       <tbody>${rows}</tbody></table></div></div>`;
 }
 // Barre de filtre cascadante Saison → Drop (issus du référentiel/implantation).

@@ -281,9 +281,12 @@ router.get('/offer-breadth', requireAuth, (req, res) => {
   const ov = effectiveMap();
   const famOf = (ref, v) => ov[ref] || (v.regroupement || '').trim() || '(sans regroupement)';
   const inDrop = v => !drop || drop === 'ALL' || ((v.drop || '(sans drop)') === drop);
+  // Colonne « Cycle » (permanent/saisonnier) si présente dans l'implantation N → source de vérité.
+  const hasCycle = !!(dsN && dsN.map && dsN.map.cycle !== undefined);
+  const isPermCol = v => /perman/i.test(v.cycle || '');
   const fam = {};
-  const ensure = f => fam[f] || (fam[f] = { famille: f, refsN: 0, refsN1: 0, perm: 0, nouv: 0, sortie: 0 });
-  for (const [ref, v] of Object.entries(detN)) { if (inDrop(v)) ensure(famOf(ref, v)).refsN++; }
+  const ensure = f => fam[f] || (fam[f] = { famille: f, refsN: 0, refsN1: 0, perm: 0, nouv: 0, sortie: 0, permCol: 0, saisoCol: 0 });
+  for (const [ref, v] of Object.entries(detN)) { if (inDrop(v)) { const e = ensure(famOf(ref, v)); e.refsN++; if (hasCycle) { if (isPermCol(v)) e.permCol++; else e.saisoCol++; } } }
   for (const [ref, v] of Object.entries(detN1)) { if (inDrop(v)) ensure(famOf(ref, v)).refsN1++; }
   for (const ref of new Set([...Object.keys(detN), ...Object.keys(detN1)])) {
     const inN = detN[ref] && inDrop(detN[ref]), inN1 = detN1[ref] && inDrop(detN1[ref]);
@@ -293,7 +296,7 @@ router.get('/offer-breadth', requireAuth, (req, res) => {
   }
   const familles = Object.values(fam).sort((a, b) => b.refsN - a.refsN);
   const sum = k => familles.reduce((s, f) => s + f[k], 0);
-  res.json({ season, prev, prevMissing: !dsN1, familles, total: { refsN: sum('refsN'), refsN1: sum('refsN1'), perm: sum('perm'), nouv: sum('nouv'), sortie: sum('sortie') }, drops: seasonDropsOf(season) });
+  res.json({ season, prev, prevMissing: !dsN1, hasCycle, familles, total: { refsN: sum('refsN'), refsN1: sum('refsN1'), perm: sum('perm'), nouv: sum('nouv'), sortie: sum('sortie'), permCol: sum('permCol'), saisoCol: sum('saisoCol') }, drops: seasonDropsOf(season) });
 });
 
 // Import CSV/Excel-collé : applique en masse des corrections (réf → regroupement). Round-trip de l'export.
