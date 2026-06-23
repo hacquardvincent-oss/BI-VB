@@ -365,12 +365,14 @@ async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) 
 // EN DERNIER (pour conserver dsN.sync), et supprime le slot N1 devenu redondant.
 function consolidateN(src, dsN, dsN1, from, to, cfrom, cto) {
   const legacy = store.getDataset(src, 'N1');
+  const ops = [];
   if (legacy && legacy.rows && legacy.rows.length && legacy.date_min && legacy.date_max)
-    store.mergeDatasetWindow(src, 'N', legacy, legacy.date_min, legacy.date_max);
+    ops.push({ data: legacy, from: legacy.date_min, to: legacy.date_max });
   if (dsN1 && dsN1.rows && dsN1.rows.length && cfrom && cto)
-    store.mergeDatasetWindow(src, 'N', dsN1, cfrom, cto);
-  store.mergeDatasetWindow(src, 'N', dsN, from, to);
-  store.delDataset(src, 'N1');
+    ops.push({ data: dsN1, from: cfrom, to: cto });
+  ops.push({ data: dsN, from, to }); // en dernier → conserve hdrs/map/sync de dsN
+  store.mergeWindows(src, 'N', ops); // 1 seule écriture base au lieu de 3
+  if (legacy) store.delDataset(src, 'N1');
 }
 
 async function refresh(opts = {}, cb = {}) {

@@ -103,4 +103,27 @@ function importAll(obj) {
   return n;
 }
 
-module.exports = { setDataset, mergeDatasetWindow, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };
+// Comme mergeDatasetWindow mais applique PLUSIEURS fenêtres en RAM et n'écrit qu'UNE fois en base
+// → réduit fortement la bande passante sortante vers Neon (consolidation = 1 write au lieu de 3).
+// windows = [{ data, from, to }] appliquées dans l'ordre ; la DERNIÈRE fournit hdrs/map/sync finaux.
+function mergeWindows(source, period, windows) {
+  const calc = require('./calc');
+  const iso = v => { const o = calc.parseFrD(v); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null; };
+  let cur = STORE.get(`${source}-${period}`) || null;
+  for (const w of windows) {
+    if (!w || !w.data) continue;
+    const di = w.data.map ? w.data.map.date : undefined;
+    if (!cur || di === undefined || !w.from || !w.to || !cur.map || cur.map.date === undefined) { cur = w.data; continue; }
+    const cdi = cur.map.date;
+    const kept = (cur.rows || []).filter(r => { const v = iso(r[cdi]); return !v || v < w.from || v > w.to; });
+    cur = Object.assign({}, w.data, { rows: kept.concat(w.data.rows || []) });
+  }
+  if (!cur) return 0;
+  let min = null, max = null; const di = cur.map ? cur.map.date : undefined;
+  if (di !== undefined) for (const r of cur.rows || []) { const v = iso(r[di]); if (!v) continue; if (!min || v < min) min = v; if (!max || v > max) max = v; }
+  cur = Object.assign({}, cur, { row_count: (cur.rows || []).length, date_min: min, date_max: max });
+  setDataset(source, period, cur); // UNE seule écriture
+  return (cur.rows || []).length;
+}
+
+module.exports = { setDataset, mergeDatasetWindow, mergeWindows, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };
