@@ -137,7 +137,7 @@ function parseBuffer(buf, filename, source) {
 const aliasesFor = s => ({ oms: calc.OMS_ALIASES, saisonoms: calc.OMS_ALIASES, y2: calc.Y2_ALIASES, saisony2: calc.Y2_ALIASES, ga: calc.GA_ALIASES, ads: calc.ADS_ALIASES, metaads: calc.ADS_ALIASES, ref: calc.REF_ALIASES, saisonref: calc.REF_ALIASES, ret: calc.RET_ALIASES, saisonret: calc.RET_ALIASES, impl: calc.IMPL_ALIASES, offre: calc.OFFRE_ALIASES, saisonstock: calc.STOCK_ALIASES }[s]);
 
 // Parse + anonymise + mappe + stocke un buffer (réutilisé par la route ET le chargement auto SPECS)
-function ingestBuffer(source, period, buffer, filename, uploadedBy) {
+function ingestBuffer(source, period, buffer, filename, uploadedBy, opts = {}) {
   let { hdrs, rows } = parseBuffer(buffer, filename, source);
   if (!hdrs.length) throw new Error('Fichier vide ou illisible');
   let dropped = [];
@@ -146,13 +146,17 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy) {
   if (OMS_LIKE.has(source)) calc.ensureRefExtIdx(hdrs, map);
   calc.normalizeDateColumn(rows, map.date); // dates US M/J/AAAA (ex. export Y2) → ISO, si clairement US
   let dateMin = null, dateMax = null;
-  if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
-  store.setDataset(source, period, {
+  if (map.date !== undefined) ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
+  const dataset = {
     hdrs, rows, map, filename,
     row_count: rows.length, date_min: dateMin, date_max: dateMax,
     uploaded_by: uploadedBy || 'import', uploaded_at: new Date().toISOString(),
-  });
-  return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
+  };
+  // Mode « ajouter une période » (base continue) : fusionne sur la fenêtre du fichier sans écraser le reste.
+  let merged = null;
+  if (opts.merge && dateMin && dateMax) merged = store.mergeDatasetWindow(source, period, dataset, dateMin, dateMax);
+  else store.setDataset(source, period, dataset);
+  return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped, merged };
 }
 
 // Ingère un tableau DÉJÀ parsé (hdrs + rows de tableaux) — pour les connecteurs base de données
@@ -283,15 +287,33 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
   try {
     // OMS de saison (gros volumes) : import projeté (mémoire réduite, PII écartées).
     // Alertes stock : agrégation par produit + anti-PII (email écarté).
+    const merge = req.query.merge === '1' || req.query.merge === 'true';
     const fn = source === 'saisonoms' ? ingestOmsProjected : source === 'bis' ? ingestBisProjected : ingestBuffer;
-    const r = fn(source, period, req.file.buffer, req.file.originalname, req.session.username);
-    res.json({ source, period, filename: req.file.originalname, ...r });
+    // merge (base continue) supporté par ingestBuffer ; les chemins projetés gardent le remplacement.
+    const r = fn === ingestBuffer
+      ? ingestBuffer(source, period, req.file.buffer, req.file.originalname, req.session.username, { merge })
+      : fn(source, period, req.file.buffer, req.file.originalname, req.session.username);
+    res.json({ source, period, filename: req.file.originalname, merged: merge, ...r });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
+
+// Capacité de la base : taille Postgres actuelle vs limite (env NEON_LIMIT_MB, défaut 512 = Neon free).
+// Sans base (mode mémoire) → hasDb:false (rien n'est persisté). Sert la jauge de la page Données.
+router.get('/dbsize', requireAuth, async (req, res) => {
+  const db = require('./db');
+  if (!db.enabled) return res.json({ hasDb: false });
+  try {
+    const { rows } = await db.query('SELECT pg_database_size(current_database()) AS bytes');
+    const bytes = Number(rows[0].bytes) || 0;
+    const limitMb = Number(process.env.NEON_LIMIT_MB || 512);
+    const limitBytes = limitMb * 1024 * 1024;
+    res.json({ hasDb: true, bytes, limitBytes, limitMb, pct: Math.min(100, Math.round((bytes / limitBytes) * 1000) / 10) });
+  } catch (e) { res.json({ hasDb: true, error: e.message }); }
+});
 
 // Diagnostic d'un jeu : en-têtes + colonnes mappées + aperçu de CHAQUE colonne (valeurs distinctes)
 // + distribution de la colonne Date. Sert à trouver une colonne temporelle exploitable (ex. Y2).

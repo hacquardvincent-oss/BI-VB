@@ -46,6 +46,28 @@ function setDataset(source, period, data) {
     ).catch(e => console.error('[store] persist KO:', e.message));
   }
 }
+
+// Fusion « base continue » : ajoute/met à jour une PLAGE de dates dans un jeu existant sans
+// écraser le reste. On garde les lignes existantes HORS [from,to] et on insère les nouvelles
+// lignes (rechargées) → permet d'étendre la profondeur (ajouter 2025 à 2026) ou de rafraîchir
+// seulement la veille. Sans jeu existant ou sans colonne date → comportement = remplacement.
+function mergeDatasetWindow(source, period, data, from, to) {
+  const cur = STORE.get(`${source}-${period}`);
+  const calc = require('./calc');
+  const di = data && data.map ? data.map.date : undefined;
+  if (!cur || di === undefined || !from || !to || !cur.map || cur.map.date === undefined) {
+    setDataset(source, period, data); return data && data.rows ? data.rows.length : 0;
+  }
+  const iso = v => { const o = calc.parseFrD(v); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null; };
+  const cdi = cur.map.date;
+  const kept = (cur.rows || []).filter(r => { const v = iso(r[cdi]); return !v || v < from || v > to; }); // tout SAUF la fenêtre rechargée
+  const merged = kept.concat(data.rows || []);
+  let min = null, max = null;
+  for (const r of merged) { const v = iso(r[di]); if (!v) continue; if (!min || v < min) min = v; if (!max || v > max) max = v; }
+  const out = Object.assign({}, data, { rows: merged, row_count: merged.length, date_min: min, date_max: max });
+  setDataset(source, period, out);
+  return merged.length;
+}
 function getDataset(source, period) {
   return STORE.get(`${source}-${period}`) || null;
 }
@@ -81,4 +103,4 @@ function importAll(obj) {
   return n;
 }
 
-module.exports = { setDataset, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };
+module.exports = { setDataset, mergeDatasetWindow, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };

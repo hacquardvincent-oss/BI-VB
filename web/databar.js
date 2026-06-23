@@ -43,7 +43,9 @@
         return `<div>✅ <b>${LABEL[s] || s}</b> · ${range} · ${fInt(rows)} l.</div>`;
       }).join('');
       const el = document.getElementById('db_loaded');
-      if (el) el.innerHTML = lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire (partagé entre les briques)</b>${lines}</div>` : '';
+      // Lien vers la page centrale « Données » (sauf si on EST déjà dessus → OPTS.hub).
+      const manage = OPTS.hub ? '' : `<div style="margin-top:6px"><a href="/data.html" style="font-size:11px;color:var(--a);font-weight:600;text-decoration:none">🗄️ Gérer les données (ajouter/mettre à jour une période) →</a></div>`;
+      if (el) el.innerHTML = lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire (partagé entre les briques)</b>${lines}${manage}</div>` : manage;
     } catch (e) { /* ignore */ }
   }
 
@@ -120,7 +122,8 @@
     note(`⏳ Import fichier ${src} ${per}…`);
     try {
       const fd = new FormData(); fd.append('file', f);
-      const r = await fetch(`/api/ingest/${src}/${per}`, { method: 'POST', body: fd });
+      const q = OPTS.merge ? '?merge=1' : ''; // base continue : ajoute la plage du fichier sans écraser le reste
+      const r = await fetch(`/api/ingest/${src}/${per}${q}`, { method: 'POST', body: fd });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { note('⚠ ' + esc(j.error || 'Erreur import')); return; }
       note(`✓ ${src} ${per} : ${fInt(j.rows)} lignes.`); afterLoad();
