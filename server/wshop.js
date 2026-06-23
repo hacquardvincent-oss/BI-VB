@@ -360,6 +360,19 @@ async function collectRange(fromISO, toISO, onCount, extra = {}, guard = false) 
 
 // Importe les commandes WSHOP pour la période demandée (N → oms-N, N-1 → oms-N1).
 // opts : { from, to, cfrom, cto } (ISO YYYY-MM-DD). Sans dates → fenêtre par défaut (WSHOP_MONTHS).
+// Consolide les fenêtres rechargées dans le slot N (base continue). Replie d'abord un éventuel
+// ANCIEN slot N1 dans N (migration sans perte), fusionne le N-1 fraîchement chargé, puis le N
+// EN DERNIER (pour conserver dsN.sync), et supprime le slot N1 devenu redondant.
+function consolidateN(src, dsN, dsN1, from, to, cfrom, cto) {
+  const legacy = store.getDataset(src, 'N1');
+  if (legacy && legacy.rows && legacy.rows.length && legacy.date_min && legacy.date_max)
+    store.mergeDatasetWindow(src, 'N', legacy, legacy.date_min, legacy.date_max);
+  if (dsN1 && dsN1.rows && dsN1.rows.length && cfrom && cto)
+    store.mergeDatasetWindow(src, 'N', dsN1, cfrom, cto);
+  store.mergeDatasetWindow(src, 'N', dsN, from, to);
+  store.delDataset(src, 'N1');
+}
+
 async function refresh(opts = {}, cb = {}) {
   if (!isConfigured()) throw new Error('WSHOP non configuré (WSHOP_INSTANCE / WSHOP_USER / WSHOP_PWD manquants)');
   const c = CFG();
@@ -383,13 +396,23 @@ async function refresh(opts = {}, cb = {}) {
   if (!dsN.rows.length) throw new Error(`WSHOP : aucune commande sur ${from} → ${to} (vérifier période / droits API)`);
   // Point de reprise pour la synchro incrémentale : la fenêtre importée + l'instant de l'import.
   dsN.sync = { from, to, since: nowDT() };
-  store.setDataset(omsSrc, 'N', dsN);
-  store.setDataset(retSrc, 'N', datasetFromRows(RET_HDRS, N.ret, 'ret', from, to));
-  let n1 = null;
+  const retDsN = datasetFromRows(RET_HDRS, N.ret, 'ret', from, to);
+  let n1 = null, dsN1 = null, retDsN1 = null;
   if (N1) {
-    const dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', cfrom, cto);
-    if (dsN1.rows.length) { store.setDataset(omsSrc, 'N1', dsN1); n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max }; }
-    store.setDataset(retSrc, 'N1', datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto));
+    dsN1 = datasetFromRows(OMS_HDRS, N1.oms, 'oms', cfrom, cto);
+    retDsN1 = datasetFromRows(RET_HDRS, N1.ret, 'ret', cfrom, cto);
+    if (dsN1.rows.length) n1 = { rows: dsN1.rows.length, from: dsN1.date_min, to: dsN1.date_max };
+  }
+  if (opts.slot) {
+    // Saison : snapshots dédiés (période longue, page à part) → remplacement, comportement historique.
+    store.setDataset(omsSrc, 'N', dsN); store.setDataset(retSrc, 'N', retDsN);
+    if (dsN1 && dsN1.rows.length) store.setDataset(omsSrc, 'N1', dsN1);
+    if (retDsN1) store.setDataset(retSrc, 'N1', retDsN1);
+  } else {
+    // Base CONTINUE (OMS/Retours, filtrés par date partout) : tout consolidé dans le slot N ;
+    // le N-1 du report se déduit des dates. Migration sans perte (replie l'éventuel ancien slot N1).
+    consolidateN('oms', dsN, dsN1, from, to, cfrom, cto);
+    consolidateN('ret', retDsN, retDsN1, from, to, cfrom, cto);
   }
   // ⚠️ Stock (inventaire) / alertes back-in-stock / retours produit sont DÉCOUPLÉS de l'import OMS
   // (allègement du temps de chargement) → endpoint dédié /stock-alerts (refreshStockAlerts), CTA databar à part.

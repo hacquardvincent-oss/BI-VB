@@ -50,20 +50,20 @@ async function renderState() {
   const el = document.getElementById('stateBody');
   try {
     const list = await (await fetch('/api/ingest/status')).json();
-    const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || {})[d.period] = d; });
-    const cell = d => {
-      if (!d) return '<span class="na">—</span>';
-      const range = (d.date_min && d.date_max) ? `${frd(d.date_min)} → ${frd(d.date_max)}` : 'chargé';
-      return `${range}<br><span class="note" style="font-size:10px">${fInt(d.row_count)} l.</span>`;
-    };
-    const maj = src => { const ds = [byKey[src] && byKey[src].N, byKey[src] && byKey[src].N1].filter(Boolean); const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0]; return t ? new Date(t).toLocaleDateString('fr-FR') : '—'; };
-    const rows = SOURCES.filter(([s]) => byKey[s]).map(([s, lbl]) => `<tr>
-      <td><b>${esc(lbl)}</b></td>
-      <td>${cell(byKey[s].N)}</td>
-      <td>${cell(byKey[s].N1)}</td>
-      <td style="text-align:right">${esc(maj(s))}</td></tr>`).join('');
+    const byKey = {}; list.forEach(d => { (byKey[d.source] = byKey[d.source] || []).push(d); });
+    const rows = SOURCES.filter(([s]) => byKey[s]).map(([s, lbl]) => {
+      const ds = byKey[s];
+      const mins = ds.map(d => d.date_min).filter(Boolean).sort();
+      const maxs = ds.map(d => d.date_max).filter(Boolean).sort();
+      const totRows = ds.reduce((a, d) => a + (d.row_count || 0), 0);
+      const range = (mins[0] && maxs.length) ? `${frd(mins[0])} → ${frd(maxs[maxs.length - 1])}` : 'chargé';
+      const t = ds.map(d => d.uploaded_at).filter(Boolean).sort().slice(-1)[0];
+      const maj = t ? new Date(t).toLocaleDateString('fr-FR') : '—';
+      return `<tr><td><b>${esc(lbl)}</b></td><td>${range}</td><td style="text-align:right">${fInt(totRows)}</td><td style="text-align:right">${esc(maj)}</td></tr>`;
+    }).join('');
     const missing = SOURCES.filter(([s]) => !byKey[s]).map(([, lbl]) => lbl);
-    el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Période N</th><th>Période N-1</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>${missing.length ? `<div class="note" style="margin-top:8px">Non chargé : ${esc(missing.join(', '))}.</div>` : ''}`
+    el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Période en base</th><th style="text-align:right">Lignes</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="note" style="margin-top:8px">La <b>période en base</b> est la couverture totale chargée. Pour OMS / Retours / Y2, le N‑1 d'un report se déduit automatiquement des dates que tu sélectionnes dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
       : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>`;
   } catch (e) { el.innerHTML = `<div class="note">État indisponible.</div>`; }
 }
