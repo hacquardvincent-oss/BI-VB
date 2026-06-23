@@ -1153,4 +1153,39 @@ router.get('/saison', requireAuth, async (req, res) => {
   }
 });
 
+// Analyse des familles (parts de marché) : Global / FR / Inter (+ pays précis), N vs N-1,
+// avec drill-down PRODUITS par famille. Source = base continue oms + référentiel (bible + corrections).
+router.get('/families', requireAuth, (req, res) => {
+  try {
+    const { from, to, cfrom, cto, dim, country, compare } = req.query;
+    const oms = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N');
+    if (!oms || !oms.rows) return res.json({ empty: true, message: 'Aucun OMS chargé (page 🗄️ Données).' });
+    const map = oms.map; calc.ensureRefExtIdx(oms.hdrs, map);
+    const refMap = Object.assign(calc.buildRefMap(store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N') || { rows: [], hdrs: [] }), require('./refoverrides').effectiveMap());
+    const pai = map.pays;
+    const byCountry = rows => { if (!country || pai === undefined) return rows; const c = country.toLowerCase().trim(); return rows.filter(r => (r[pai] || '').toString().trim().toLowerCase() === c); };
+    const prep = (f, t) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return rs; };
+    const useRef = rows => calc.calcFamilleMarket(rows, map, refMap);
+    const noN1 = compare === '0';
+    const mN = useRef(prep(from, to));
+    const mN1b = noN1 ? { fam: {}, total: 0 } : useRef(prep(cfrom, cto));
+    const fams = [...new Set([...Object.keys(mN.fam), ...Object.keys(mN1b.fam)])];
+    const familles = fams.map(f => {
+      const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
+      const names = [...new Set([...Object.keys(a.prods), ...Object.keys(b.prods)])];
+      const products = names.map(n => ({ name: n, ca: Math.round((a.prods[n] || {}).ca || 0), caN1: Math.round((b.prods[n] || {}).ca || 0), qte: (a.prods[n] || {}).qte || 0 }))
+        .sort((x, y) => y.ca - x.ca).slice(0, 50);
+      return { famille: f, ca: Math.round(a.ca), caN1: Math.round(b.ca), qte: a.qte, share: mN.total ? a.ca / mN.total : 0, shareN1: mN1b.total ? b.ca / mN1b.total : 0, products };
+    }).sort((x, y) => y.ca - x.ca);
+    // Pays disponibles (hors mkt, hors France) pour le sélecteur International.
+    const countries = [];
+    if (pai !== undefined) {
+      const seen = new Set();
+      calc.filterOutstore(calc.filterRows(oms.rows, map, from, to, false), map).forEach(r => { if (calc.isMkt((r[map.type] || '').trim())) return; const c = (r[pai] || '').toString().trim(); const cl = c.toLowerCase(); if (c && cl !== 'france' && !seen.has(cl)) { seen.add(cl); countries.push(c); } });
+      countries.sort((a, b) => a.localeCompare(b, 'fr'));
+    }
+    res.json({ familles, total: Math.round(mN.total), totalN1: Math.round(mN1b.total), countries, hasN1: !noN1, dim: dim || 'global', country: country || '' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = { router, buildReport, buildSaison };

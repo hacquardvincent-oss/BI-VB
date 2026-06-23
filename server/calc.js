@@ -1321,6 +1321,24 @@ function calcCAFamille(rows, omsMap, refMap) {
   });
   return byFam;
 }
+// Parts de marché par FAMILLE (regroupement) + détail PRODUITS par famille (drill-down).
+// EShop hors marketplace. Cabas/Sacs distincts car le refMap porte la taxonomie fine du client.
+function calcFamilleMarket(rows, map, refMap) {
+  const pi = map.prix, di = map.des, qi = map.qte, ti = map.type;
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  const fam = {}; let total = 0;
+  (rows || []).forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const ca = fN(r[pi]); const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const f = (ri !== undefined && refMap[(r[ri] || '').trim()]) || '(n.c.)';
+    const e = fam[f] || (fam[f] = { famille: f, ca: 0, qte: 0, prods: {} });
+    e.ca += ca; e.qte += q; total += ca;
+    const name = (di !== undefined ? (r[di] || '').trim() : '') || '(?)';
+    const p = e.prods[name] || (e.prods[name] = { name, ca: 0, qte: 0 });
+    p.ca += ca; p.qte += q;
+  });
+  return { fam, total };
+}
 // Produits NON RÉFÉRENCÉS : références EShop (hors mkt) absentes du référentiel produit → à ajouter
 // au référentiel. Renvoie la liste agrégée { ref, des, ca, qte } triée par CA + le total.
 function calcUnreferencedProducts(rows, omsMap, refMap) {
@@ -2327,7 +2345,7 @@ module.exports = {
   getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
-  buildRefMap, calcCAFamille, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, gaMetricsByZone, calcZoneCompare, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,
