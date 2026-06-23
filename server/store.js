@@ -27,13 +27,20 @@ function unpackFromDb(raw) {
   return raw;
 }
 
-// Hydratation au démarrage (no-op sans base)
+// Hydratation au démarrage (no-op sans base). Charge les jeux UN PAR UN (et non tout le résultat
+// compressé d'un coup) → pic mémoire réduit au boot (instance contrainte ~512 Mo).
 async function hydrate() {
   if (!db.enabled) return 0;
-  const { rows } = await db.query('SELECT source, period, data FROM datasets');
-  rows.forEach(r => STORE.set(`${r.source}-${r.period}`, unpackFromDb(r.data)));
-  if (rows.length) console.log(`[store] ${rows.length} jeu(x) de données restauré(s) depuis la base.`);
-  return rows.length;
+  const { rows: keys } = await db.query('SELECT source, period FROM datasets');
+  let n = 0;
+  for (const k of keys) {
+    try {
+      const { rows } = await db.query('SELECT data FROM datasets WHERE source = $1 AND period = $2', [k.source, k.period]);
+      if (rows.length) { STORE.set(`${k.source}-${k.period}`, unpackFromDb(rows[0].data)); n++; }
+    } catch (e) { console.error(`[store] hydrate ${k.source}-${k.period} KO:`, e.message); }
+  }
+  if (n) console.log(`[store] ${n} jeu(x) de données restauré(s) depuis la base.`);
+  return n;
 }
 
 function setDataset(source, period, data) {
