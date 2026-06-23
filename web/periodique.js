@@ -44,49 +44,37 @@ function blockCard(title, b, emphasize) {
 
 function render(d) {
   const body = document.getElementById('body');
-  if (!d.blocks || !d.has.oms) { body.innerHTML = '<div class="card"><div class="note">Aucune donnée OMS chargée. Charge l\'OMS (et GA4 pour les sessions/TT) via le panneau à gauche, puis « Générer ».</div></div>'; return; }
-  const emph = (document.getElementById('presetWeekly').classList.contains('on')) ? { semaine: 1, mois: 1, saison: 1 } : { jour: 1, mois: 1 };
-  const order = [['jour', '🗓️ Jour'], ['semaine', '📅 Semaine (cumul)'], ['mois', '📆 Mois (cumul)'], ['saison', `🏷️ Saison ${esc(d.season || '')} (cumul)`]];
-  body.innerHTML = `<div class="card"><div class="note">Arrêté au <b>${frd(d.asof)}</b> · saison <b>${esc(d.season)}</b> · CA EShop hors marketplace, N vs N-1 (−364 j). Sessions/TT au niveau Global (splits FR/Inter à venir).</div></div>`
-    + order.map(([k, t]) => blockCard(t, d.blocks[k], emph[k])).join('');
+  if (!d.blocks || !d.has.oms) { body.innerHTML = '<div class="card"><div class="note">Aucune donnée OMS chargée. Charge l\'OMS via la page 🗄️ Données, puis « Appliquer ».</div></div>'; return; }
+  const order = [['jour', '🗓️ Jour'], ['semaine', '📅 Semaine (cumul WTD)'], ['mois', '📆 Mois (cumul MTD)'], ['periode', '🔭 Période sélectionnée (dézoom)'], ['saison', `🏷️ Saison ${esc(d.season || '')}`]];
+  body.innerHTML = `<div class="card"><div class="note">Fin de période (arrêté) <b>${frd(d.asof)}</b> · CA EShop hors marketplace, N vs N-1. Tableaux <b>courts</b> (jour/semaine/mois) dérivés de la fin de période <b>+ dézoom</b> sur toute la période choisie.</div></div>`
+    + order.filter(([k]) => d.blocks[k]).map(([k, t]) => blockCard(t, d.blocks[k], k === 'periode')).join('');
 }
 
-const BLOCKS = [['jour', '🗓️ Jour'], ['semaine', '📅 Semaine'], ['mois', '📆 Mois'], ['saison', '🏷️ Saison']];
-function buildAdv() {
-  document.getElementById('advGrid').innerHTML = BLOCKS.map(([k, lbl]) => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px">
-    <b style="width:80px">${lbl}</b>
-    N <input id="${k}From" type="date" class="dt" style="padding:3px 5px"> → <input id="${k}To" type="date" class="dt" style="padding:3px 5px">
-    <span style="color:var(--t3)">·</span> N-1 <input id="${k}N1From" type="date" class="dt" style="padding:3px 5px"> → <input id="${k}N1To" type="date" class="dt" style="padding:3px 5px"></div>`).join('');
-}
-function fillWindows(d) {
-  BLOCKS.forEach(([k]) => {
-    const b = d.blocks && d.blocks[k]; if (!b) return;
-    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-    set(k + 'From', b.window.from); set(k + 'To', b.window.to); set(k + 'N1From', b.n1window.from); set(k + 'N1To', b.n1window.to);
-  });
+const ISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const minus1y = iso => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() - 1); return d.toISOString().slice(0, 10); };
+function setPreset(kind) {
+  const now = new Date(); const to = new Date(now); let from = new Date(now);
+  if (kind === 'yesterday') { from.setDate(from.getDate() - 1); to.setDate(to.getDate() - 1); }
+  else if (kind === 'week') { from.setDate(from.getDate() - 6); }
+  else if (kind === 'mtd') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+  else if (kind === 'season') { const m = now.getMonth() + 1; const e = (m >= 2 && m <= 7); from = e ? new Date(now.getFullYear(), 1, 1) : new Date(m === 1 ? now.getFullYear() - 1 : now.getFullYear(), 7, 1); }
+  document.getElementById('nFrom').value = ISO(from); document.getElementById('nTo').value = ISO(to);
+  document.getElementById('cFrom').value = minus1y(ISO(from)); document.getElementById('cTo').value = minus1y(ISO(to));
+  document.querySelectorAll('[data-preset]').forEach(b => b.classList.toggle('on', b.dataset.preset === kind));
 }
 async function run() {
-  const asof = document.getElementById('asof').value;
-  if (!asof) { document.getElementById('pnote').textContent = '⚠ Choisis une date.'; return; }
+  const from = document.getElementById('nFrom').value, to = document.getElementById('nTo').value;
+  if (!from || !to) { document.getElementById('pnote').textContent = '⚠ Choisis la période N.'; return; }
   document.getElementById('pnote').textContent = 'Calcul…';
-  const params = new URLSearchParams({ asof });
-  if (document.getElementById('advWindows').open) {
-    BLOCKS.forEach(([k]) => ['From', 'To', 'N1From', 'N1To'].forEach(suf => { const v = document.getElementById(k + suf).value; if (v) params.set(k + suf, v); }));
-  }
+  const p = new URLSearchParams({ from, to });
+  const cf = document.getElementById('cFrom').value, ct = document.getElementById('cTo').value;
+  if (cf && ct) { p.set('cfrom', cf); p.set('cto', ct); }
   try {
-    const r = await fetch('/api/periodic?' + params.toString());
+    const r = await fetch('/api/periodic?' + p.toString());
     const d = await r.json();
     if (!r.ok) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(d.error || 'Erreur')}</div></div>`; return; }
-    document.getElementById('pnote').textContent = '';
-    render(d); fillWindows(d);
+    document.getElementById('pnote').textContent = ''; render(d);
   } catch (e) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
-}
-
-function setPreset(weekly) {
-  document.getElementById('presetDaily').classList.toggle('on', !weekly);
-  document.getElementById('presetWeekly').classList.toggle('on', weekly);
-  const d = new Date(); if (!weekly) d.setDate(d.getDate() - 1); // quotidien = hier
-  document.getElementById('asof').value = ymd(d);
 }
 
 (async () => {
@@ -96,15 +84,9 @@ function setPreset(weekly) {
   document.getElementById('who').textContent = u.username;
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
-  document.getElementById('presetDaily').addEventListener('click', () => { setPreset(false); run(); });
-  document.getElementById('presetWeekly').addEventListener('click', () => { setPreset(true); run(); });
+  document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => { setPreset(b.dataset.preset); run(); }));
   document.getElementById('run').addEventListener('click', run);
-  buildAdv();
-  setPreset(false);
-  if (window.initDataBar) initDataBar({ readonly: true,
-    title: '2 · Chargement des données',
-    getPeriods: () => { const a = document.getElementById('asof').value; if (!a) return {}; return { n: { from: `${+a.slice(0, 4) - 1}-01-01`, to: a } }; },
-    onLoaded: run,
-  });
+  setPreset('season');
+  if (window.initDataBar) initDataBar({ readonly: true });
   run();
 })();

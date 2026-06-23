@@ -45,23 +45,20 @@ const okDate = s => /^\d{4}-\d{2}-\d{2}$/.test((s || '').slice(0, 10)) ? s.slice
 
 router.get('/', requireAuth, (req, res) => {
   try {
-    const dw = calc.deriveWindows(req.query.asof);
     const q = req.query;
-    // Override manuel par bloc : {key}From/{key}To (période N) et {key}N1From/{key}N1To (N-1, sinon −364 j).
-    const winOf = key => {
-      const f = okDate(q[key + 'From']), t = okDate(q[key + 'To']);
-      const win = (f && t) ? { from: f, to: t } : dw.windows[key];
-      const cf = okDate(q[key + 'N1From']), ct = okDate(q[key + 'N1To']);
-      let n1win;
-      if (cf && ct) n1win = { from: cf, to: ct };
-      else if (f && t) n1win = { from: shiftISO(f, -364), to: shiftISO(t, -364) };
-      else n1win = dw.n1[key];
-      return { window: win, n1window: n1win };
-    };
-    const block = key => { const w = winOf(key); return { window: w.window, n1window: w.n1window, n: bundleFor(w.window), n1: bundleFor(w.n1window) }; };
-    const blocks = { jour: block('jour'), semaine: block('semaine'), mois: block('mois'), saison: block('saison') };
+    const pFrom = okDate(q.from), pTo = okDate(q.to);
+    const asof = pTo || q.asof;                 // l'arrêté = FIN de la période sélectionnée
+    const dw = calc.deriveWindows(asof);
+    const cFrom = okDate(q.cfrom), cTo = okDate(q.cto);
+    // N-1 de la période large : explicite (2e calendrier) sinon −364 j.
+    const perN1 = (cFrom && cTo) ? { from: cFrom, to: cTo } : (pFrom && pTo ? { from: shiftISO(pFrom, -364), to: shiftISO(pTo, -364) } : null);
+    const block = key => { const win = dw.windows[key], n1win = dw.n1[key]; return { window: win, n1window: n1win, n: bundleFor(win), n1: bundleFor(n1win) }; };
+    // Tableaux COURTS dérivés de l'arrêté (Jour / Semaine WTD / Mois MTD) + DÉZOOM sur la période choisie.
+    const blocks = { jour: block('jour'), semaine: block('semaine'), mois: block('mois') };
+    if (pFrom && pTo) blocks.periode = { window: { from: pFrom, to: pTo }, n1window: perN1, n: bundleFor({ from: pFrom, to: pTo }), n1: perN1 ? bundleFor(perN1) : null };
+    else blocks.saison = block('saison');
     res.json({
-      asof: dw.asof, season: dw.season, blocks,
+      asof: dw.asof, season: dw.season, blocks, hasPeriode: !!(pFrom && pTo),
       has: { oms: !!(store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N') || store.getDataset('oms', 'N1') || store.getDataset('saisonoms', 'N1')), ga: !!(store.getDataset('gatot', 'N') || store.getDataset('gasess', 'N')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

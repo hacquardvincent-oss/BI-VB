@@ -32,21 +32,21 @@
 <div class="wrap layout-side no-rightnav">
   <aside id="setupCol">
     <div class="card setup-card">
-      <h3>1 · Arrêté</h3>
-      <div class="note">Le reporting se calcule à partir d'<b>une date d'arrêté</b> : il empile le <b>Jour</b>, le cumul <b>Semaine</b>, le cumul <b>Mois</b> et le cumul <b>Saison</b> — chacun vs N-1.</div>
-      <div class="toolbar" style="gap:6px;margin-top:8px">
-        <button class="pb on" id="presetDaily" title="Arrêté = hier">🌅 Quotidien</button>
-        <button class="pb" id="presetWeekly" title="Arrêté = aujourd'hui (focus semaine/mois/saison)">📅 Hebdo</button>
+      <h3>1 · Période d'analyse</h3>
+      <div class="note">Choisis une <b>période large</b> (N) et son <b>N‑1</b> : la brique empile des tableaux <b>courts</b> dérivés de la fin de période (<b>Jour</b>, cumul <b>Semaine</b>, cumul <b>Mois</b>) <b>+ un dézoom</b> sur toute la période sélectionnée — chacun vs N‑1.</div>
+      <div class="toolbar" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pb" data-preset="yesterday" title="Hier">🌅 Hier</button>
+        <button class="pb" data-preset="week" title="7 derniers jours">7 j</button>
+        <button class="pb" data-preset="mtd" title="Mois en cours">Mois</button>
+        <button class="pb on" data-preset="season" title="Saison à date">Saison</button>
       </div>
-      <label class="setlabel">Date d'arrêté</label>
-      <input id="asof" type="date" class="dt" style="width:100%">
-      <button class="btn blue" id="run" style="margin-top:10px;width:100%">📅 Générer le reporting</button>
+      <label class="setlabel">Période N — début → fin</label>
+      <div class="toolbar" style="gap:5px"><input id="nFrom" type="date" class="dt" style="flex:1"><input id="nTo" type="date" class="dt" style="flex:1"></div>
+      <label class="setlabel">Période N‑1 — début → fin (auto −1 an)</label>
+      <div class="toolbar" style="gap:5px"><input id="cFrom" type="date" class="dt" style="flex:1"><input id="cTo" type="date" class="dt" style="flex:1"></div>
+      <input id="asof" type="hidden">
+      <button class="btn blue" id="run" style="margin-top:10px;width:100%">✓ Appliquer &amp; générer</button>
       <div class="note" id="pnote" style="margin-top:6px"></div>
-      <details class="fold" id="advWindows" style="margin-top:10px">
-        <summary>⚙️ Ajuster les périodes manuellement</summary>
-        <div class="note" style="margin:6px 0">Pré-rempli automatiquement ; modifie un bloc puis « Générer » (replié = automatique depuis l'arrêté).</div>
-        <div id="advGrid" style="display:flex;flex-direction:column;gap:8px;font-size:11px"></div>
-      </details>
     </div>
     <div id="dataBar"></div>
   </aside>
