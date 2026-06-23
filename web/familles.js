@@ -78,6 +78,35 @@ async function fetchDim(dim, country, o) {
   const r = await fetch('/api/report/families?' + q.toString());
   return r.json();
 }
+// Analyse de l'OFFRE (largeur en références/SKU) — visible quand une saison est filtrée.
+async function fetchBreadth(o) { const q = new URLSearchParams({ season: o.saison }); if (o.drop) q.set('drop', o.drop); const r = await fetch('/api/referentiel/offer-breadth?' + q.toString()); return r.json(); }
+function offerSection(b) {
+  if (!b || b.empty || !b.familles) return '';
+  const t = b.total, pct = (n, d) => d ? Math.round(n / d * 100) : 0;
+  const dlt = (n, n1) => { if (!n1) return ''; const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
+  const tile = (lbl, val, sub, col) => `<div style="background:var(--s2);border:1px solid var(--br);border-radius:8px;padding:8px 10px"><div style="font-size:11px;color:var(--t3);text-transform:uppercase">${lbl}</div><div style="font-size:20px;font-weight:700${col ? ';color:' + col : ''}">${val}</div><div style="font-size:11px">${sub || ''}</div></div>`;
+  const rows = b.familles.filter(f => f.refsN || f.refsN1).map(f => `<tr>
+    <td><b>${esc(f.famille)}</b></td>
+    <td style="text-align:right">${f.refsN}</td><td style="text-align:right">${f.refsN1}</td>
+    <td style="text-align:right">${dlt(f.refsN, f.refsN1)}</td>
+    <td style="text-align:right">${f.perm}</td>
+    <td style="text-align:right;color:var(--g)">${f.nouv}</td>
+    <td style="text-align:right;color:var(--r)">${f.sortie}</td></tr>`).join('');
+  return `<div class="card">
+    <h3>📐 Analyse de l'offre — largeur en références (SKU) · ${esc(b.season)} vs ${esc(b.prev || 'N-1')}</h3>
+    ${b.prevMissing ? `<div class="note" style="color:var(--r)">⚠ Référentiel <b>${esc(b.prev)}</b> non chargé → comparatif d'offre indisponible.</div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;margin:8px 0">
+      ${tile('Réfs ' + esc(b.season), t.refsN, dlt(t.refsN, t.refsN1) + ' vs ' + esc(b.prev))}
+      ${tile('Réfs ' + esc(b.prev), t.refsN1, 'largeur N-1')}
+      ${tile('Permanents', t.perm, pct(t.perm, t.refsN) + '% de l\'offre')}
+      ${tile('Nouveautés', t.nouv, pct(t.nouv, t.refsN) + '% de l\'offre', 'var(--g)')}
+      ${tile('Sorties (N-1 seul)', t.sortie, 'non reconduits', 'var(--r)')}
+    </div>
+    <div class="note" style="margin:0 0 6px">Permanent = réf présente dans les 2 implantations (${esc(b.season)} ∩ ${esc(b.prev)}) · Nouveauté = ${esc(b.season)} seule · Sortie = ${esc(b.prev)} seule.</div>
+    <div style="overflow-x:auto"><table style="font-size:12px;width:100%">
+      <thead><tr><th>Famille</th><th style="text-align:right">Réfs ${esc(b.season)}</th><th style="text-align:right">Réfs ${esc(b.prev)}</th><th style="text-align:right">Δ largeur</th><th style="text-align:right">Perm.</th><th style="text-align:right">Nouv.</th><th style="text-align:right">Sorties</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
 // Barre de filtre cascadante Saison → Drop (issus du référentiel/implantation).
 function filterBar(d, o) {
   const sais = d.saisons || [];
@@ -109,8 +138,8 @@ function bindCty(root, o) {
 async function renderInto(root, o, country) {
   root.innerHTML = '<div class="card"><div class="note">Calcul des parts de marché…</div></div>';
   try {
-    const [g, fr, it] = await Promise.all([fetchDim('global', null, o), fetchDim('fr', null, o), fetchDim('inter', country || '', o)]);
-    root.innerHTML = filterBar(g, o) + block('g', '🌍 Global', g, false) + block('fr', '🇫🇷 France', fr, false) + block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
+    const [g, fr, it, breadth] = await Promise.all([fetchDim('global', null, o), fetchDim('fr', null, o), fetchDim('inter', country || '', o), o.saison ? fetchBreadth(o) : Promise.resolve(null)]);
+    root.innerHTML = filterBar(g, o) + (breadth ? offerSection(breadth) : '') + block('g', '🌍 Global', g, false) + block('fr', '🇫🇷 France', fr, false) + block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
     [['g', g], ['fr', fr], ['it', it]].forEach(([id, d]) => { drawPie(id, d); wireDrill(id, d); });
     bindCty(root, o); wireFilter(root, o, country);
     return { g, fr, it };

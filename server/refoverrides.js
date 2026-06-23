@@ -267,6 +267,35 @@ router.get('/season-drops', requireAuth, (req, res) => {
   res.json({ saisons, drops: code && code !== 'ALL' ? seasonDropsOf(code) : [] });
 });
 
+// ANALYSE DE L'OFFRE : largeur (en RÉFÉRENCES/SKU) d'une collection vs la précédente (E26 vs E25),
+// par famille, avec permanents (réfs présentes dans les 2 implantations) / nouveautés (collection N
+// seule) / sorties (N-1 seule). Filtrable par drop. ⚠️ Permanent = intersection des 2 implantations
+// (pas de colonne dédiée dans les fichiers actuels).
+router.get('/offer-breadth', requireAuth, (req, res) => {
+  const season = (req.query.season || '').toUpperCase();
+  if (!season) return res.json({ empty: true, message: 'Choisis une saison.' });
+  const prev = prevSeasonCode(season);
+  const dsN = store.getDataset('ref', season), dsN1 = store.getDataset('ref', prev);
+  const detN = dsN ? calc.buildSeasonDetail(dsN) : {}, detN1 = dsN1 ? calc.buildSeasonDetail(dsN1) : {};
+  const drop = (req.query.drop || '').trim();
+  const ov = effectiveMap();
+  const famOf = (ref, v) => ov[ref] || (v.regroupement || '').trim() || '(sans regroupement)';
+  const inDrop = v => !drop || drop === 'ALL' || ((v.drop || '(sans drop)') === drop);
+  const fam = {};
+  const ensure = f => fam[f] || (fam[f] = { famille: f, refsN: 0, refsN1: 0, perm: 0, nouv: 0, sortie: 0 });
+  for (const [ref, v] of Object.entries(detN)) { if (inDrop(v)) ensure(famOf(ref, v)).refsN++; }
+  for (const [ref, v] of Object.entries(detN1)) { if (inDrop(v)) ensure(famOf(ref, v)).refsN1++; }
+  for (const ref of new Set([...Object.keys(detN), ...Object.keys(detN1)])) {
+    const inN = detN[ref] && inDrop(detN[ref]), inN1 = detN1[ref] && inDrop(detN1[ref]);
+    if (!inN && !inN1) continue;
+    const e = ensure(famOf(ref, detN[ref] || detN1[ref]));
+    if (inN && inN1) e.perm++; else if (inN) e.nouv++; else e.sortie++;
+  }
+  const familles = Object.values(fam).sort((a, b) => b.refsN - a.refsN);
+  const sum = k => familles.reduce((s, f) => s + f[k], 0);
+  res.json({ season, prev, prevMissing: !dsN1, familles, total: { refsN: sum('refsN'), refsN1: sum('refsN1'), perm: sum('perm'), nouv: sum('nouv'), sortie: sum('sortie') }, drops: seasonDropsOf(season) });
+});
+
 // Import CSV/Excel-collé : applique en masse des corrections (réf → regroupement). Round-trip de l'export.
 // Body : { csv } (texte ; séparateur ; ou , ou tab ; 1re ligne = en-têtes « Ref… ; Regroupement »).
 router.post('/import', requireAuth, requireEdit, (req, res) => {
