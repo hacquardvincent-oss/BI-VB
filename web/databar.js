@@ -51,25 +51,67 @@
 
   // WSHOP : import complet (job + poll) / delta (économe). L'import complet charge AUSSI
   // les retours (ret/retprod) + les alertes back-in-stock (bis) → analysables dans toutes les briques.
+  // ⚠️ Le refresh écrit À LA FIN (tout ou rien) → sur une grande période (plan gratuit), il peut ne pas
+  // aboutir et ne RIEN sauvegarder. On découpe donc en BLOCS MENSUELS : chaque bloc se termine et se
+  // FUSIONNE dans la base continue (rien n'est écrasé) → import robuste, reprise possible.
+  function monthChunks(from, to) {
+    const out = []; let s = from;
+    while (s <= to) {
+      const d = new Date(s + 'T00:00:00Z');
+      const eom = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+      out.push({ from: s, to: eom > to ? to : eom });
+      s = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+    }
+    return out;
+  }
+  function waitJob(onTick) {
+    const start = Date.now();
+    return new Promise(resolve => {
+      const tick = async () => {
+        try {
+          const j = await (await fetch('/api/wshop/job')).json();
+          if (j.error) { note('⚠ ' + esc(j.error)); return resolve(false); }
+          if (j.done) return resolve(true);
+          if (onTick) onTick(j, Math.floor((Date.now() - start) / 60000));
+          if (Date.now() - start > 10 * 60000) { note('⏳ Bloc encore en cours côté serveur — il continue. Reviens dans un moment et relance (les blocs déjà finis sont sauvegardés).'); return resolve(false); }
+        } catch (e) { /* transitoire */ }
+        setTimeout(tick, 1500);
+      };
+      tick();
+    });
+  }
+  async function loadWshopRange(from, to) {
+    const chunks = monthChunks(from, to);
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i];
+      const lbl = `${frd(c.from)} → ${frd(c.to)}`;
+      note(`⏳ Import OMS — bloc ${i + 1}/${chunks.length} (${lbl})…`);
+      let r;
+      try { r = await fetch(`/api/wshop/refresh?from=${c.from}&to=${c.to}` + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''), { method: 'POST' }); }
+      catch (e) { note('⚠ ' + esc(e.message)); return false; }
+      if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note(`⚠ ${esc(j.error || 'Erreur WSHOP')} (bloc ${lbl})`); return false; }
+      const ok = await waitJob((j, mins) => note(`⏳ Bloc ${i + 1}/${chunks.length} (${lbl})${j.ordersN ? ' — ' + fInt(j.ordersN) + ' cmd' : ''}${mins ? ' (' + mins + ' min)' : ''}`));
+      if (!ok) return false;
+      afterLoad(); // sauvegarde + récap après CHAQUE bloc (reprise possible)
+    }
+    return true;
+  }
   async function importWshop(delta) {
     const p = periods(), n = p.n, n1 = p.n1;
-    // Skip/delta si l'OMS couvre déjà la période (oms OU saisonoms) → évite un long réimport inutile.
-    if (!delta && n) {
-      const covN = covers('oms', n.from, n.to) || covers('saisonoms', n.from, n.to);
-      const covN1 = !n1 || covers('oms', n1.from, n1.to) || covers('saisonoms', n1.from, n1.to);
-      if (covN && covN1) {
-        const ch = confirm('L\'OMS couvre déjà cette période en mémoire.\n\nOK = synchroniser seulement les nouveautés (delta, rapide).\nAnnuler = tout réimporter (long).');
-        if (ch) delta = true;
-      }
+    if (delta) {
+      note('⏳ Synchronisation delta WSHOP (nouveautés seulement)…');
+      try {
+        const r = await fetch('/api/wshop/sync', { method: 'POST' });
+        if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
+        await pollJob(j => `✓ Delta synchronisé (${fInt(j.ordersN || 0)} cmd).`);
+      } catch (e) { note('⚠ ' + esc(e.message)); }
+      return;
     }
-    let url;
-    if (!delta) { const q = periodQuery(); if (!q) return; note('⏳ Import OMS complet (peut être long sur une grande période)…'); url = '/api/wshop/refresh?' + q + (OPTS.slot ? '&slot=' + encodeURIComponent(OPTS.slot) : ''); }
-    else { note('⏳ Synchronisation delta WSHOP (nouveautés seulement)…'); url = '/api/wshop/sync'; }
-    try {
-      const r = await fetch(url, { method: 'POST' });
-      if (!r.ok && r.status !== 202) { const j = await r.json().catch(() => ({})); note('⚠ ' + (j.error || 'Erreur WSHOP')); return; }
-      await pollJob(j => `✓ OMS importé (N : ${fInt(j.ordersN)} cmd${j.ordersN1 ? ', N-1 : ' + fInt(j.ordersN1) : ''}) — retours & alertes inclus.`);
-    } catch (e) { note('⚠ ' + esc(e.message)); }
+    if (!n || !n.from || !n.to) { note('⚠ Renseigne la période d\'analyse.'); return; }
+    // Charge la période N (et N-1 si demandée) par blocs mensuels → fusion dans la base continue.
+    const ranges = [n]; if (n1 && n1.from && n1.to) ranges.push(n1);
+    for (const rg of ranges) { const ok = await loadWshopRange(rg.from, rg.to); if (!ok) return; }
+    note(`✓ OMS chargé par blocs mensuels (fusionnés dans la base continue, retours & alertes inclus).`); afterLoad();
   }
   // Stock (inventaire) + alertes back-in-stock + retours produit dans les slots STANDARDS → utilisables
   // partout. Endpoint DÉDIÉ (découplé de l'import OMS pour ne pas l'alourdir).
