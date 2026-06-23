@@ -48,6 +48,19 @@ function render(d) {
   const order = [['jour', '🗓️ Jour'], ['semaine', '📅 Semaine (cumul WTD)'], ['mois', '📆 Mois (cumul MTD)'], ['periode', '🔭 Période sélectionnée (dézoom)'], ['saison', `🏷️ Saison ${esc(d.season || '')}`]];
   body.innerHTML = `<div class="card"><div class="note">Fin de période (arrêté) <b>${frd(d.asof)}</b> · CA EShop hors marketplace, N vs N-1. Tableaux <b>courts</b> (jour/semaine/mois) dérivés de la fin de période <b>+ dézoom</b> sur toute la période choisie.</div></div>`
     + order.filter(([k]) => d.blocks[k]).map(([k, t]) => blockCard(t, d.blocks[k], k === 'periode')).join('');
+  renderFamMarketBlock();
+}
+// Bloc dédié « Parts de marché par famille » (Saison → Drop), piloté par la période sélectionnée.
+function renderFamMarketBlock() {
+  if (!window.famMarketRenderInto) return;
+  const body = document.getElementById('body'); if (!body) return;
+  const from = document.getElementById('nFrom').value, to = document.getElementById('nTo').value;
+  const cf = document.getElementById('cFrom').value, ct = document.getElementById('cTo').value;
+  if (!from || !to) return;
+  const sec = document.createElement('div');
+  sec.innerHTML = '<div class="card" style="background:transparent;border:none;padding:0;margin-top:6px"><h3 style="border-left:3px solid var(--a);padding-left:8px">📦 Parts de marché par famille — Saison → Drop</h3></div><div id="famMarketBody"></div>';
+  body.appendChild(sec);
+  window.famMarketRenderInto(document.getElementById('famMarketBody'), { from, to, cmp: !!(cf && ct), cfrom: cf, cto: ct });
 }
 
 const ISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

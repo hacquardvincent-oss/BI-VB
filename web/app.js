@@ -912,6 +912,18 @@ function wireSnapshots() {
   const fb = document.getElementById('freezeBtn'); if (fb && !fb._wired) { fb._wired = true; fb.addEventListener('click', freezeReport); }
   const hb = document.getElementById('histBtn'); if (hb && !hb._wired) { hb._wired = true; hb.addEventListener('click', () => { const p = document.getElementById('snapPanel'); if (p && !p.classList.contains('hidden')) { p.classList.add('hidden'); } else { loadSnapshots(); } }); }
 }
+// Bloc dédié « Parts de marché par famille » (Saison → Drop + drill-down), réutilise le composant
+// partagé famMarketRenderInto (familles.js), piloté par la période du rapport.
+function renderFamMarketBlock(rep) {
+  if (!window.famMarketRenderInto || !rep || !rep.meta) return;
+  const report = document.getElementById('report'); if (!report) return;
+  const sec = document.createElement('div'); sec.id = 'famMarketSec';
+  sec.innerHTML = '<div class="card" style="background:transparent;border:none;padding:0;margin-top:6px"><h3 style="border-left:3px solid var(--a);padding-left:8px">📦 Parts de marché par famille — Saison → Drop</h3></div><div id="famMarketBody"></div>';
+  report.appendChild(sec);
+  const m = rep.meta;
+  window.famMarketRenderInto(document.getElementById('famMarketBody'), { from: m.from, to: m.to, cmp: !!m.hasN1, cfrom: m.cf, cto: m.ct });
+}
+
 async function loadReport() {
   const box = document.getElementById('report');
   box.innerHTML = '<div class="card">Chargement…</div>';
@@ -945,7 +957,7 @@ async function loadReport() {
   renderCharts(rep);
   renderWidgetCharts(); // graphes des widgets « from scratch » (mode normal + édition)
   if (EDIT_VIEW) { wireEditMode(); const n = document.getElementById('reportNav'); if (n) { n.innerHTML = ''; n.classList.remove('open'); } }
-  else { wireBilan(); buildReportNav(); wireCardEdit(); }
+  else { wireBilan(); buildReportNav(); wireCardEdit(); renderFamMarketBlock(rep); }
   balanceKgrids(box);
   requestAnimationFrame(() => balanceKgrids(box)); // recalcul après mise en page réelle (largeurs fiables)
   updateViewControls();
