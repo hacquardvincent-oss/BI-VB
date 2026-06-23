@@ -18,16 +18,35 @@ function render() {
     : (DATA.hasOms ? '✅ Toutes les références vendues sont classées. Rien à compléter.' : 'Aucun OMS chargé — charge tes ventes sur la page 🗄️ Données pour voir les références à classer.');
   document.getElementById('famList').innerHTML = DATA.familles.map(f => `<option value="${esc(f)}">`).join('');
   if (!items.length) { document.getElementById('list').innerHTML = DATA.count ? `<div class="card"><div class="note">Aucune réf ne correspond à « ${esc(q)} ».</div></div>` : ''; return; }
-  const rows = items.map(t => `<tr data-ref="${esc(t.ref)}">
-    <td><code style="font-size:11px">${esc(t.ref)}</code></td>
-    <td title="${esc(t.des)}">${esc((t.des || '').slice(0, 40))}</td>
-    <td style="text-align:right;white-space:nowrap">${fEur(t.ca)}</td>
-    <td><input class="dt famInput" list="famList" placeholder="Famille / regroupement…" value="${esc(t.ov && (t.ov.regroupement || t.ov.famille) || '')}" style="width:100%;min-width:160px"></td>
-    <td style="white-space:nowrap"><button class="btn primary save">💾</button> <span class="note rowNote" style="margin:0"></span></td>
-  </tr>`).join('');
-  document.getElementById('list').innerHTML = `<div class="card"><div style="overflow-x:auto"><table style="font-size:12px;width:100%">
-    <thead><tr><th>Référence</th><th>Désignation (OMS)</th><th style="text-align:right">CA EShop</th><th>Famille / regroupement</th><th></th></tr></thead>
+  const rows = items.map(t => {
+    const ovVal = t.ov && (t.ov.regroupement || t.ov.famille);
+    const sug = !ovVal && t.suggest ? t.suggest : null;            // suggestion seulement si pas déjà corrigé
+    const val = ovVal || (sug ? sug.value : '');
+    const badge = sug ? `<span class="note sugBadge" style="margin:0;color:var(--a)">✨ suggéré ${sug.conf}%</span>` : '';
+    return `<tr data-ref="${esc(t.ref)}" data-sug="${sug ? '1' : ''}">
+      <td><code style="font-size:11px">${esc(t.ref)}</code></td>
+      <td title="${esc(t.des)}">${esc((t.des || '').slice(0, 40))}</td>
+      <td style="text-align:right;white-space:nowrap">${fEur(t.ca)}</td>
+      <td><input class="dt famInput${sug ? ' isSug' : ''}" list="famList" placeholder="Famille / regroupement…" value="${esc(val)}" style="width:100%;min-width:150px${sug ? ';font-style:italic;color:var(--a)' : ''}"> ${badge}</td>
+      <td style="white-space:nowrap"><button class="btn primary save">💾</button> <span class="note rowNote" style="margin:0"></span></td>
+    </tr>`;
+  }).join('');
+  const nSug = items.filter(t => !(t.ov && (t.ov.regroupement || t.ov.famille)) && t.suggest).length;
+  const bulk = nSug ? `<div class="toolbar" style="margin-bottom:8px"><button class="btn primary" id="bulkSave">✨ Valider les ${nSug} suggestions affichées</button><span class="note" style="margin:0">Pré‑remplies depuis tes produits déjà classés — relis et corrige avant de valider.</span></div>` : '';
+  document.getElementById('list').innerHTML = `<div class="card">${bulk}<div style="overflow-x:auto"><table style="font-size:12px;width:100%">
+    <thead><tr><th>Référence</th><th>Désignation (OMS)</th><th style="text-align:right">CA EShop</th><th>Famille / regroupement (✨ = suggéré)</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div></div>`;
+  const bs = document.getElementById('bulkSave');
+  if (bs) bs.addEventListener('click', async () => {
+    bs.disabled = true; bs.textContent = '⏳ Validation…';
+    const trs = [...document.querySelectorAll('#list tr[data-sug="1"]')];
+    let ok = 0;
+    for (const tr of trs) {
+      const ref = tr.dataset.ref, val = (tr.querySelector('.famInput').value || '').trim(); if (!val) continue;
+      try { const r = await fetch('/api/referentiel/override', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref, regroupement: val }) }); if (r.ok) { ok++; tr.querySelector('.rowNote').textContent = '✓'; tr.style.opacity = '.45'; } } catch (e) { /* */ }
+    }
+    bs.textContent = `✓ ${ok} validées`; setTimeout(load, 800);
+  });
   document.querySelectorAll('#list tr[data-ref]').forEach(tr => {
     const ref = tr.dataset.ref, inp = tr.querySelector('.famInput'), note = tr.querySelector('.rowNote');
     const save = async () => {

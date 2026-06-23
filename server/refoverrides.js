@@ -60,6 +60,11 @@ router.get('/todo', requireAuth, (req, res) => {
   const eff = currentRefMap();
   const oms = store.getDataset('oms', 'N');
   const out = []; let totalCA = 0, unclassCA = 0;
+  // Apprentissage désignation→famille depuis les produits DÉJÀ classés (taxonomie de l'utilisateur).
+  const STOP = new Set(['en', 'de', 'du', 'la', 'le', 'les', 'des', 'et', 'un', 'une', 'sur', 'avec', 'pour', 'sans', 'aux', 'par', 'mini', 'maxi', 'midi', 'long', 'court', 'grand', 'petit', 'moyen', 'taille']);
+  const nrm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const toks = des => nrm((des || '').split(/\s+[-–]\s+/)[0]).split(/[^a-z0-9]+/).filter(t => t.length >= 3 && !STOP.has(t));
+  const votes = {}; // token → { famille: poids }
   if (oms && oms.rows && oms.map) {
     const map = oms.map; calc.ensureRefExtIdx(oms.hdrs, map);
     const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt, pi = map.prix, di = map.des, ti = map.type;
@@ -68,12 +73,18 @@ router.get('/todo', requireAuth, (req, res) => {
       oms.rows.forEach(r => {
         if (calc.isMkt((r[ti] || '').trim())) return;
         const ref = (r[ri] || '').trim(); if (!ref) return;
+        const des = di !== undefined ? (r[di] || '').trim() : '';
         const ca = calc.fN(r[pi]);
-        const e = by[ref] || (by[ref] = { ref, des: '', ca: 0, lines: 0 });
-        if (!e.des && di !== undefined) e.des = (r[di] || '').trim();
-        e.ca += ca; e.lines += 1; totalCA += ca;
+        const e = by[ref] || (by[ref] = { ref, des: '', ca: 0, lines: 0 }); if (!e.des && des) e.des = des; e.ca += ca; e.lines += 1; totalCA += ca;
+        const fam = eff[ref];
+        if (fam) { toks(des).forEach(t => { (votes[t] = votes[t] || {})[fam] = (votes[t][fam] || 0) + 1; }); } // apprend des classés
       });
-      Object.values(by).forEach(e => { if (!eff[e.ref]) { unclassCA += e.ca; out.push({ ref: e.ref, des: e.des, ca: Math.round(e.ca), lines: e.lines, ov: OV[e.ref] || null }); } });
+      const suggest = des => {
+        const score = {}; toks(des).forEach(t => { const v = votes[t]; if (v) for (const f in v) score[f] = (score[f] || 0) + v[f]; });
+        let best = null, bestN = 0, tot = 0; for (const f in score) { tot += score[f]; if (score[f] > bestN) { bestN = score[f]; best = f; } }
+        return best ? { value: best, conf: tot ? Math.round((bestN / tot) * 100) : 0 } : null;
+      };
+      Object.values(by).forEach(e => { if (!eff[e.ref]) { unclassCA += e.ca; out.push({ ref: e.ref, des: e.des, ca: Math.round(e.ca), lines: e.lines, ov: OV[e.ref] || null, suggest: suggest(e.des) }); } });
       out.sort((a, b) => b.ca - a.ca);
     }
   }
