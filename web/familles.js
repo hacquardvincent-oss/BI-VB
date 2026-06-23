@@ -1,4 +1,8 @@
 'use strict';
+// Encapsulé (IIFE) : évite les collisions de globals (fEur/esc/delta/_charts…) quand
+// ce script est chargé À CÔTÉ de saison.js sur la page Analyse de saison. N'expose que
+// window.famMarketRenderInto.
+(function () {
 // ============================================================================
 // familles.js — Parts de marché par famille (Analyse de saison). 3 tableaux EMPILÉS
 // (Global / France / International + pays), N vs N-1 (2 calendriers). Au clic famille :
@@ -65,34 +69,39 @@ function wireDrill(id, d) {
   }));
 }
 
-async function fetchDim(dim, country) {
-  const nFrom = document.getElementById('nFrom').value, nTo = document.getElementById('nTo').value;
-  const cmp = document.getElementById('cmp').checked;
-  const q = new URLSearchParams({ from: nFrom, to: nTo, dim, compare: cmp ? '1' : '0' });
-  if (cmp) { q.set('cfrom', document.getElementById('cFrom').value); q.set('cto', document.getElementById('cTo').value); }
+async function fetchDim(dim, country, o) {
+  const q = new URLSearchParams({ from: o.from, to: o.to, dim, compare: o.cmp ? '1' : '0' });
+  if (o.cmp) { q.set('cfrom', o.cfrom); q.set('cto', o.cto); }
   if (dim === 'inter' && country) q.set('country', country);
   const r = await fetch('/api/report/families?' + q.toString());
   return r.json();
 }
-async function run() {
-  const nFrom = document.getElementById('nFrom').value, nTo = document.getElementById('nTo').value;
-  if (!nFrom || !nTo) { document.getElementById('note').textContent = '⚠ Choisis la période N.'; return; }
-  document.getElementById('note').textContent = 'Calcul…';
-  const country = document.getElementById('cty').value;
+// Rendu réutilisable : 3 tableaux empilés (Global / France / Inter) dans n'importe quel conteneur.
+// Utilisé par la page Familles ET embarqué dans la page Analyse de saison.
+function bindCty(root, o) {
+  const c2 = root.querySelector('#cty2'); if (!c2) return;
+  c2.addEventListener('change', async () => { const d = await fetchDim('inter', c2.value, o); const el = root.querySelector('[data-block="it"]'); if (!el) return; el.outerHTML = block('it', `✈️ International${d.country ? ' — ' + esc(d.country) : ''}`, d, true); drawPie('it', d); wireDrill('it', d); bindCty(root, o); });
+}
+async function renderInto(root, o, country) {
+  root.innerHTML = '<div class="card"><div class="note">Calcul des parts de marché…</div></div>';
   try {
-    const [g, fr, it] = await Promise.all([fetchDim('global'), fetchDim('fr'), fetchDim('inter', country)]);
-    document.getElementById('note').textContent = '';
-    // alimente le sélecteur pays depuis l'inter
-    const sel = document.getElementById('cty'); const cur = sel.value;
-    if (it.countries) sel.innerHTML = `<option value="">Tout l'international (hors France)</option>` + it.countries.map(c => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
-    document.getElementById('body').innerHTML =
-      block('g', '🌍 Global', g, false) +
-      block('fr', '🇫🇷 France', fr, false) +
-      block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
+    const [g, fr, it] = await Promise.all([fetchDim('global', null, o), fetchDim('fr', null, o), fetchDim('inter', country || '', o)]);
+    root.innerHTML = block('g', '🌍 Global', g, false) + block('fr', '🇫🇷 France', fr, false) + block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
     [['g', g], ['fr', fr], ['it', it]].forEach(([id, d]) => { drawPie(id, d); wireDrill(id, d); });
-    const c2 = document.getElementById('cty2');
-    if (c2) c2.addEventListener('change', async () => { document.getElementById('cty').value = c2.value; const d = await fetchDim('inter', c2.value); document.querySelector('[data-block="it"]').outerHTML = block('it', `✈️ International${d.country ? ' — ' + esc(d.country) : ''}`, d, true); drawPie('it', d); wireDrill('it', d); document.getElementById('cty2').addEventListener('change', () => run()); });
-  } catch (e) { document.getElementById('note').textContent = '⚠ ' + e.message; }
+    bindCty(root, o);
+    return { g, fr, it };
+  } catch (e) { root.innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; return {}; }
+}
+window.famMarketRenderInto = renderInto;
+
+async function run() {
+  const from = document.getElementById('nFrom').value, to = document.getElementById('nTo').value;
+  if (!from || !to) { document.getElementById('note').textContent = '⚠ Choisis la période N.'; return; }
+  document.getElementById('note').textContent = '';
+  const o = { from, to, cmp: document.getElementById('cmp').checked, cfrom: document.getElementById('cFrom').value, cto: document.getElementById('cTo').value };
+  const { it } = await renderInto(document.getElementById('body'), o, document.getElementById('cty').value);
+  const sel = document.getElementById('cty'); const cur = sel.value;
+  if (it && it.countries) sel.innerHTML = `<option value="">Tout l'international (hors France)</option>` + it.countries.map(c => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
 }
 
 function setYear(y) {
@@ -100,7 +109,7 @@ function setYear(y) {
   document.getElementById('cFrom').value = `${y - 1}-01-01`; document.getElementById('cTo').value = `${y - 1}-12-31`;
 }
 
-(async () => {
+if (document.getElementById('run') && document.getElementById('nFrom')) (async () => {
   let u; try { const r = await fetch('/auth/me'); if (!r.ok) { location.href = '/login.html'; return; } u = await r.json(); } catch (e) { location.href = '/login.html'; return; }
   document.getElementById('who').textContent = u.username;
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => location.href = '/admin.html'; } }
@@ -109,6 +118,7 @@ function setYear(y) {
   document.getElementById('cty').addEventListener('change', run);
   document.getElementById('cmp').addEventListener('change', run);
   document.getElementById('run').addEventListener('click', run);
-  setYear(2025);
+  setYear(new Date().getFullYear());   // défaut : année en cours (N) vs année précédente (N-1)
   run();
+})();
 })();

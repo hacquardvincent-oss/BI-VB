@@ -396,9 +396,19 @@ async function loadReport() {
   try {
     const rep = await (await fetch('/api/report/saison?' + q)).json();
     render(rep);
+    renderFamMarket(p);
   } catch (e) {
     box.innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message || 'Erreur réseau')}</div></div>`;
   }
+}
+
+// Parts de marché par famille EMBARQUÉES (3 tableaux Global/France/Inter), pilotées par la période de saison.
+function renderFamMarket(p) {
+  const report = document.getElementById('report'); if (!report) return;
+  const sec = document.createElement('div');
+  sec.innerHTML = '<div class="card" style="background:transparent;border:none;padding:0;margin-top:6px"><h3 style="border-left:3px solid var(--a);padding-left:8px">📦 Parts de marché par famille — Global / France / International</h3></div><div id="famMarketBody"></div>';
+  report.appendChild(sec);
+  if (window.famMarketRenderInto) window.famMarketRenderInto(document.getElementById('famMarketBody'), { from: p.from, to: p.to, cmp: true, cfrom: p.cfrom, cto: p.cto });
 }
 
 // Import OMS de saison (tâche de fond → polling du job partagé WSHOP).

@@ -1182,8 +1182,10 @@ router.get('/families', requireAuth, (req, res) => {
     const familles = fams.map(f => {
       const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
       // Regroupe les produits par NOM de modèle (tous les « Moon » ensemble), avec variantes au détail.
+      // Clé NORMALISÉE (minuscule, sans accents) → fusionne « MOON » (N-1) et « Moon » (N) sur le même modèle.
       const grp = {};
-      const addP = (prods, key) => { for (const [des, p] of Object.entries(prods || {})) { const nm = modelName(des); const g = grp[nm] || (grp[nm] = { name: nm, ca: 0, caN1: 0, variants: {} }); g[key] += p.ca; const v = g.variants[des] || (g.variants[des] = { des, ca: 0, caN1: 0 }); v[key] += p.ca; } };
+      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const addP = (prods, key) => { for (const [des, p] of Object.entries(prods || {})) { const disp = modelName(des); const nk = norm(disp); const g = grp[nk] || (grp[nk] = { name: disp, ca: 0, caN1: 0, variants: {} }); g[key] += p.ca; const v = g.variants[des] || (g.variants[des] = { des, ca: 0, caN1: 0 }); v[key] += p.ca; } };
       addP(a.prods, 'ca'); addP(b.prods, 'caN1');
       const names = Object.values(grp).map(g => ({ name: g.name, ca: Math.round(g.ca), caN1: Math.round(g.caN1), variants: Object.values(g.variants).map(v => ({ des: v.des, ca: Math.round(v.ca), caN1: Math.round(v.caN1) })).sort((x, y) => y.ca - x.ca).slice(0, 30) }))
         .sort((x, y) => y.ca - x.ca).slice(0, 80);
