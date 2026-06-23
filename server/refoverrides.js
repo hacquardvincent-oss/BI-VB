@@ -132,6 +132,31 @@ function desByRefFromOms() {
 // Saisons disponibles (+ bible) pour le sélecteur.
 router.get('/seasons', requireAuth, (req, res) => res.json({ seasons: seasonsList() }));
 
+// Dashboard : par slot référentiel, lignes BRUTES vs réfs avec regroupement (révèle les « sans regroupement »).
+router.get('/stats', requireAuth, (req, res) => {
+  const slots = [];
+  for (const d of store.listDatasets()) {
+    if (d.source !== 'ref' && d.source !== 'saisonref') continue;
+    const ds = store.getDataset(d.source, d.period); if (!ds) continue;
+    const ri = ds.map ? ds.map.ref_ext : undefined;
+    const fi = ds.map ? (ds.map.regroupement !== undefined ? ds.map.regroupement : ds.map.famille) : undefined;
+    let total = 0, withFam = 0;
+    if (ri !== undefined) { const seen = new Set(); (ds.rows || []).forEach(r => { const k = (r[ri] || '').trim(); if (!k || seen.has(k)) return; seen.add(k); total++; if (fi !== undefined && (r[fi] || '').trim()) withFam++; }); }
+    const isBible = d.period === 'N' || d.period === 'N1';
+    slots.push({ code: d.period, label: isBible ? 'Bible (globale)' : d.period, bible: isBible, total, withFam, missing: total - withFam });
+  }
+  slots.sort((a, b) => (a.bible === b.bible ? a.code.localeCompare(b.code) : a.bible ? -1 : 1));
+  res.json({ slots, classified: Object.keys(fullRefMap()).length, corrections: Object.keys(OV).length });
+});
+
+// Ajout/édition direct d'une référence (même si absente des fichiers/OMS) → override.
+router.put('/ref', requireAuth, requireEdit, (req, res) => {
+  const ref = (req.body && req.body.ref || '').trim(); const fam = (req.body && (req.body.regroupement || req.body.famille) || '').trim();
+  if (!ref || !fam) return res.status(400).json({ error: 'Référence + regroupement requis.' });
+  setOv(ref, { regroupement: fam, by: req.session.username });
+  res.json({ ok: true, ref });
+});
+
 // Export CSV d'UNE saison (ou de la bible) — round-trip Excel par saison.
 router.get('/season/:code/export', requireAuth, (req, res) => {
   const code = (req.params.code || '').toUpperCase();

@@ -32,8 +32,20 @@
 <div class="wrap" style="max-width:1000px;margin:0 auto;padding:18px">
   <div class="card">
     <h3>📚 Référentiel produit (familles / regroupements)</h3>
-    <div class="note">La « bible » (Ref. externe → Regroupement) + tes corrections en ligne. <b>Importe</b> un fichier sur la page 🗄️ Données (source « Référentiel »), <b>édite</b> ici, <b>exporte</b> le tout fusionné en CSV. Les corrections sont prioritaires et persistées (un réimport ne les écrase pas).</div>
-    <div class="toolbar" style="margin-top:8px;gap:6px;flex-wrap:wrap">
+    <div id="dash" style="margin-top:6px"></div>
+    <details class="fold" style="margin-top:8px">
+      <summary>➕ Ajouter une référence manuellement</summary>
+      <div class="toolbar" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+        <input id="addRef" class="dt" placeholder="Référence externe (RC)" style="min-width:170px">
+        <input id="addFam" class="dt" list="famList" placeholder="Regroupement / famille" style="min-width:170px">
+        <button class="btn primary" id="addBtn">Ajouter</button>
+        <span class="note" id="addNote" style="margin:0">Utile pour une réf absente des fichiers (création d'une correction). Pour un ajout en masse → importe un fichier (page Données ou « Saisons »).</span>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <div class="toolbar" style="gap:6px;flex-wrap:wrap">
       <button class="pb on" id="modeTodo">⚠️ À compléter</button>
       <button class="pb" id="modeAll">📋 Tout le référentiel</button>
       <div class="spacer" style="flex:1"></div>

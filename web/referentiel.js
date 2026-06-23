@@ -106,7 +106,7 @@ function render() {
     ? `⚠ <b>${fInt(DATA.count)} références non classées</b> = <b>${fEur(DATA.unclassifiedCA)}</b> de CA non ventilé (${pct.toLocaleString('fr-FR')} % du CA EShop). ${DATA.familles.length} familles/regroupements existants.`
     : (DATA.hasOms ? '✅ Toutes les références vendues sont classées. Rien à compléter.' : 'Aucun OMS chargé — charge tes ventes sur la page 🗄️ Données pour voir les références à classer.');
   document.getElementById('famList').innerHTML = DATA.familles.map(f => `<option value="${esc(f)}">`).join('');
-  if (!items.length) { document.getElementById('list').innerHTML = DATA.count ? `<div class="card"><div class="note">Aucune réf ne correspond à « ${esc(q)} ».</div></div>` : ''; return; }
+  if (!items.length) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">${DATA.count ? `Aucune réf ne correspond à « ${esc(q)} ».` : (DATA.hasOms ? '✅ Toutes les références vendues sont classées. Rien à compléter — passe à « 📋 Tout le référentiel » pour tout voir/éditer.' : 'Charge l\'OMS (page 🗄️ Données) pour voir les références à classer, et la bible/saisons ci-dessous.')}</div></div>`; return; }
   const rows = items.map(t => {
     const ovVal = t.ov && (t.ov.regroupement || t.ov.famille);
     const sug = !ovVal && t.suggest ? t.suggest : null;            // suggestion seulement si pas déjà corrigé
@@ -154,6 +154,19 @@ function render() {
   });
 }
 
+async function loadDash() {
+  try {
+    const d = await (await fetch('/api/referentiel/stats')).json();
+    const el = document.getElementById('dash'); if (!el) return;
+    const totalRows = (d.slots || []).reduce((a, s) => a + s.total, 0);
+    const slotLine = s => `<span style="display:inline-block;margin:2px 8px 2px 0;padding:3px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--br)"><b>${esc(s.bible ? '📖 Bible' : s.code)}</b> : ${fInt(s.withFam)} classées${s.missing ? ` <span style="color:#C9A24B">· ${fInt(s.missing)} sans regroupement ⚠</span>` : ''}</span>`;
+    el.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
+        <div><span style="font-size:22px;font-weight:700;font-family:var(--disp)">${fInt(d.classified)}</span> <span class="note" style="margin:0">références classées</span></div>
+        <div class="note" style="margin:0">${fInt(totalRows)} lignes dans les fichiers · ${fInt(d.corrections)} corrections manuelles</div>
+      </div>
+      <div>${(d.slots || []).map(slotLine).join('') || '<span class="note">Aucun fichier référentiel chargé — importe la bible (page 🗄️ Données → Référentiel) ou une saison ci-dessous.</span>'}</div>`;
+  } catch (e) { /* */ }
+}
 async function load() {
   try {
     const r = await fetch('/api/referentiel/todo'); if (!r.ok) { if (r.status === 401) location.href = '/login.html'; return; }
@@ -187,6 +200,19 @@ const renderCurrent = () => (MODE === 'all' ? renderAll() : render());
   document.getElementById('modeAll').addEventListener('click', () => setMode('all'));
   document.getElementById('seasonImport').addEventListener('click', importSeason);
   document.getElementById('seasonDelete').addEventListener('click', deleteSeason);
+  document.getElementById('addBtn').addEventListener('click', async () => {
+    const ref = (document.getElementById('addRef').value || '').trim(), fam = (document.getElementById('addFam').value || '').trim();
+    const note = document.getElementById('addNote');
+    if (!ref || !fam) { note.textContent = '⚠ Référence + regroupement requis.'; return; }
+    note.textContent = '⏳';
+    try {
+      const r = await fetch('/api/referentiel/ref', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref, regroupement: fam }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); note.textContent = '⚠ ' + (j.error || 'erreur'); return; }
+      note.textContent = `✓ « ${ref} » → ${fam} ajoutée.`; document.getElementById('addRef').value = '';
+      loadDash(); if (MODE === 'all') loadAll();
+    } catch (e) { note.textContent = '⚠ ' + e.message; }
+  });
   await loadSeasons();
+  loadDash();
   await load();
 })();
