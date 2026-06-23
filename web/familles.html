@@ -14,13 +14,13 @@
     <a class="pb" href="/app.html" title="Reporting">📊 Reporting</a>
     <a class="pb" href="/periodique.html" title="Périodique">📅 Périodique</a>
     <a class="pb" href="/commerciale.html" title="Analyse commerciale">💰 Commerciale</a>
-    <a class="pb" href="/saison.html" title="Analyse de saison">🏷️ Saison</a>
-    <a class="pb on" href="/familles.html" title="Familles & parts de marché">📦 Familles</a>
+    <a class="pb on" href="/saison.html" title="Analyse de saison">🏷️ Analyse de saison</a>
     <a class="pb" href="/objectifs.html" title="Objectifs">🎯 Objectifs</a>
     <a class="pb" href="/tendances.html" title="Tendances">📈 Tendances</a>
   </nav>
   <div class="spacer"></div>
   <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a class="btn" href="/saison.html" title="Retour à l'analyse de saison">← Saison</a>
   <a class="btn" href="/referentiel.html" title="Référentiel">📚</a>
   <a class="btn" href="/data.html" title="Données">🗄️</a>
   <button class="btn hidden" id="adminBtn">👤 Admin</button>
@@ -30,35 +30,24 @@
 <div class="wrap layout-side no-rightnav">
   <aside id="setupCol">
     <div class="card setup-card">
-      <h3>Période d'analyse</h3>
-      <div class="note">Analyse des familles produit (parts de marché), N vs N‑1 — ex. toute l'année 2025, ou 2026 vs 2025. <b>Cabas distinct des Sacs</b> (taxonomie du référentiel).</div>
-      <label class="setlabel">Du</label>
-      <input id="from" type="date" class="dt" style="width:100%">
-      <label class="setlabel">Au</label>
-      <input id="to" type="date" class="dt" style="width:100%">
+      <h3>Parts de marché par famille</h3>
+      <div class="note">Analyse de saison → poids de chaque famille dans le CA, N vs N‑1. <b>Cabas distinct des Sacs</b>. Au clic sur une famille : produits regroupés par <b>nom</b> (tous les « Moon »), puis détail des références.</div>
+      <label class="setlabel">Période N — début → fin</label>
+      <div class="toolbar" style="gap:5px"><input id="nFrom" type="date" class="dt" style="flex:1"><input id="nTo" type="date" class="dt" style="flex:1"></div>
+      <label class="setlabel">Période N‑1 — début → fin</label>
+      <div class="toolbar" style="gap:5px"><input id="cFrom" type="date" class="dt" style="flex:1"><input id="cTo" type="date" class="dt" style="flex:1"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px"><input type="checkbox" id="cmp" checked style="width:16px;height:16px;accent-color:var(--a)"> Comparer à N‑1</label>
       <div class="toolbar" style="gap:6px;margin-top:8px">
-        <button class="pb" data-yr="2025">2025</button>
-        <button class="pb" data-yr="2026">2026</button>
+        <button class="pb" data-yr="2025">2025 vs 2024</button>
+        <button class="pb" data-yr="2026">2026 vs 2025</button>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px"><input type="checkbox" id="cmp" checked style="width:16px;height:16px;accent-color:var(--a)"> Comparer à N‑1 (−1 an)</label>
-      <label class="setlabel">Périmètre</label>
-      <div class="toolbar" style="gap:5px">
-        <button class="pb on" data-dim="global">🌍 Global</button>
-        <button class="pb" data-dim="fr">🇫🇷 France</button>
-        <button class="pb" data-dim="inter">✈️ International</button>
-      </div>
-      <div id="ctyWrap" class="hidden" style="margin-top:8px">
-        <label class="setlabel">Pays (International)</label>
-        <select id="cty" class="dt" style="width:100%"><option value="">Tous (hors France)</option></select>
-      </div>
+      <label class="setlabel">Pays (tableau International)</label>
+      <select id="cty" class="dt" style="width:100%"><option value="">Tout l'international (hors France)</option></select>
       <button class="btn blue" id="run" style="margin-top:12px;width:100%">📦 Analyser</button>
       <div class="note" id="note" style="margin-top:6px"></div>
     </div>
   </aside>
-
-  <main id="mainCol">
-    <div id="body"><div class="card"><div class="note">Choisis une période puis « Analyser ».</div></div></div>
-  </main>
+  <main id="mainCol"><div id="body"><div class="card"><div class="note">Choisis une période puis « Analyser ».</div></div></div></main>
 </div>
 <script src="/familles.js"></script>
 </body>

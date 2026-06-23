@@ -10,6 +10,16 @@ const calc = require('./calc');
 
 const router = express.Router();
 
+// Nom de MODÈLE depuis une désignation : retire la couleur (après « - ») puis le 1er mot distinctif
+// (ni type, ni matière, ni taille) → « Moyen Sac Moon en Lin - CHAMPIGNON » → « Moon ».
+const NAME_STOP = new Set(['sac', 'cabas', 'robe', 'jupe', 'pantalon', 'jean', 'jeans', 'chemise', 'blouse', 'pull', 'gilet', 'cardigan', 'veste', 'manteau', 'top', 'tshirt', 'foulard', 'echarpe', 'ceinture', 'pochette', 'short', 'combinaison', 'trousse', 'bijou', 'collier', 'bracelet', 'bague', 'boucle', 'chaussure', 'botte', 'sandale', 'basket', 'mocassin', 'en', 'de', 'la', 'le', 'les', 'et', 'au', 'aux', 'avec', 'sans', 'pour', 'grand', 'grande', 'petit', 'petite', 'moyen', 'moyenne', 'mini', 'maxi', 'midi', 'long', 'longue', 'court', 'courte', 'zippe', 'zippee', 'lin', 'toile', 'soie', 'coton', 'cuir', 'laine', 'maille', 'jersey', 'velours', 'satin', 'denim', 'a', 'rabat', 'main', 'dos', 'bandouliere']);
+function modelName(des) {
+  const base = (des || '').split(/\s+[-–]\s+/)[0];
+  const toks = base.split(/[^A-Za-zÀ-ÿ0-9]+/).filter(Boolean);
+  for (const t of toks) { const n = t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); if (n.length >= 3 && !NAME_STOP.has(n)) return t; }
+  return base.trim().slice(0, 24) || '(?)';
+}
+
 async function loadDataset(source, period) {
   const d = store.getDataset(source, period);
   if (!d) return null;
@@ -1171,10 +1181,13 @@ router.get('/families', requireAuth, (req, res) => {
     const fams = [...new Set([...Object.keys(mN.fam), ...Object.keys(mN1b.fam)])];
     const familles = fams.map(f => {
       const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
-      const names = [...new Set([...Object.keys(a.prods), ...Object.keys(b.prods)])];
-      const products = names.map(n => ({ name: n, ca: Math.round((a.prods[n] || {}).ca || 0), caN1: Math.round((b.prods[n] || {}).ca || 0), qte: (a.prods[n] || {}).qte || 0 }))
-        .sort((x, y) => y.ca - x.ca).slice(0, 50);
-      return { famille: f, ca: Math.round(a.ca), caN1: Math.round(b.ca), qte: a.qte, share: mN.total ? a.ca / mN.total : 0, shareN1: mN1b.total ? b.ca / mN1b.total : 0, products };
+      // Regroupe les produits par NOM de modèle (tous les « Moon » ensemble), avec variantes au détail.
+      const grp = {};
+      const addP = (prods, key) => { for (const [des, p] of Object.entries(prods || {})) { const nm = modelName(des); const g = grp[nm] || (grp[nm] = { name: nm, ca: 0, caN1: 0, variants: {} }); g[key] += p.ca; const v = g.variants[des] || (g.variants[des] = { des, ca: 0, caN1: 0 }); v[key] += p.ca; } };
+      addP(a.prods, 'ca'); addP(b.prods, 'caN1');
+      const names = Object.values(grp).map(g => ({ name: g.name, ca: Math.round(g.ca), caN1: Math.round(g.caN1), variants: Object.values(g.variants).map(v => ({ des: v.des, ca: Math.round(v.ca), caN1: Math.round(v.caN1) })).sort((x, y) => y.ca - x.ca).slice(0, 30) }))
+        .sort((x, y) => y.ca - x.ca).slice(0, 80);
+      return { famille: f, ca: Math.round(a.ca), caN1: Math.round(b.ca), qte: a.qte, share: mN.total ? a.ca / mN.total : 0, shareN1: mN1b.total ? b.ca / mN1b.total : 0, names };
     }).sort((x, y) => y.ca - x.ca);
     // Pays disponibles (hors mkt, hors France) pour le sélecteur International.
     const countries = [];
