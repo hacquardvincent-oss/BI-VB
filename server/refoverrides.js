@@ -76,6 +76,24 @@ function seasonsList() {
   }
   return out.sort((a, b) => (a.bible === b.bible ? a.code.localeCompare(b.code) : a.bible ? -1 : 1));
 }
+// ref → { saison, drop } depuis les slots de saison (implantations) → filtrer les VENTES par saison/drop.
+function seasonDropIndex() {
+  const idx = {};
+  for (const d of store.listDatasets()) {
+    if (d.source !== 'ref' || d.period === 'N' || d.period === 'N1') continue;
+    const ds = store.getDataset('ref', d.period); if (!ds) continue;
+    const det = calc.buildSeasonDetail(ds);
+    for (const [ref, v] of Object.entries(det)) { if (!idx[ref]) idx[ref] = { saison: d.period, drop: (v.drop || '').trim() }; }
+  }
+  return idx;
+}
+// Drops distincts d'une saison (slot ref-<code>), triés.
+function seasonDropsOf(code) {
+  const ds = store.getDataset('ref', (code || '').toUpperCase()); if (!ds) return [];
+  const det = calc.buildSeasonDetail(ds); const set = new Set();
+  for (const v of Object.values(det)) set.add((v.drop || '').trim() || '(sans drop)');
+  return [...set].sort((a, b) => (a === '(sans drop)' ? 1 : b === '(sans drop)' ? -1 : a.localeCompare(b)));
+}
 const currentRefMap = fullRefMap; // compat
 
 const router = express.Router();
@@ -236,4 +254,29 @@ router.put('/override', requireAuth, requireEdit, (req, res) => {
 
 router.delete('/override/:ref', requireAuth, requireEdit, (req, res) => { removeOv(req.params.ref); res.json({ ok: true }); });
 
-module.exports = { router, hydrate, effectiveMap, fullRefMap, currentRefMap };
+// Saisons (slots, hors bible) + drops de la saison demandée → cascade de filtres Saison → Drop.
+router.get('/season-drops', requireAuth, (req, res) => {
+  const saisons = seasonsList().filter(s => !s.bible).map(s => s.code);
+  const code = (req.query.season || '').toUpperCase();
+  res.json({ saisons, drops: code && code !== 'ALL' ? seasonDropsOf(code) : [] });
+});
+
+// Import CSV/Excel-collé : applique en masse des corrections (réf → regroupement). Round-trip de l'export.
+// Body : { csv } (texte ; séparateur ; ou , ou tab ; 1re ligne = en-têtes « Ref… ; Regroupement »).
+router.post('/import', requireAuth, requireEdit, (req, res) => {
+  const csv = (req.body && req.body.csv || '').toString();
+  if (!csv.trim()) return res.status(400).json({ error: 'Aucun contenu.' });
+  const rows = csv.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+  if (!rows.length) return res.status(400).json({ error: 'Vide.' });
+  const split = l => { const sep = (l.match(/;/g) || []).length >= (l.match(/\t/g) || []).length ? (l.includes(';') ? ';' : (l.includes('\t') ? '\t' : ',')) : '\t'; return l.split(sep).map(c => c.replace(/^"|"$/g, '').trim()); };
+  const head = split(rows[0]).map(h => h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+  const refI = head.findIndex(h => /ref/.test(h));
+  const famI = head.findIndex(h => /regroup|famille/.test(h));
+  if (refI < 0 || famI < 0) return res.status(400).json({ error: 'Colonnes « Ref… » et « Regroupement » introuvables dans l\'en-tête.' });
+  let n = 0;
+  for (let i = 1; i < rows.length; i++) { const c = split(rows[i]); const ref = (c[refI] || '').trim(), fam = (c[famI] || '').trim(); if (ref && fam) { OV[ref] = Object.assign({}, OV[ref], { regroupement: fam, by: req.session.username, at: new Date().toISOString() }); n++; } }
+  persist();
+  res.json({ ok: true, applied: n });
+});
+
+module.exports = { router, hydrate, effectiveMap, fullRefMap, currentRefMap, seasonDropIndex, seasonDropsOf };

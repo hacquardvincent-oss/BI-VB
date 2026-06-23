@@ -223,6 +223,12 @@ const renderCurrent = () => (MODE === 'all' ? renderAll() : render());
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   document.getElementById('reload').addEventListener('click', () => (MODE === 'all' ? loadAll() : load()));
+  { const imp = document.getElementById('ovImport'); if (imp) imp.addEventListener('change', async () => {
+    const f = imp.files && imp.files[0]; if (!f) return; const note = document.getElementById('ovImportNote');
+    note.textContent = 'Import…';
+    try { const csv = await f.text(); const r = await fetch('/api/referentiel/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv }) }); const j = await r.json();
+      note.textContent = r.ok ? `✅ ${j.applied} corrections appliquées.` : '⚠ ' + (j.error || 'Erreur'); imp.value = ''; if (r.ok) (MODE === 'all' ? loadAll() : load()); }
+    catch (e) { note.textContent = '⚠ ' + e.message; } }); }
   document.getElementById('search').addEventListener('input', renderCurrent);
   document.getElementById('modeTodo').addEventListener('click', () => setMode('todo'));
   document.getElementById('modeAll').addEventListener('click', () => setMode('all'));

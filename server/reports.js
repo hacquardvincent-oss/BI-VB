@@ -1166,14 +1166,19 @@ router.get('/saison', requireAuth, async (req, res) => {
 // avec drill-down PRODUITS par famille. Source = base continue oms + référentiel (bible + corrections).
 router.get('/families', requireAuth, (req, res) => {
   try {
-    const { from, to, cfrom, cto, dim, country, compare } = req.query;
+    const { from, to, cfrom, cto, dim, country, compare, saison, drop } = req.query;
     const oms = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N');
     if (!oms || !oms.rows) return res.json({ empty: true, message: 'Aucun OMS chargé (page 🗄️ Données).' });
     const map = oms.map; calc.ensureRefExtIdx(oms.hdrs, map);
-    const refMap = require('./refoverrides').fullRefMap();
+    const refov = require('./refoverrides');
+    const refMap = refov.fullRefMap();
     const pai = map.pays;
+    const refIdx = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+    // Filtre SAISON → DROP : isole les ventes des références d'une saison (implantation) et, au besoin, d'un drop précis.
+    const sdx = (saison && saison !== 'ALL') ? refov.seasonDropIndex() : null;
+    const bySeason = rows => { if (!sdx || refIdx === undefined) return rows; return rows.filter(r => { const e = sdx[(r[refIdx] || '').trim()]; if (!e || e.saison !== saison) return false; if (drop && drop !== 'ALL' && (e.drop || '(sans drop)') !== drop) return false; return true; }); };
     const byCountry = rows => { if (!country || pai === undefined) return rows; const c = country.toLowerCase().trim(); return rows.filter(r => (r[pai] || '').toString().trim().toLowerCase() === c); };
-    const prep = (f, t) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return rs; };
+    const prep = (f, t) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return bySeason(rs); };
     const useRef = rows => calc.calcFamilleMarket(rows, map, refMap);
     const noN1 = compare === '0';
     const mN = useRef(prep(from, to));
@@ -1198,7 +1203,9 @@ router.get('/families', requireAuth, (req, res) => {
       calc.filterOutstore(calc.filterRows(oms.rows, map, from, to, false), map).forEach(r => { if (calc.isMkt((r[map.type] || '').trim())) return; const c = (r[pai] || '').toString().trim(); const cl = c.toLowerCase(); if (c && cl !== 'france' && !seen.has(cl)) { seen.add(cl); countries.push(c); } });
       countries.sort((a, b) => a.localeCompare(b, 'fr'));
     }
-    res.json({ familles, total: Math.round(mN.total), totalN1: Math.round(mN1b.total), countries, hasN1: !noN1, dim: dim || 'global', country: country || '' });
+    const saisons = refov.seasonDropIndex ? [...new Set(Object.values(refov.seasonDropIndex()).map(e => e.saison))].sort() : [];
+    const drops = (saison && saison !== 'ALL') ? refov.seasonDropsOf(saison) : [];
+    res.json({ familles, total: Math.round(mN.total), totalN1: Math.round(mN1b.total), countries, hasN1: !noN1, dim: dim || 'global', country: country || '', saisons, drops, saison: saison || '', drop: drop || '' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

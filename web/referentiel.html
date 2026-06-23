@@ -50,8 +50,10 @@
       <button class="pb" id="modeAll">📋 Tout le référentiel</button>
       <div class="spacer" style="flex:1"></div>
       <a class="btn" href="/api/referentiel/export" title="Exporter le référentiel fusionné (base + corrections) en CSV">⬇ Exporter (CSV)</a>
+      <label class="btn" id="ovImportBtn" title="Importer un CSV de corrections (colonnes « Ref. Externe ; Regroupement ») — round-trip de l'export, édité dans Excel">⬆ Importer corrections (CSV)<input type="file" id="ovImport" accept=".csv,.txt" hidden></label>
       <button class="btn" id="reload">↻ Rafraîchir</button>
     </div>
+    <div class="note" id="ovImportNote" style="margin-top:4px"></div>
     <div id="summary" class="note" style="margin-top:8px"></div>
     <div class="toolbar" style="margin-top:8px;gap:8px">
       <input id="search" class="dt" placeholder="🔎 Rechercher une réf, une désignation ou une famille" style="flex:1;min-width:180px">

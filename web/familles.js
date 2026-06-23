@@ -73,8 +73,27 @@ async function fetchDim(dim, country, o) {
   const q = new URLSearchParams({ from: o.from, to: o.to, dim, compare: o.cmp ? '1' : '0' });
   if (o.cmp) { q.set('cfrom', o.cfrom); q.set('cto', o.cto); }
   if (dim === 'inter' && country) q.set('country', country);
+  if (o.saison) q.set('saison', o.saison);
+  if (o.drop) q.set('drop', o.drop);
   const r = await fetch('/api/report/families?' + q.toString());
   return r.json();
+}
+// Barre de filtre cascadante Saison → Drop (issus du référentiel/implantation).
+function filterBar(d, o) {
+  const sais = d.saisons || [];
+  if (!sais.length) return '';
+  const sOpt = `<option value="">Toutes saisons</option>` + sais.map(s => `<option value="${esc(s)}"${s === o.saison ? ' selected' : ''}>${esc(s)}</option>`).join('');
+  const dOpt = `<option value="">Tous les drops</option>` + (d.drops || []).map(dr => `<option value="${esc(dr)}"${dr === o.drop ? ' selected' : ''}>${esc(dr)}</option>`).join('');
+  return `<div class="card" style="padding:8px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <b style="font-size:12px">🔎 Isoler</b>
+    <label style="font-size:12px">Saison <select id="fmSaison" class="dt" style="font-size:12px">${sOpt}</select></label>
+    <label style="font-size:12px">Drop <select id="fmDrop" class="dt" style="font-size:12px"${o.saison ? '' : ' disabled'}>${dOpt}</select></label>
+    <span class="note" style="margin:0">Filtre les ventes sur les références d'une saison (implantation) puis d'un drop.</span></div>`;
+}
+function wireFilter(root, o, country) {
+  const s = root.querySelector('#fmSaison'), dd = root.querySelector('#fmDrop');
+  if (s) s.addEventListener('change', () => { o.saison = s.value; o.drop = ''; renderInto(root, o, country); });
+  if (dd) dd.addEventListener('change', () => { o.drop = dd.value; renderInto(root, o, country); });
 }
 // Rendu réutilisable : 3 tableaux empilés (Global / France / Inter) dans n'importe quel conteneur.
 // Utilisé par la page Familles ET embarqué dans la page Analyse de saison.
@@ -86,9 +105,9 @@ async function renderInto(root, o, country) {
   root.innerHTML = '<div class="card"><div class="note">Calcul des parts de marché…</div></div>';
   try {
     const [g, fr, it] = await Promise.all([fetchDim('global', null, o), fetchDim('fr', null, o), fetchDim('inter', country || '', o)]);
-    root.innerHTML = block('g', '🌍 Global', g, false) + block('fr', '🇫🇷 France', fr, false) + block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
+    root.innerHTML = filterBar(g, o) + block('g', '🌍 Global', g, false) + block('fr', '🇫🇷 France', fr, false) + block('it', `✈️ International${it.country ? ' — ' + esc(it.country) : ''}`, it, true);
     [['g', g], ['fr', fr], ['it', it]].forEach(([id, d]) => { drawPie(id, d); wireDrill(id, d); });
-    bindCty(root, o);
+    bindCty(root, o); wireFilter(root, o, country);
     return { g, fr, it };
   } catch (e) { root.innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; return {}; }
 }
