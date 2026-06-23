@@ -97,6 +97,13 @@ async function init() {
     data        jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at  timestamptz NOT NULL DEFAULT now()
   )`);
+  // Corrections manuelles du référentiel (overrides ref → famille/regroupement), appliquées par-dessus
+  // les fichiers importés (couche d'édition en ligne, persistée, prioritaire). 1 ligne jsonb.
+  await pool.query(`CREATE TABLE IF NOT EXISTS ref_overrides (
+    id         int PRIMARY KEY DEFAULT 1,
+    data       jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
   console.log('[db] Postgres connecté, schéma prêt.');
   return true;
 }

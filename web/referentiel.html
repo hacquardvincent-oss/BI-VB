@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Project — Référentiel</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="hdr">
+  <div id="logo">BI <b>Project</b></div>
+  <nav class="toolbar" style="gap:6px;margin-left:6px">
+    <a class="pb" href="/app.html" title="Reporting">📊 Reporting</a>
+    <a class="pb" href="/periodique.html" title="Reporting périodique">📅 Périodique</a>
+    <a class="pb" href="/commerciale.html" title="Analyse commerciale">💰 Analyse commerciale</a>
+    <a class="pb" href="/saison.html" title="Analyse de saison">🏷️ Analyse de saison</a>
+    <a class="pb" href="/objectifs.html" title="Objectifs">🎯 Objectifs</a>
+    <a class="pb" href="/anticipation.html" title="Prévisionnel">🔮 Prévisionnel</a>
+    <a class="pb" href="/tendances.html" title="Tendances">📈 Tendances</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="who" style="font-size:12px;color:var(--t2)"></span>
+  <a class="btn primary" href="/referentiel.html" title="Référentiel produit (familles / regroupements)">📚 Référentiel</a>
+  <a class="btn" href="/data.html" title="Données">🗄️</a>
+  <a class="btn" href="/creation.html" title="Création">🧱</a>
+  <a class="btn" href="/feedback.html" title="Retours">💬</a>
+  <button class="btn hidden" id="adminBtn" title="Administration des comptes">👤 Admin</button>
+  <button class="btn" id="logout">Déconnexion</button>
+</div>
+
+<div class="wrap" style="max-width:1000px;margin:0 auto;padding:18px">
+  <div class="card">
+    <h3>📚 Référentiel — références à compléter</h3>
+    <div class="note">Les références <b>vues dans tes ventes (OMS)</b> mais <b>sans famille / regroupement</b> tombent en « (n.c.) » dans le CA par famille. Classe-les ici : ta correction est <b>persistée</b> et appliquée par‑dessus les fichiers importés (priorité), donc un réimport ne l'écrase pas. Triées par <b>CA décroissant</b> — commence par ce qui pèse.</div>
+    <div id="summary" class="note" style="margin-top:8px"></div>
+    <div class="toolbar" style="margin-top:8px;gap:8px">
+      <input id="search" class="dt" placeholder="🔎 Rechercher une réf ou une désignation" style="flex:1;min-width:180px">
+      <button class="btn" id="reload">↻ Rafraîchir</button>
+    </div>
+  </div>
+  <div id="list"><div class="card"><div class="note">Chargement…</div></div></div>
+</div>
+
+<datalist id="famList"></datalist>
+<script src="/referentiel.js"></script>
+</body>
+</html>

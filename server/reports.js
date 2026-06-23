@@ -111,7 +111,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const sessionsByZone = { n: zoneSess(gaSessN), n1: zoneSess(gaSessN1) };
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
-  const refMap = ref ? calc.buildRefMap(ref) : {};
+  // Référentiel = fichiers importés + corrections manuelles en ligne (overrides, prioritaires).
+  const refMap = Object.assign(ref ? calc.buildRefMap(ref) : {}, require('./refoverrides').effectiveMap());
 
   // Périmètre « collection » (scope=collection) : zoom sur les produits de l'implantation
   // (E26 pour N, E25 pour N-1). N'affecte que les ventes OMS (le trafic GA reste global).
@@ -904,9 +905,10 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   // un saisonref sans colonne « Regroupement » ne casse plus le tableau famille).
   const saisonRefN = await loadDataset('saisonref', 'N'), saisonRefN1 = await loadDataset('saisonref', 'N1');
   const repoRef = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
+  const ovMap = require('./refoverrides').effectiveMap();
   const famMap = ds => { const m = ds ? calc.buildRefMap(ds) : {}; return Object.keys(m).length ? m : null; };
-  const refMap = famMap(saisonRefN) || famMap(repoRef) || {};
-  const refMapN1 = famMap(saisonRefN1) || famMap(repoRef) || refMap;
+  const refMap = Object.assign({}, famMap(saisonRefN) || famMap(repoRef) || {}, ovMap);
+  const refMapN1 = Object.assign({}, famMap(saisonRefN1) || famMap(repoRef) || refMap, ovMap);
   // Mapping Réf. externe → Saison (colonne « Saison » du référentiel) pour le filtre saison
   const refSaisonMap = ds => {
     if (!ds || !ds.rows || !ds.hdrs) return {};
