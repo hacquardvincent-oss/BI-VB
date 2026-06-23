@@ -8,7 +8,58 @@ const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const esc = s => (s || '').toString().replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 let DATA = { todo: [], familles: [] };
-let ALL = null, MODE = 'todo';
+let ALL = null, MODE = 'todo', SEASON = '', SEASONS = [];
+
+// ── Saisons du référentiel ──────────────────────────────────────────────────
+async function loadSeasons() {
+  try { const r = await fetch('/api/referentiel/seasons'); SEASONS = (await r.json()).seasons || []; } catch (e) { SEASONS = []; }
+  renderSeasonBar();
+}
+function renderSeasonBar() {
+  const bar = document.getElementById('seasonBar'); if (!bar) return;
+  const codes = SEASONS.filter(s => !s.bible).map(s => s.code);
+  const chip = (val, label, on) => `<button class="pb${on ? ' on' : ''}" data-season="${esc(val)}">${esc(label)}</button>`;
+  bar.innerHTML = chip('', '🌐 Tout', SEASON === '') + codes.map(c => {
+    const s = SEASONS.find(x => x.code === c);
+    return chip(c, `${c} (${fInt(s ? s.rows : 0)})`, SEASON === c);
+  }).join('') + `<button class="pb" id="addSeason" title="Ajouter une saison (E27, H27…)">➕ Nouvelle saison</button>`;
+  bar.querySelectorAll('[data-season]').forEach(b => b.addEventListener('click', () => setSeason(b.dataset.season)));
+  const add = document.getElementById('addSeason');
+  if (add) add.addEventListener('click', () => {
+    const code = (prompt('Code de la nouvelle saison (ex. E27, H27) :') || '').trim().toUpperCase();
+    if (!/^[EH]\d{2}$/.test(code)) { if (code) alert('Format attendu : une lettre E/H + 2 chiffres (ex. E27).'); return; }
+    if (!SEASONS.find(s => s.code === code)) SEASONS.push({ code, label: code, bible: false, rows: 0 });
+    setSeason(code); document.getElementById('seasonNote').textContent = `Saison ${code} prête — importe son fichier.`;
+  });
+  syncSeasonActions();
+}
+function setSeason(code) { SEASON = code; renderSeasonBar(); if (MODE === 'all') loadAll(); }
+function syncSeasonActions() {
+  const isBible = SEASON === '';
+  document.getElementById('seasonImportLbl').textContent = isBible ? 'la bible (globale)' : `la saison ${SEASON}`;
+  document.getElementById('seasonExport').href = isBible ? '/api/referentiel/export' : `/api/referentiel/season/${encodeURIComponent(SEASON)}/export`;
+  document.getElementById('seasonDelete').classList.toggle('hidden', isBible);
+}
+async function importSeason() {
+  const f = document.getElementById('seasonFile').files[0]; const note = document.getElementById('seasonNote');
+  if (!f) { note.textContent = '⚠ Choisis un fichier.'; return; }
+  const target = SEASON || 'N'; // '' → bible (ref-N) ; sinon slot ref-<code>
+  note.textContent = '⏳ Import…';
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch(`/api/ingest/ref/${encodeURIComponent(target)}`, { method: 'POST', body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { note.textContent = '⚠ ' + (j.error || 'Erreur import'); return; }
+    note.textContent = `✓ ${fInt(j.rows)} références importées dans ${SEASON || 'la bible'}.`;
+    document.getElementById('seasonFile').value = '';
+    await loadSeasons(); if (MODE === 'all') loadAll(); else load();
+  } catch (e) { note.textContent = '⚠ ' + e.message; }
+}
+async function deleteSeason() {
+  if (!SEASON || !confirm(`Supprimer le référentiel de la saison ${SEASON} ?`)) return;
+  try { await fetch(`/api/referentiel/season/${encodeURIComponent(SEASON)}`, { method: 'DELETE' }); } catch (e) { /* */ }
+  SEASON = ''; await loadSeasons(); if (MODE === 'all') loadAll();
+}
 
 // Sauvegarde inline d'une correction (commune aux deux modes).
 async function saveOverride(ref, val, note, tr) {
@@ -111,7 +162,7 @@ async function load() {
 }
 async function loadAll() {
   document.getElementById('list').innerHTML = '<div class="card"><div class="note">Chargement du référentiel…</div></div>';
-  try { const r = await fetch('/api/referentiel/all'); ALL = await r.json(); renderAll(); }
+  try { const r = await fetch('/api/referentiel/all?season=' + encodeURIComponent(SEASON || 'all')); ALL = await r.json(); renderAll(); }
   catch (e) { document.getElementById('list').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
 function setMode(m) {
@@ -134,5 +185,8 @@ const renderCurrent = () => (MODE === 'all' ? renderAll() : render());
   document.getElementById('search').addEventListener('input', renderCurrent);
   document.getElementById('modeTodo').addEventListener('click', () => setMode('todo'));
   document.getElementById('modeAll').addEventListener('click', () => setMode('all'));
+  document.getElementById('seasonImport').addEventListener('click', importSeason);
+  document.getElementById('seasonDelete').addEventListener('click', deleteSeason);
+  await loadSeasons();
   await load();
 })();

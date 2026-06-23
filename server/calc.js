@@ -194,7 +194,7 @@ const ADS_ALIASES = {
   convValue: ['valeur de conversion', 'valeur des conversions', 'all conv value', 'conv value', 'conversion value'],
 };
 const REF_ALIASES = {
-  ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe'],
+  ref_ext: ['ref. externe', 'ref externe', 'reference externe', 'ref.externe', 'rc'], // « RC » = réf. complète (implantation)
   famille: ['familles principales', 'famille principale', 'famille'],
   regroupement: ['regroupement'],
   saison: ['saison', 'season'],

@@ -111,8 +111,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const sessionsByZone = { n: zoneSess(gaSessN), n1: zoneSess(gaSessN1) };
 
   calc.ensureRefExtIdx(omsN.hdrs, omsN.map);
-  // Référentiel = fichiers importés + corrections manuelles en ligne (overrides, prioritaires).
-  const refMap = Object.assign(ref ? calc.buildRefMap(ref) : {}, require('./refoverrides').effectiveMap());
+  // Référentiel = tous les slots (bible + saisons) + corrections manuelles en ligne (prioritaires).
+  const refMap = require('./refoverrides').fullRefMap();
 
   // Périmètre « collection » (scope=collection) : zoom sur les produits de l'implantation
   // (E26 pour N, E25 pour N-1). N'affecte que les ventes OMS (le trafic GA reste global).
@@ -907,10 +907,9 @@ async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   // un saisonref sans colonne « Regroupement » ne casse plus le tableau famille).
   const saisonRefN = await loadDataset('saisonref', 'N'), saisonRefN1 = await loadDataset('saisonref', 'N1');
   const repoRef = (await loadDataset('ref', 'N')) || (await loadDataset('ref', 'N1'));
-  const ovMap = require('./refoverrides').effectiveMap();
-  const famMap = ds => { const m = ds ? calc.buildRefMap(ds) : {}; return Object.keys(m).length ? m : null; };
-  const refMap = Object.assign({}, famMap(saisonRefN) || famMap(repoRef) || {}, ovMap);
-  const refMapN1 = Object.assign({}, famMap(saisonRefN1) || famMap(repoRef) || refMap, ovMap);
+  // Référentiel = tous les slots (bible + saisons + saisonref) + corrections (prioritaires).
+  const refMap = require('./refoverrides').fullRefMap();
+  const refMapN1 = refMap;
   // Mapping Réf. externe → Saison (colonne « Saison » du référentiel) pour le filtre saison
   const refSaisonMap = ds => {
     if (!ds || !ds.rows || !ds.hdrs) return {};
@@ -1161,7 +1160,7 @@ router.get('/families', requireAuth, (req, res) => {
     const oms = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N');
     if (!oms || !oms.rows) return res.json({ empty: true, message: 'Aucun OMS chargé (page 🗄️ Données).' });
     const map = oms.map; calc.ensureRefExtIdx(oms.hdrs, map);
-    const refMap = Object.assign(calc.buildRefMap(store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N') || { rows: [], hdrs: [] }), require('./refoverrides').effectiveMap());
+    const refMap = require('./refoverrides').fullRefMap();
     const pai = map.pays;
     const byCountry = rows => { if (!country || pai === undefined) return rows; const c = country.toLowerCase().trim(); return rows.filter(r => (r[pai] || '').toString().trim().toLowerCase() === c); };
     const prep = (f, t) => { let rs = calc.filterRows(oms.rows, map, f, t, false); rs = calc.filterOutstore(rs, map); rs = country ? byCountry(rs) : calc.filterDim(rs, map, dim || 'global'); return rs; };

@@ -45,6 +45,18 @@
       <input id="search" class="dt" placeholder="🔎 Rechercher une réf, une désignation ou une famille" style="flex:1;min-width:180px">
     </div>
   </div>
+  <div class="card" id="seasonCard">
+    <h3 style="margin-bottom:4px">🗂️ Saisons du référentiel</h3>
+    <div class="note">Un référentiel par saison (E26, H25, H26… + nouvelles). Sélectionne une saison pour l'<b>importer</b> / l'<b>exporter</b> / l'<b>éditer</b>. « 🌐 Tout » = bible globale + toutes les saisons fusionnées (ce qui sert aux analyses).</div>
+    <div class="toolbar" id="seasonBar" style="margin-top:8px;gap:6px;flex-wrap:wrap"></div>
+    <div class="toolbar" id="seasonActions" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="file" id="seasonFile" class="dt" accept=".csv,.xlsx,.xls" style="max-width:220px">
+      <button class="btn blue" id="seasonImport">⬆ Importer dans <span id="seasonImportLbl">la bible</span></button>
+      <a class="btn" id="seasonExport" href="/api/referentiel/export">⬇ Exporter</a>
+      <button class="btn hidden" id="seasonDelete" title="Supprimer cette saison">🗑️ Supprimer la saison</button>
+      <span class="note" id="seasonNote" style="margin:0"></span>
+    </div>
+  </div>
   <div id="list"><div class="card"><div class="note">Chargement…</div></div></div>
 </div>
 

@@ -46,12 +46,37 @@ function effectiveMap() {
   for (const [k, v] of Object.entries(OV)) { const f = ((v.regroupement || '').trim()) || ((v.famille || '').trim()); if (f) m[k] = f; }
   return m;
 }
-// refMap effectif = base (fichiers ref/saisonref) + overrides (prioritaires).
-function currentRefMap() {
-  const ref = store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N');
-  const base = ref ? calc.buildRefMap(ref) : {};
-  return Object.assign({}, base, effectiveMap());
+// refMap effectif = TOUS les slots référentiel, par priorité croissante :
+//   1) saisons (implantations) → couvrent les produits hors bible (regroupement souvent + grossier) ;
+//   2) bible globale (ref-N/N1) → taxonomie FINE prioritaire (CABAS distinct de SACS) ;
+//   3) corrections manuelles (overrides) → priorité maximale.
+function fullRefMap() {
+  const out = {};
+  for (const d of store.listDatasets()) {
+    if ((d.source !== 'ref' && d.source !== 'saisonref') || d.period === 'N' || d.period === 'N1') continue;
+    const ds = store.getDataset(d.source, d.period); if (ds) Object.assign(out, calc.buildRefMap(ds)); // saisons
+  }
+  for (const p of ['N', 'N1']) { const ds = store.getDataset('ref', p); if (ds) Object.assign(out, calc.buildRefMap(ds)); } // bible
+  for (const p of ['N', 'N1']) { const ds = store.getDataset('saisonref', p); if (ds) Object.assign(out, calc.buildRefMap(ds)); }
+  Object.assign(out, effectiveMap()); // corrections
+  return out;
 }
+// refMap d'UNE saison précise (slot ref-<code>) + overrides.
+function seasonRefMap(code) {
+  const ds = store.getDataset('ref', code);
+  return Object.assign(ds ? calc.buildRefMap(ds) : {}, effectiveMap());
+}
+// Liste des saisons (slots ref-<code>) + la bible globale (ref-N / ref-N1).
+function seasonsList() {
+  const out = [];
+  for (const d of store.listDatasets()) {
+    if (d.source !== 'ref') continue;
+    const isBible = d.period === 'N' || d.period === 'N1';
+    out.push({ code: d.period, label: isBible ? 'Bible (globale)' : d.period, bible: isBible, rows: d.row_count || 0, updated: d.uploaded_at || null });
+  }
+  return out.sort((a, b) => (a.bible === b.bible ? a.code.localeCompare(b.code) : a.bible ? -1 : 1));
+}
+const currentRefMap = fullRefMap; // compat
 
 const router = express.Router();
 
@@ -104,22 +129,42 @@ function desByRefFromOms() {
   }
   return des;
 }
+// Saisons disponibles (+ bible) pour le sélecteur.
+router.get('/seasons', requireAuth, (req, res) => res.json({ seasons: seasonsList() }));
+
+// Export CSV d'UNE saison (ou de la bible) — round-trip Excel par saison.
+router.get('/season/:code/export', requireAuth, (req, res) => {
+  const code = (req.params.code || '').toUpperCase();
+  const ds = store.getDataset('ref', code);
+  const m = ds ? calc.buildRefMap(ds) : {};
+  const esc = s => { s = (s == null ? '' : String(s)); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = ['Ref. Externe;Regroupement'];
+  Object.keys(m).sort().forEach(r => lines.push(`${esc(r)};${esc(m[r])}`));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="referentiel_${code}.csv"`);
+  res.send('﻿' + lines.join('\r\n'));
+});
+
+router.delete('/season/:code', requireAuth, requireEdit, (req, res) => {
+  const code = (req.params.code || '').toUpperCase();
+  if (code === 'N' || code === 'N1') return res.status(400).json({ error: 'La bible globale ne se supprime pas ici.' });
+  store.delDataset('ref', code);
+  res.json({ ok: true });
+});
+
 router.get('/all', requireAuth, (req, res) => {
-  const ref = store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N');
-  const base = ref ? calc.buildRefMap(ref) : {};
-  const eff = Object.assign({}, base, effectiveMap());
+  const season = (req.query.season || '').toUpperCase();
+  const eff = season && season !== 'ALL' ? seasonRefMap(season) : fullRefMap();
   const des = desByRefFromOms();
   const entries = Object.entries(eff).map(([r, f]) => ({ ref: r, famille: f, des: des[r] || '', ov: !!OV[r] }))
     .sort((a, b) => a.famille.localeCompare(b.famille, 'fr') || a.ref.localeCompare(b.ref));
   const familles = [...new Set(Object.values(eff))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'));
-  res.json({ entries, familles, count: entries.length, baseCount: Object.keys(base).length, ovCount: Object.keys(OV).length });
+  res.json({ entries, familles, count: entries.length, baseCount: entries.filter(e => !e.ov).length, ovCount: Object.keys(OV).length, season: season || '' });
 });
 
 // Export CSV du référentiel fusionné (base fichiers + corrections) → round-trip Excel.
 router.get('/export', requireAuth, (req, res) => {
-  const ref = store.getDataset('ref', 'N') || store.getDataset('ref', 'N1') || store.getDataset('saisonref', 'N');
-  const base = ref ? calc.buildRefMap(ref) : {};
-  const eff = Object.assign({}, base, effectiveMap());
+  const eff = fullRefMap();
   const esc = s => { s = (s == null ? '' : String(s)); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = ['Ref. Externe;Regroupement;Source'];
   Object.keys(eff).sort().forEach(r => lines.push(`${esc(r)};${esc(eff[r])};${OV[r] ? 'correction' : 'fichier'}`));
@@ -137,4 +182,4 @@ router.put('/override', requireAuth, requireEdit, (req, res) => {
 
 router.delete('/override/:ref', requireAuth, requireEdit, (req, res) => { removeOv(req.params.ref); res.json({ ok: true }); });
 
-module.exports = { router, hydrate, effectiveMap, currentRefMap };
+module.exports = { router, hydrate, effectiveMap, fullRefMap, currentRefMap };

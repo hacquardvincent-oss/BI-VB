@@ -104,15 +104,25 @@ function repairFormulaCells(sheet) {
   }
 }
 
-// Choisit la feuille de DONNÉES d'un classeur : celle qui a le plus de lignes. Évite de tomber sur
-// une feuille de TCD/récap placée en premier (ex. export Y2 « Feuil1 » = pivot, « Page 1 » = données).
-function pickDataSheet(wb) {
-  let best = wb.SheetNames[0], bestRows = -1;
+// Choisit la feuille de DONNÉES d'un classeur multi-feuilles. On note chaque feuille par le nombre
+// de colonnes-clés du source reconnues dans sa ligne d'en-tête (autoMap), puis par le nb de lignes.
+// → tolère un TCD/récap en 1ère feuille ET une feuille « data » qui n'est pas la plus grosse
+// (ex. implantation : la feuille E-Store avec RC/Regroupement n'est pas la plus volumineuse).
+function pickDataSheet(wb, source) {
+  const aliasVals = source ? Object.values(aliasesFor(source) || {}).flat() : [];
+  const hdrRow = sh => {
+    if (!sh || !sh['!ref']) return [];
+    const rg = XLSX.utils.decode_range(sh['!ref']); const out = [];
+    for (let c = rg.s.c; c <= Math.min(rg.e.c, rg.s.c + 80); c++) { const cell = sh[XLSX.utils.encode_cell({ r: rg.s.r, c })]; out.push(cell ? calc.norm(cell.w != null ? cell.w : cell.v) : ''); }
+    return out;
+  };
+  let best = wb.SheetNames[0], bestScore = -2, bestRows = -1;
   for (const name of wb.SheetNames) {
-    const ref = wb.Sheets[name] && wb.Sheets[name]['!ref'];
-    const m = ref && ref.match(/(\d+)\s*$/);
-    const rows = m ? +m[1] : 0;
-    if (rows > bestRows) { bestRows = rows; best = name; }
+    const sh = wb.Sheets[name]; const refr = sh && sh['!ref'];
+    const m = refr && refr.match(/(\d+)\s*$/); const rows = m ? +m[1] : 0;
+    const hdr = hdrRow(sh);
+    const score = aliasVals.length ? hdr.filter(h => h && aliasVals.some(a => h === a || h.includes(a) || a.includes(h))).length : 0;
+    if (score > bestScore || (score === bestScore && rows > bestRows)) { bestScore = score; bestRows = rows; best = name; }
   }
   return best;
 }
@@ -130,7 +140,7 @@ function parseBuffer(buf, filename, source) {
     // On lit le classeur et on choisit la feuille de DONNÉES (la plus remplie) → tolère un TCD/récap
     // placé en 1ʳᵉ feuille (cas export Y2 « Feuil1 » pivot + « Page 1 » données).
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    const sheet = wb.Sheets[pickDataSheet(wb)];
+    const sheet = wb.Sheets[pickDataSheet(wb, source)];
     repairFormulaCells(sheet); // récupère les valeurs perdues (formule = constante numérique, valeur cachée NaN/absente)
     if (source === 'ga') {
       return calc.parseGAcsv(XLSX.utils.sheet_to_csv(sheet, { FS: ',' }));
@@ -293,8 +303,11 @@ router.post('/offre-listing', requireAuth, uploadSingle, (req, res) => {
 });
 
 router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
-  const { source, period } = req.params;
-  if (!SOURCES.includes(source) || !PERIODS.includes(period))
+  let { source, period } = req.params;
+  // Référentiel par SAISON : le code saison (E26, H25, H27…) sert de "period" pour le slot ref-<saison>.
+  const isSeason = (source === 'ref' || source === 'saisonref') && /^[EHeh]\d{2}$/.test(period);
+  if (isSeason) period = period.toUpperCase();
+  if (!SOURCES.includes(source) || !(PERIODS.includes(period) || isSeason))
     return res.status(400).json({ error: 'Source ou période invalide' });
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
   try {
