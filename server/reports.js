@@ -1207,11 +1207,24 @@ router.get('/families', requireAuth, async (req, res) => {
     const fams = [...new Set([...Object.keys(mN.fam), ...Object.keys(mN1b.fam)])];
     const familles = fams.map(f => {
       const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
-      // Regroupe les produits par NOM de modèle (tous les « Moon » ensemble), avec variantes au détail.
-      // Clé NORMALISÉE (minuscule, sans accents) → fusionne « MOON » (N-1) et « Moon » (N) sur le même modèle.
+      // Regroupe par MODÈLE = base de la RC (référence SANS le suffixe couleur : « 0PVE31-V40378-030 »
+      // → « 0PVE31-V40378 »). La RC est stable d'une saison à l'autre (≠ la désignation) → les ventes N
+      // ET N-1 d'un même modèle fusionnent correctement. Repli sur le nom de modèle si pas de RC.
       const grp = {};
       const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const addP = (prods, key) => { for (const [des, p] of Object.entries(prods || {})) { const disp = modelName(des); const nk = norm(disp); const g = grp[nk] || (grp[nk] = { name: disp, ca: 0, caN1: 0, variants: {} }); g[key] += p.ca; const v = g.variants[des] || (g.variants[des] = { des, ca: 0, caN1: 0 }); v[key] += p.ca; } };
+      const refBase = ref => { ref = (ref || '').trim(); const i = ref.lastIndexOf('-'); return i > 0 ? ref.slice(0, i) : ref; };
+      const stripColor = des => (des || '').split(/\s+[-–]\s+/)[0].trim();
+      const addP = (prods, key) => {
+        for (const p of Object.values(prods || {})) {
+          const base = (p.ref && refBase(p.ref)) || ('d:' + norm(modelName(p.des)));
+          const g = grp[base] || (grp[base] = { name: stripColor(p.des) || '(?)', _best: -1, ca: 0, caN1: 0, variants: {} });
+          g[key] += p.ca;
+          if (p.ca > g._best) { g._best = p.ca; const nm = stripColor(p.des); if (nm) g.name = nm; }
+          const vk = p.ref || p.des;
+          const v = g.variants[vk] || (g.variants[vk] = { des: p.des, ca: 0, caN1: 0 });
+          v[key] += p.ca;
+        }
+      };
       addP(a.prods, 'ca'); addP(b.prods, 'caN1');
       const names = Object.values(grp).map(g => ({ name: g.name, ca: Math.round(g.ca), caN1: Math.round(g.caN1), variants: Object.values(g.variants).map(v => ({ des: v.des, ca: Math.round(v.ca), caN1: Math.round(v.caN1) })).sort((x, y) => y.ca - x.ca).slice(0, 30) }))
         .sort((x, y) => y.ca - x.ca).slice(0, 80);

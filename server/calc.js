@@ -1347,8 +1347,12 @@ function calcFamilleMarket(rows, map, refMap) {
     const e = fam[f] || (fam[f] = { famille: f, ca: 0, qte: 0, prods: {} });
     e.ca += ca; e.qte += q; total += ca;
     const name = (di !== undefined ? (r[di] || '').trim() : '') || '(?)';
-    const p = e.prods[name] || (e.prods[name] = { name, ca: 0, qte: 0 });
-    p.ca += ca; p.qte += q;
+    const ref = (ri !== undefined ? (r[ri] || '').trim() : '');
+    // Produits indexés par RÉFÉRENCE (RC) et non par désignation : la RC est STABLE entre saisons
+    // (la désignation, elle, change de libellé) → permet de retrouver les ventes N-1 d'un même modèle.
+    const key = ref || name;
+    const p = e.prods[key] || (e.prods[key] = { ref, des: name, ca: 0, qte: 0 });
+    p.ca += ca; p.qte += q; if ((!p.des || p.des === '(?)') && name) p.des = name;
   });
   return { fam, total };
 }
