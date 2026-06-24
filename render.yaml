@@ -1,10 +1,12 @@
-# Blueprint Render — BiDash V2 (mode sans base de données)
+# Blueprint Render — BiDash V2
 # Déploiement : "New +" → "Blueprint" sur Render, sélectionner le repo.
-# Définir ADMIN_PASSWORD dans le dashboard Render (non versionné).
+# Les secrets (sync: false) se saisissent dans le dashboard Render (jamais versionnés).
 #
-# NB : pas de base PostgreSQL ici (le free tier Render limite à 1 base gratuite).
-# Les données déposées vivent en mémoire le temps de la session serveur ; archiver via l'export PDF.
-# Pour réactiver la persistance plus tard : ajouter un bloc "databases:" + la variable DATABASE_URL.
+# PERSISTANCE : DATABASE_URL (Postgres/Neon) est déclarée ci-dessous en sync:false.
+#   → saisir la connection string Neon UNE fois dans le dashboard Render.
+#   ⚠️ La déclarer ICI est indispensable : une variable ajoutée à la main mais ABSENTE du
+#      Blueprint est EFFACÉE à chaque resynchronisation → données perdues (mode mémoire).
+#   Sans valeur = mode mémoire (données perdues à la veille du serveur).
 
 services:
   - type: web
@@ -22,6 +24,10 @@ services:
         value: Vincent
       - key: ADMIN_PASSWORD
         sync: false          # à saisir manuellement dans le dashboard Render
+      # Persistance Postgres (Neon) — saisir la connection string dans le dashboard.
+      # Indispensable pour que les données survivent aux mises en veille / redéploiements.
+      - key: DATABASE_URL
+        sync: false
       # Connecteur GA4 (optionnel, cf. ADR-007) :
       - key: GA4_PROPERTY_ID
         value: "358326945"
