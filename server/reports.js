@@ -20,6 +20,40 @@ function modelName(des) {
   return base.trim().slice(0, 24) || '(?)';
 }
 
+// Regroupement SÉMANTIQUE d'un produit (modèle commercial) depuis la désignation, indépendant de la
+// LANGUE et du libellé exact → fusionne correctement N et N-1. Deux logiques :
+//   • NOM PROPRE présent (Moon, Daily, Mathilde…) → on regroupe par ce nom, toutes tailles/matières
+//     confondues (cas SACS : « Moon N vs N-1 »).
+//   • sinon (désignation purement descriptive) → TYPE + TAILLE + MATIÈRE (+ zippé) (cas CABAS :
+//     « Cabas M en Toile », « Cabas L en Lin »). Traductions EN→FR (canvas=toile, linen=lin,
+//     leather=cuir, tote=cabas, bag=sac, large=L, medium=M, small=S…).
+const PG_TYPE = { sac: 'sac', sacs: 'sac', cabas: 'cabas', tote: 'cabas', pochette: 'pochette', panier: 'panier', sacoche: 'sacoche', robe: 'robe', jupe: 'jupe', pantalon: 'pantalon', jean: 'jean', jeans: 'jean', chemise: 'chemise', blouse: 'blouse', pull: 'pull', gilet: 'gilet', cardigan: 'cardigan', veste: 'veste', manteau: 'manteau', top: 'top', tshirt: 'tshirt', foulard: 'foulard', echarpe: 'echarpe', ceinture: 'ceinture', short: 'short', combinaison: 'combinaison', dress: 'robe', skirt: 'jupe', shirt: 'chemise', coat: 'manteau', jacket: 'veste', scarf: 'foulard', belt: 'ceinture' };
+const PG_MAT = { lin: 'lin', linen: 'lin', toile: 'toile', canvas: 'toile', cuir: 'cuir', leather: 'cuir', raphia: 'raphia', raffia: 'raphia', velours: 'velours', velvet: 'velours', nubuck: 'nubuck', bambou: 'bambou', bamboo: 'bambou', tresse: 'tressé', paille: 'paille', jonc: 'jonc', daim: 'daim', suede: 'daim', soie: 'soie', silk: 'soie', coton: 'coton', cotton: 'coton', laine: 'laine', wool: 'laine', maille: 'maille', jersey: 'jersey', satin: 'satin', denim: 'denim', wax: 'wax' };
+const PG_SIZE = { xs: 'XS', s: 'S', m: 'M', l: 'L', xl: 'XL', mini: 'XS', petit: 'S', petite: 'S', small: 'S', moyen: 'M', moyenne: 'M', medium: 'M', grand: 'L', grande: 'L', large: 'L', maxi: 'XL' };
+const PG_NOISE = new Set(['en', 'de', 'du', 'la', 'le', 'les', 'des', 'et', 'a', 'au', 'aux', 'avec', 'sans', 'pour', 'bag', 'my', 'mon', 'ma', 'the', 'sac', 'cabas', 'tote', 'zippe', 'zipped', 'zippee', 'rabat', 'main', 'dos', 'bandouliere', 'new', 'mini']);
+const pgCap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+function productGroup(famille, des) {
+  const base = (des || '').split(/\s+[-–]\s+/)[0]; // retire la couleur
+  const toks = base.split(/[^A-Za-zÀ-ÿ0-9]+/).map(t => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')).filter(Boolean);
+  let type = '', material = '', size = '', zipped = false; const names = [];
+  for (const t of toks) {
+    if (t === 'tote') { type = 'cabas'; continue; }
+    if (t === 'bag') { type = type || 'sac'; continue; }
+    if (PG_TYPE[t]) { type = type || PG_TYPE[t]; continue; }
+    if (PG_MAT[t]) { material = material || PG_MAT[t]; continue; }
+    if (PG_SIZE[t]) { size = size || PG_SIZE[t]; continue; }
+    if (t === 'zippe' || t === 'zipped' || t === 'zippee') { zipped = true; continue; }
+    if (PG_NOISE.has(t) || t.length < 3) continue;
+    names.push(pgCap(t)); // mot distinctif = nom propre de modèle
+  }
+  if (names.length) return { key: 'n:' + names.join(' ').toLowerCase(), label: names.join(' ') };
+  const fam = (famille || '').toLowerCase();
+  const t = type || (fam.includes('cabas') ? 'cabas' : 'sac');
+  const key = `t:${t}|${size}|${material}|${zipped ? 'z' : ''}`;
+  const label = `${pgCap(t)}${size ? ' ' + size : ''}${zipped ? ' Zippé' : ''}${material ? ' en ' + pgCap(material) : ''}`.trim();
+  return { key, label: label || base.trim() || '(?)' };
+}
+
 async function loadDataset(source, period) {
   const d = store.getDataset(source, period);
   if (!d) return null;
@@ -1207,27 +1241,24 @@ router.get('/families', requireAuth, async (req, res) => {
     const fams = [...new Set([...Object.keys(mN.fam), ...Object.keys(mN1b.fam)])];
     const familles = fams.map(f => {
       const a = mN.fam[f] || { ca: 0, qte: 0, prods: {} }, b = mN1b.fam[f] || { ca: 0, qte: 0, prods: {} };
-      // Regroupe par MODÈLE = base de la RC (référence SANS le suffixe couleur : « 0PVE31-V40378-030 »
-      // → « 0PVE31-V40378 »). La RC est stable d'une saison à l'autre (≠ la désignation) → les ventes N
-      // ET N-1 d'un même modèle fusionnent correctement. Repli sur le nom de modèle si pas de RC.
+      // Regroupe par MODÈLE COMMERCIAL via parsing SÉMANTIQUE (productGroup) : indépendant de la langue
+      // et du libellé → un même modèle fusionne N et N-1. SACS → par nom (Moon, Daily…) ; CABAS → par
+      // type+taille+matière (Cabas M en Toile = Canvas M Cabas Tote). On GARDE les modèles vendus en N-1
+      // mais plus en N (ca=0) → triés en bas pour repérer les disparitions.
       const grp = {};
-      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const refBase = ref => { ref = (ref || '').trim(); const i = ref.lastIndexOf('-'); return i > 0 ? ref.slice(0, i) : ref; };
-      const stripColor = des => (des || '').split(/\s+[-–]\s+/)[0].trim();
       const addP = (prods, key) => {
         for (const p of Object.values(prods || {})) {
-          const base = (p.ref && refBase(p.ref)) || ('d:' + norm(modelName(p.des)));
-          const g = grp[base] || (grp[base] = { name: stripColor(p.des) || '(?)', _best: -1, ca: 0, caN1: 0, variants: {} });
+          const g0 = productGroup(f, p.des);
+          const g = grp[g0.key] || (grp[g0.key] = { name: g0.label, ca: 0, caN1: 0, variants: {} });
           g[key] += p.ca;
-          if (p.ca > g._best) { g._best = p.ca; const nm = stripColor(p.des); if (nm) g.name = nm; }
           const vk = p.ref || p.des;
           const v = g.variants[vk] || (g.variants[vk] = { des: p.des, ca: 0, caN1: 0 });
           v[key] += p.ca;
         }
       };
       addP(a.prods, 'ca'); addP(b.prods, 'caN1');
-      const names = Object.values(grp).map(g => ({ name: g.name, ca: Math.round(g.ca), caN1: Math.round(g.caN1), variants: Object.values(g.variants).map(v => ({ des: v.des, ca: Math.round(v.ca), caN1: Math.round(v.caN1) })).sort((x, y) => y.ca - x.ca).slice(0, 30) }))
-        .sort((x, y) => y.ca - x.ca).slice(0, 80);
+      const names = Object.values(grp).map(g => ({ name: g.name, ca: Math.round(g.ca), caN1: Math.round(g.caN1), variants: Object.values(g.variants).map(v => ({ des: v.des, ca: Math.round(v.ca), caN1: Math.round(v.caN1) })).sort((x, y) => (y.ca - x.ca) || (y.caN1 - x.caN1)).slice(0, 40) }))
+        .sort((x, y) => (y.ca - x.ca) || (y.caN1 - x.caN1)).slice(0, 120);
       return { famille: f, ca: Math.round(a.ca), caN1: Math.round(b.ca), qte: a.qte, share: mN.total ? a.ca / mN.total : 0, shareN1: mN1b.total ? b.ca / mN1b.total : 0, names };
     }).sort((x, y) => y.ca - x.ca);
     // Pays disponibles (hors mkt, hors France) pour le sélecteur International.

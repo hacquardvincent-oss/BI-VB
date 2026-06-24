@@ -59,11 +59,12 @@ function wireDrill(id, d) {
   document.querySelectorAll(`tr.famrow[data-blk="${id}"]`).forEach(tr => tr.addEventListener('click', () => {
     const i = +tr.dataset.i, det = document.getElementById(`fd_${id}_${i}`), cell = det.firstElementChild;
     if (det.style.display !== 'none') { det.style.display = 'none'; return; }
-    const f = fam[i], names = (f.names || []).filter(n => n.ca > 0);
-    cell.innerHTML = `<div class="note" style="margin:0 0 4px"><b>${esc(f.famille)}</b> — ${names.length} modèles (clic = références)</div>
+    const f = fam[i], names = (f.names || []).filter(n => n.ca > 0 || n.caN1 > 0);
+    const nGone = names.filter(n => n.ca === 0 && n.caN1 > 0).length;
+    cell.innerHTML = `<div class="note" style="margin:0 0 4px"><b>${esc(f.famille)}</b> — ${names.length} modèles${nGone ? ` · <span style="color:var(--r)">${nGone} vendus en N-1 mais plus en N</span>` : ''} (clic = références)</div>
       <table style="font-size:11px;width:100%"><thead><tr><th>Modèle</th><th style="text-align:right">CA N</th><th style="text-align:right">CA N-1</th><th style="text-align:right">vs N-1</th></tr></thead>
-      <tbody>${names.map((n, j) => `<tr class="namerow" data-k="${id}_${i}_${j}" style="cursor:pointer"><td>▸ <b>${esc(n.name)}</b></td><td style="text-align:right;white-space:nowrap">${fEur(n.ca)}</td><td style="text-align:right;white-space:nowrap;color:var(--t2)">${d.hasN1 ? fEur(n.caN1) : '—'}</td><td style="text-align:right">${d.hasN1 ? delta(n.ca, n.caN1) : '—'}</td></tr>
-        <tr class="namedetail" id="nd_${id}_${i}_${j}" style="display:none"><td colspan="4" style="padding:2px 0 6px 16px">${(n.variants || []).map(v => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--t2)"><span>${esc((v.des || '').slice(0, 42))}</span><span style="white-space:nowrap">${fEur(v.ca)}${d.hasN1 ? ` · N-1 ${fEur(v.caN1)} ${delta(v.ca, v.caN1)}` : ''}</span></div>`).join('')}</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${names.map((n, j) => { const gone = n.ca === 0 && n.caN1 > 0; return `<tr class="namerow" data-k="${id}_${i}_${j}" style="cursor:pointer${gone ? ';opacity:.6' : ''}"><td>▸ <b>${esc(n.name)}</b>${gone ? ' <span style="font-size:9px;color:var(--r);font-weight:700">DISPARU N</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${fEur(n.ca)}</td><td style="text-align:right;white-space:nowrap;color:var(--t2)">${d.hasN1 ? fEur(n.caN1) : '—'}</td><td style="text-align:right">${d.hasN1 ? delta(n.ca, n.caN1) : '—'}</td></tr>
+        <tr class="namedetail" id="nd_${id}_${i}_${j}" style="display:none"><td colspan="4" style="padding:2px 0 6px 16px">${(n.variants || []).map(v => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--t2)"><span>${esc((v.des || '').slice(0, 42))}</span><span style="white-space:nowrap">${fEur(v.ca)}${d.hasN1 ? ` · N-1 ${fEur(v.caN1)} ${delta(v.ca, v.caN1)}` : ''}</span></div>`).join('')}</td></tr>`; }).join('')}</tbody></table>`;
     det.style.display = '';
     cell.querySelectorAll('.namerow').forEach(nr => nr.addEventListener('click', () => { const nd = document.getElementById('nd_' + nr.dataset.k); if (nd) nd.style.display = nd.style.display === 'none' ? '' : 'none'; }));
   }));
