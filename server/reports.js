@@ -142,7 +142,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // = sessions GA ÷ taux. Saisie manuelle (0-100 ou 0-1). Recale le taux de transfo.
   const consentRate = v => { const n = parseFloat((v || '').toString().replace(',', '.')); if (!n || n <= 0) return null; return n > 1 ? n / 100 : n; };
   const rateN = consentRate(consentN), rateN1 = consentRate(consentN1);
-  const sessionsRawN = calc.getSessionsForPeriod(totSrcN, from, to, isAll);
+  let sessionsRawN = calc.getSessionsForPeriod(totSrcN, from, to, isAll);
+  // Repli : si `gatot` (KPI global) ne couvre pas la période mais `gasess` oui (import partiel,
+  // jeu `gatot` plus court) → on bascule sur gasess plutôt que d'afficher 0 session.
+  if ((sessionsRawN == null || sessionsRawN === 0) && sessSrcN && sessSrcN !== totSrcN) {
+    const alt = calc.getSessionsForPeriod(sessSrcN, from, to, isAll); if (alt) sessionsRawN = alt;
+  }
   const sessionsN = (sessionsRawN != null && rateN) ? Math.round(sessionsRawN / rateN) : sessionsRawN;
   const kpiEShopN = calc.calcKPIEShop(rowsN, omsN.map, sessionsN);
   const caN = calc.calcOMS(rowsN, omsN.map);
@@ -171,6 +176,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   let sessionsRawN1 = null;
   if (rowsN1 && rowsN1.length) {
     sessionsRawN1 = calc.getSessionsForPeriod(totSrcN1, cf, ct, isAll);
+    if ((sessionsRawN1 == null || sessionsRawN1 === 0) && sessSrcN1 && sessSrcN1 !== totSrcN1) {
+      const alt = calc.getSessionsForPeriod(sessSrcN1, cf, ct, isAll); if (alt) sessionsRawN1 = alt;
+    }
     const sessionsN1 = (sessionsRawN1 != null && rateN1) ? Math.round(sessionsRawN1 / rateN1) : sessionsRawN1;
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);
@@ -759,6 +767,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     meta: {
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable, hourMax: tMax,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
+      // Pourquoi pas de N-1 ? Pour lever l'ambiguïté côté UI (comparaison coupée vs aucune vente N-1 en base).
+      n1Reason: kpiEShopN1 ? '' : (noN1 ? 'compare-off' : (isAll ? 'tout' : 'no-oms-n1')),
+      // Sessions GA absentes sur la période N (le KPI transfo en dépend) → signal pour l'UI.
+      sessReason: (sessionsRawN == null || sessionsRawN === 0) ? (gaN || gaSessN || gaTotN ? 'ga-hors-periode' : 'ga-absent') : '',
       hasGA: !!gaN, hasY2: !!y2N, hasRef: !!ref, hasRet: !!retN, hasN1: !!kpiEShopN1,
       hasImpl: !!implN, hasImplN1: !!implN1, hasAds: !!adsN, scope: scopeColl ? 'collection' : 'all',
       omsDataMin: omsN.dateMin, omsDataMax: omsN.dateMax, rowsN: rowsN.length,

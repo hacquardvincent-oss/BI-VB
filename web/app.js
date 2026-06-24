@@ -938,9 +938,16 @@ async function loadReport() {
   }
   // Pré-remplit les calendriers (1ère fois) avec la plage du rapport
   fillDateInputs(rep.meta);
+  const n1Txt = rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})`
+    : ({ 'compare-off': ' · N seule (comparaison désactivée — bouton « N vs N-1 »)',
+        'no-oms-n1': ` · <span style="color:var(--r)">pas de N-1 : aucune commande en base sur ${rep.meta.cf} → ${rep.meta.ct} (élargis l'OMS sur la page Données)</span>`,
+        'tout': ' · pas de N-1 (vue « Tout »)' }[rep.meta.n1Reason] || ' · pas de N-1');
+  const sessTxt = rep.meta.sessReason === 'ga-hors-periode'
+    ? ` · <span style="color:var(--r)">⚠ GA sans données sur cette période (sessions/transfo indispo) → réimporte GA4 sur la plage</span>`
+    : (rep.meta.sessReason === 'ga-absent' ? ` · <span style="color:var(--a)">⚠ GA non chargé</span>` : '');
   document.getElementById('metaNote').innerHTML =
     `<b>${dimLabelOf(rep.meta.dim)}</b> · Période ${rep.meta.from} → ${rep.meta.to}`
-    + (rep.meta.hasN1 ? ` · vs N-1 (${rep.meta.cf} → ${rep.meta.ct})` : ' · pas de N-1')
+    + n1Txt + sessTxt
     + (rep.meta.gaDimUnavailable ? ` · <span style="color:var(--a)">⚠ GA par pays indisponible → re-« Rafraîchir GA4 »</span>` : '');
   LAST_REP = rep;
   // Démo : sur la vue « Tout » (DATES nul = plage complète), mémorise la dernière date couverte
