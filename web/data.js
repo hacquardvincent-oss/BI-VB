@@ -150,7 +150,9 @@ function renderHeatmap(days, from, to) {
     <div class="note" style="font-size:10px;margin-top:4px">▢ gris bordé = jour manquant · ▣ vert = jour avec ventes (foncé = volume).</div></div>`;
 }
 // Plages de jours MANQUANTS (consécutifs regroupés) — actionnable pour savoir quoi recharger.
-function renderMissingRanges(days, from, to) {
+// `src` (clé du jeu) → bouton « ↻ Charger » 1 clic via le connecteur correspondant.
+const MISS_CONN = { oms: 'wshop', ret: 'ret', ga: 'ga4', ads: 'googleads', y2: 'y2', metaads: 'meta' };
+function renderMissingRanges(days, from, to, src) {
   const miss = []; let runStart = null, prev = null;
   for (let cur = new Date(from + 'T00:00:00Z'), end = new Date(to + 'T00:00:00Z'); cur <= end; cur = addDays(cur, 1)) {
     const iso = isoOf(cur);
@@ -160,7 +162,10 @@ function renderMissingRanges(days, from, to) {
   if (runStart) miss.push([runStart, prev]);
   if (!miss.length) return '<div class="note" style="color:var(--g);margin-top:4px">✅ Aucun jour manquant sur la plage chargée.</div>';
   const fmt = r => r[0] === r[1] ? frd(r[0]) : `${frd(r[0])} → ${frd(r[1])}`;
-  return `<div class="note" style="margin-top:4px"><b style="color:#C9A24B">⚠ Jours manquants (${miss.length} plage${miss.length > 1 ? 's' : ''})</b> : ${miss.map(fmt).join(' · ')}</div>`;
+  const conn = MISS_CONN[src];
+  const btn = r => conn ? `<button class="btn miss-load" data-conn="${conn}" data-from="${r[0]}" data-to="${r[1]}" style="padding:1px 8px;font-size:10px;margin-left:5px">↻ Charger</button>` : '';
+  const list = miss.map(r => `<span style="white-space:nowrap">${fmt(r)}${btn(r)}</span>`).join(' · ');
+  return `<div class="note" style="margin-top:4px"><b style="color:#C9A24B">⚠ Jours manquants (${miss.length} plage${miss.length > 1 ? 's' : ''})</b> : ${list}${conn ? '' : ' <span style="color:var(--t3)">(import par fichier)</span>'}</div>`;
 }
 async function loadDayDetail(src, el) {
   el.innerHTML = '<div class="note">Chargement du calendrier…</div>';
@@ -168,7 +173,13 @@ async function loadDayDetail(src, el) {
     const days = await (await fetch('/api/ingest/coverage-days?source=' + encodeURIComponent(src))).json();
     const keys = Object.keys(days).sort();
     if (!keys.length) { el.innerHTML = '<div class="note">Pas de dates exploitables.</div>'; return; }
-    el.innerHTML = renderHeatmap(days, keys[0], keys[keys.length - 1]) + renderMissingRanges(days, keys[0], keys[keys.length - 1]);
+    el.innerHTML = renderHeatmap(days, keys[0], keys[keys.length - 1]) + renderMissingRanges(days, keys[0], keys[keys.length - 1], src);
+    el.querySelectorAll('.miss-load').forEach(b => b.addEventListener('click', async () => {
+      if (!window.dataBarLoadRange) { alert('Chargeur indisponible.'); return; }
+      b.disabled = true; b.textContent = '⏳ chargement… (voir progression à gauche)';
+      try { await window.dataBarLoadRange(b.dataset.conn, b.dataset.from, b.dataset.to); } catch (e) { /* géré dans le databar */ }
+      refreshAll(); loadDayDetail(src, el); // rafraîchit l'état + la heatmap après import
+    }));
   } catch (e) { el.innerHTML = '<div class="note">Détail indisponible.</div>'; }
 }
 

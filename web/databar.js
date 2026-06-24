@@ -231,4 +231,20 @@
     showLoaded();
   }
   window.initDataBar = initDataBar;
+
+  // Chargement direct d'UNE plage pour UN connecteur (1 clic depuis l'alerte « jours manquants »).
+  // Cale les champs de date de la page sur la plage puis lance l'import du connecteur concerné.
+  async function dataBarLoadRange(conn, from, to) {
+    const df = document.getElementById('dfrom'), dt = document.getElementById('dto');
+    if (df) df.value = from; if (dt) dt.value = to;
+    try {
+      if (conn === 'wshop') { note(`⏳ Import OMS sur ${frd(from)} → ${frd(to)}…`); const ok = await loadWshopRange(from, to); if (ok) { note('✓ OMS chargé sur la plage manquante.'); afterLoad(); } }
+      else if (conn === 'ret') await importMerch('returns', 'Retours');
+      else if (conn === 'ga4') await importDated('ga4', 'GA4');
+      else if (conn === 'googleads') await importDated('googleads', 'Google Ads');
+      else if (conn === 'meta') await importDated('meta', 'Meta Ads');
+      else if (conn === 'y2') await importDated('y2', 'Y2 Marketplace');
+    } catch (e) { note('⚠ ' + esc(e.message)); }
+  }
+  window.dataBarLoadRange = dataBarLoadRange;
 })();
