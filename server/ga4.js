@@ -458,15 +458,23 @@ router.get('/ping', requireAuth, async (req, res) => {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
+// État de job en arrière-plan (l'import GA4 = ~26 appels API → trop long pour une réponse HTTP
+// synchrone sur une grande période → timeout proxy 502). On répond 202 et on poursuit en fond.
+let _job = null; // { running, startedAt, phase, result, error, doneAt }
+function jobState() { return _job ? Object.assign({}, _job) : { running: false }; }
+
 router.post('/refresh', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (clé ou GA4_PROPERTY_ID manquants côté serveur)' });
-  try {
-    const r = await refresh(req.query);
-    res.json({ ok: true, ...r });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  if (_job && _job.running) return res.status(202).json({ started: true, already: true });
+  _job = { running: true, startedAt: Date.now(), phase: 'Import GA4 en cours…' };
+  res.status(202).json({ started: true }); // réponse immédiate → plus de timeout proxy
+  const q = req.query;
+  (async () => {
+    try { const r = await refresh(q); _job = { running: false, result: r, doneAt: Date.now() }; }
+    catch (e) { console.error('[ga4] refresh KO:', e.message); _job = { running: false, error: e.message, doneAt: Date.now() }; }
+  })();
 });
+router.get('/job', requireAuth, (req, res) => res.json(jobState()));
 
 router.post('/saison-items', requireAuth, async (req, res) => {
   if (!isConfigured()) return res.status(400).json({ error: 'GA4 non configuré (clé ou GA4_PROPERTY_ID manquants côté serveur)' });

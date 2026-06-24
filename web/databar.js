@@ -143,6 +143,39 @@
     });
   }
   const SRC_OF = { ga4: 'ga', googleads: 'ads', meta: 'metaads', y2: 'y2' };
+  // Poll d'un import lancé en arrière-plan (route GET /api/<conn>/job).
+  function pollConnJob(conn, label) {
+    const start = Date.now();
+    return new Promise(resolve => {
+      const tick = async () => {
+        try {
+          const r = await fetch(`/api/${conn}/job`);
+          if (r.ok) {
+            const j = await r.json();
+            if (!j.running) {
+              if (j.error) note(`⚠ ${esc(label)} : ${esc(j.error)}`);
+              else { const w = (j.result && j.result.warnings && j.result.warnings.length) ? ` (${j.result.warnings.length} jeu(x) secondaire(s) ignoré(s))` : ''; note(`✓ ${esc(label)} importé${w}.`); afterLoad(); }
+              return resolve();
+            }
+            const mins = Math.floor((Date.now() - start) / 60000);
+            note(`⏳ ${esc(label)} en cours${mins ? ' (' + mins + ' min)' : ''}…`);
+          }
+        } catch (e) { /* transitoire */ }
+        if (Date.now() - start > 8 * 60000) { note(`⏳ ${esc(label)} toujours en cours côté serveur — reviens dans 1-2 min puis « Appliquer ».`); afterLoad(); return resolve(); }
+        setTimeout(tick, 2500);
+      };
+      tick();
+    });
+  }
+  // Diagnostic d'un connecteur (route GET /ping) → message précis (token, propriété, egress…).
+  async function pingDiag(conn) {
+    try {
+      const r = await fetch(`/api/${conn}/ping`);
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) return 'le test de connexion réussit → réessaie l\'import (souvent un timeout passager) ou réduis la période';
+      return 'diagnostic : ' + (j.error || `HTTP ${r.status}`);
+    } catch (e) { return ''; }
+  }
   async function importDated(conn, label) {
     const q = periodQuery(); if (!q) return;
     const p = periods(), n = p.n, src = SRC_OF[conn];
@@ -152,10 +185,17 @@
     note(`⏳ Import ${esc(label)}…`);
     try {
       const r = await fetch(`/api/${conn}/refresh?` + q, { method: 'POST' });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { note('⚠ ' + esc(j.error || ('Erreur ' + label))); return; }
+      if (r.status === 202) { note(`⏳ ${esc(label)} lancé en arrière-plan…`); return pollConnJob(conn, label); } // import long → fond
+      let j = {}, txt = '';
+      try { j = await r.json(); } catch (e) { try { txt = await r.text(); } catch (_) { /* */ } }
+      if (!r.ok) {
+        const base = j.error || (txt ? txt.slice(0, 140) : `HTTP ${r.status}${r.statusText ? ' ' + r.statusText : ''} (réponse non lisible — souvent un timeout serveur)`);
+        const diag = await pingDiag(conn);
+        note(`⚠ ${esc(label)} : ${esc(base)}${diag ? ' · ' + esc(diag) : ''}`);
+        return;
+      }
       note(`✓ ${esc(label)} importé.`); afterLoad();
-    } catch (e) { note('⚠ ' + esc(e.message)); }
+    } catch (e) { note('⚠ ' + esc(e.message) + ' (réseau/timeout) — réessaie ou réduis la période'); }
   }
   // Import de FICHIER (manuel) → base continue (slot N) : pas de notion N/N-1 à l'import, la plage
   // du fichier se FUSIONNE (remplace seulement ses propres dates). Un re-import du même mois = pas de
