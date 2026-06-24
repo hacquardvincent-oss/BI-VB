@@ -11,6 +11,18 @@ const db = require('./db');
 const zlib = require('zlib');
 const STORE = new Map(); // clé `${source}-${period}` → dataset
 
+// ── Barrière d'hydratation ────────────────────────────────────────────────
+// Le port s'ouvre AVANT la fin de l'hydratation (cf. index.js, pour la détection
+// rapide par l'hébergeur). Pendant ce laps, la RAM est vide → un report lancé tout
+// de suite verrait « OMS manquant » alors que les données sont en base. `whenReady()`
+// laisse les routes data ATTENDRE la fin de l'hydratation (résolu immédiatement en
+// mode mémoire, ou une fois `hydrate()` terminé). Toujours résolu (jamais rejeté).
+let _resolveReady;
+const _ready = new Promise(r => { _resolveReady = r; });
+let _hydrated = false;
+function whenReady() { return _ready; }
+function isReady() { return _hydrated; }
+
 // Compression du payload pour la BASE uniquement (la RAM garde l'objet vif décompressé).
 // Les jeux tabulaires (OMS/Y2/GA) compressent ~7-10× → tient largement dans un Neon gratuit
 // (0,5 Go) et réduit d'autant l'historique/WAL généré à chaque ré-import.
@@ -30,16 +42,21 @@ function unpackFromDb(raw) {
 // Hydratation au démarrage (no-op sans base). Charge les jeux UN PAR UN (et non tout le résultat
 // compressé d'un coup) → pic mémoire réduit au boot (instance contrainte ~512 Mo).
 async function hydrate() {
-  if (!db.enabled) return 0;
-  const { rows: keys } = await db.query('SELECT source, period FROM datasets');
+  if (!db.enabled) { _hydrated = true; _resolveReady(); return 0; }
   let n = 0;
-  for (const k of keys) {
-    try {
-      const { rows } = await db.query('SELECT data FROM datasets WHERE source = $1 AND period = $2', [k.source, k.period]);
-      if (rows.length) { STORE.set(`${k.source}-${k.period}`, unpackFromDb(rows[0].data)); n++; }
-    } catch (e) { console.error(`[store] hydrate ${k.source}-${k.period} KO:`, e.message); }
+  try {
+    const { rows: keys } = await db.query('SELECT source, period FROM datasets');
+    for (const k of keys) {
+      try {
+        const { rows } = await db.query('SELECT data FROM datasets WHERE source = $1 AND period = $2', [k.source, k.period]);
+        if (rows.length) { STORE.set(`${k.source}-${k.period}`, unpackFromDb(rows[0].data)); n++; }
+      } catch (e) { console.error(`[store] hydrate ${k.source}-${k.period} KO:`, e.message); }
+    }
+    if (n) console.log(`[store] ${n} jeu(x) de données restauré(s) depuis la base.`);
+  } finally {
+    // Toujours débloquer les routes data, même si l'hydratation a partiellement échoué.
+    _hydrated = true; _resolveReady();
   }
-  if (n) console.log(`[store] ${n} jeu(x) de données restauré(s) depuis la base.`);
   return n;
 }
 
@@ -133,4 +150,4 @@ function mergeWindows(source, period, windows) {
   return (cur.rows || []).length;
 }
 
-module.exports = { setDataset, mergeDatasetWindow, mergeWindows, getDataset, delDataset, listDatasets, hydrate, exportAll, importAll };
+module.exports = { setDataset, mergeDatasetWindow, mergeWindows, getDataset, delDataset, listDatasets, hydrate, whenReady, isReady, exportAll, importAll };

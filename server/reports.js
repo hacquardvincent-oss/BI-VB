@@ -68,6 +68,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const noN1 = compare === '0' || compare === 0 || compare === false;
   const loadN1 = (src) => noN1 ? Promise.resolve(null) : loadDataset(src, 'N1');
   dim = dim || 'global';
+  // Attend la fin de l'hydratation RAM depuis la base (le port s'ouvre avant — cf. index.js) :
+  // évite le faux « OMS manquant » si un report est lancé pendant le réveil de l'instance.
+  if (store.whenReady) await store.whenReady();
   const omsN = await loadDataset('oms', 'N');
   if (!omsN) {
     // OMS (N) absent : on indique ce qui EST chargé pour lever l'ambiguïté (imports indépendants),
@@ -907,6 +910,7 @@ function detectDemarque(byDayN, byDayN1, threshold) {
 // sur ses variantes couleur.
 async function buildSaison({ from, to, cfrom, cto, dim, demSeuil, saison }) {
   dim = dim || 'global';
+  if (store.whenReady) await store.whenReady(); // attend l'hydratation RAM (cf. buildReport)
   // Données de saison : jeux dédiés `saison*` SINON la base continue (oms/y2/ret/stock) chargée dans
   // la page « 🗄️ Données » → plus besoin d'importer depuis la page Saison (chargement centralisé).
   const omsN = (await loadDataset('saisonoms', 'N')) || (await loadDataset('oms', 'N'));
@@ -1164,8 +1168,9 @@ router.get('/saison', requireAuth, async (req, res) => {
 
 // Analyse des familles (parts de marché) : Global / FR / Inter (+ pays précis), N vs N-1,
 // avec drill-down PRODUITS par famille. Source = base continue oms + référentiel (bible + corrections).
-router.get('/families', requireAuth, (req, res) => {
+router.get('/families', requireAuth, async (req, res) => {
   try {
+    if (store.whenReady) await store.whenReady(); // attend l'hydratation RAM (cf. buildReport)
     const { from, to, cfrom, cto, dim, country, compare, saison, drop } = req.query;
     const oms = store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N');
     if (!oms || !oms.rows) return res.json({ empty: true, message: 'Aucun OMS chargé (page 🗄️ Données).' });

@@ -142,9 +142,11 @@ function loadDemo() {
 // « port scan timeout » quand l'hydratation depuis Postgres devient longue.
 app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
 (async () => {
+  // db.init() est isolé : s'il échoue, on DOIT quand même appeler store.hydrate() —
+  // sinon la barrière whenReady() ne se résout jamais et toutes les routes data se bloquent.
+  try { await db.init(); } catch (e) { console.error('[bidash] db.init KO (bascule mémoire) :', e.message); }
+  try { await store.hydrate(); } catch (e) { console.error('[bidash] store.hydrate KO :', e.message); }
   try {
-    await db.init();
-    await store.hydrate();
     await objectives.hydrate();
     await refoverrides.hydrate();
     await feedback.hydrate();
@@ -152,7 +154,7 @@ app.listen(PORT, () => console.log(`[bidash] en écoute sur le port ${PORT}`));
     await tables.hydrate();
     await layouts.hydrate();
   } catch (e) {
-    console.error('[bidash] init base KO (bascule en mémoire) :', e.message);
+    console.error('[bidash] hydratation modules KO :', e.message);
   }
   loadSpecs();
   loadDemo(); // mode démo : charge le snapshot par-dessus (autoritaire) si DEMO_MODE

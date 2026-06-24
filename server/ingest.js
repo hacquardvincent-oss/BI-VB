@@ -325,7 +325,7 @@ router.post('/:source/:period', requireAuth, uploadSingle, (req, res) => {
   }
 });
 
-router.get('/status', requireAuth, (req, res) => res.json(store.listDatasets()));
+router.get('/status', requireAuth, async (req, res) => { if (store.whenReady) await store.whenReady(); res.json(store.listDatasets()); });
 
 // Couverture RÉELLE par source : mois (YYYY-MM) qui contiennent effectivement des lignes.
 // Révèle les trous (ex. une base qui « va de juin 2025 à juin 2026 » mais n'a QUE ces 2 mois).

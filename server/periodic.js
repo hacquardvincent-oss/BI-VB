@@ -43,8 +43,9 @@ function bundleFor(win) {
 const shiftISO = (iso, days) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const okDate = s => /^\d{4}-\d{2}-\d{2}$/.test((s || '').slice(0, 10)) ? s.slice(0, 10) : null;
 
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
+    if (store.whenReady) await store.whenReady(); // attend l'hydratation RAM (cf. buildReport)
     const q = req.query;
     const pFrom = okDate(q.from), pTo = okDate(q.to);
     const asof = pTo || q.asof;                 // l'arrêté = FIN de la période sélectionnée
