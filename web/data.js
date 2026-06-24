@@ -25,7 +25,13 @@ async function renderCapacity() {
   try {
     const d = await (await fetch('/api/ingest/dbsize')).json();
     if (!d.hasDb) {
-      el.innerHTML = `<div class="note" style="color:var(--r)">⚠ <b>Aucune base connectée</b> (mode mémoire) : les données sont perdues à chaque mise en veille du serveur. Configure <code>DATABASE_URL</code> (Postgres/Neon) pour tout persister.</div>`;
+      const seen = (d.envKeys && d.envKeys.length) ? `Variables liées à la base vues par le serveur : <code>${d.envKeys.map(esc).join('</code>, <code>')}</code>.` : 'Aucune variable liée à la base détectée côté serveur.';
+      const hint = d.exactKeyPresent
+        ? '<code>DATABASE_URL</code> est bien présente mais <b>vide</b> → renseigne sa valeur (connection string Neon) puis redéploie.'
+        : (d.envKeys && d.envKeys.length
+          ? `<b>⚠ Le nom exact <code>DATABASE_URL</code> est absent</b> — vérifie la casse/les espaces dans le dashboard Render (renomme la variable détectée en <code>DATABASE_URL</code>), puis <b>redéploie</b>.`
+          : 'Ajoute <code>DATABASE_URL</code> dans le dashboard Render (connection string Neon) puis redéploie.');
+      el.innerHTML = `<div class="note" style="color:var(--r)">⚠ <b>Aucune base connectée</b> (mode mémoire) : données perdues à la veille du serveur.<br>${seen}<br>${hint}</div>`;
       return;
     }
     if (d.error) { el.innerHTML = `<div class="note">Base connectée, mesure indisponible (${esc(d.error)}).</div>`; return; }

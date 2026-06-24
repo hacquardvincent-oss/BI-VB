@@ -360,7 +360,12 @@ router.get('/coverage-days', requireAuth, (req, res) => {
 // Sans base (mode mémoire) → hasDb:false (rien n'est persisté). Sert la jauge de la page Données.
 router.get('/dbsize', requireAuth, async (req, res) => {
   const db = require('./db');
-  if (!db.enabled) return res.json({ hasDb: false });
+  if (!db.enabled) {
+    // Diagnostic : noms (PAS les valeurs) des variables d'env qui ressemblent à une config base
+    // → révèle immédiatement un nom mal orthographié (DATABASE_URI, casse, espace…).
+    const envKeys = Object.keys(process.env).filter(k => /database|postgres|neon|pg_?(host|user|database|url)|_url$/i.test(k)).sort();
+    return res.json({ hasDb: false, envKeys, exactKeyPresent: Object.prototype.hasOwnProperty.call(process.env, 'DATABASE_URL') });
+  }
   try {
     const { rows } = await db.query('SELECT pg_database_size(current_database()) AS bytes');
     const bytes = Number(rows[0].bytes) || 0;
