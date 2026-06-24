@@ -45,7 +45,11 @@
       const el = document.getElementById('db_loaded');
       // Lien vers la page centrale « Données » (sauf si on EST déjà dessus → OPTS.hub).
       const manage = OPTS.hub ? '' : `<div style="margin-top:6px"><a href="/data.html" style="font-size:11px;color:var(--a);font-weight:600;text-decoration:none">🗄️ Gérer les données (ajouter/mettre à jour une période) →</a></div>`;
-      if (el) el.innerHTML = lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire (partagé entre les briques)</b>${lines}${manage}</div>` : manage;
+      // Bannière MODE MÉMOIRE (aucune base) : visible sur TOUTES les briques → on ne se fait plus piéger
+      // par des données qui disparaissent à la veille du serveur.
+      let persistWarn = '';
+      try { const ds = await (await fetch('/api/ingest/dbsize')).json(); if (ds && ds.hasDb === false) persistWarn = `<div style="color:var(--r);font-weight:700;font-size:11px;margin:6px 0;border:1px solid var(--r);border-radius:6px;padding:6px 8px;line-height:1.5">⚠ Mode mémoire (aucune base connectée) : les données seront <b>perdues</b> à chaque mise en veille / redéploiement du serveur. Configure <code>DATABASE_URL</code> (Postgres/Neon) pour tout persister.</div>`; } catch (e) { /* */ }
+      if (el) el.innerHTML = persistWarn + (lines ? `<div class="note" style="margin:8px 0 0;font-size:11px;line-height:1.7"><b>📦 Déjà en mémoire (partagé entre les briques)</b>${lines}${manage}</div>` : manage);
     } catch (e) { /* ignore */ }
   }
 
