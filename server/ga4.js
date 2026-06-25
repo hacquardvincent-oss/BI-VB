@@ -365,16 +365,27 @@ async function fetchCampaignsDaily(propertyId, startDate, endDate) {
 
 // ── Trafic par heure × groupe de canaux : pour estimer l'heure d'envoi email (pic du canal Email) ──
 async function fetchHourlyChannel(propertyId, startDate, endDate) {
-  // `dateHour` (YYYYMMDDHH) = dimension canonique GA4 pour les séries horaires (compatible partout),
-  // qu'on scinde en Date (YYYYMMDD) + Heure (HH) → jeu daté fenêtrable.
+  // hour × canal (session-scoped + sessions) → heure de pic d'envoi email. Requête D'ORIGINE qui marche.
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'dateHour' }, { name: 'sessionDefaultChannelGroup' }],
+    dimensions: [{ name: 'hour' }, { name: 'sessionDefaultChannelGroup' }],
+    metrics: [{ name: 'sessions' }],
+    limit: 100000,
+  });
+  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.dimensionValues[1].value, r.metricValues[0].value]);
+  return { hdrs: ['Heure', 'Groupe de canaux', 'Sessions'], rows };
+}
+// Trafic HORAIRE daté (dateHour) + ajouts panier — SANS canal (évite le conflit de scope
+// session×événement qui faisait échouer la requête) → jeu daté fenêtrable pour le suivi temporel.
+async function fetchHourlyTraffic(propertyId, startDate, endDate) {
+  const data = await post(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'dateHour' }],
     metrics: [{ name: 'sessions' }, { name: 'addToCarts' }],
     limit: 100000,
   });
-  const rows = (data.rows || []).map(r => { const dh = (r.dimensionValues[0].value || '').toString(); return [dh.slice(0, 8), dh.slice(8, 10), r.dimensionValues[1].value, r.metricValues[0].value, r.metricValues[1].value]; });
-  return { hdrs: ['Date', 'Heure', 'Groupe de canaux', 'Sessions', 'Ajouts panier'], rows };
+  const rows = (data.rows || []).map(r => { const dh = (r.dimensionValues[0].value || '').toString(); return [dh.slice(0, 8), dh.slice(8, 10), r.metricValues[0].value, r.metricValues[1].value]; });
+  return { hdrs: ['Date', 'Heure', 'Sessions', 'Ajouts panier'], rows };
 }
 
 function toDataset(parsed, startDate, endDate) {
@@ -436,7 +447,8 @@ async function refresh(opts = {}) {
     () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
-    () => safe(`emailhour ${P}`, async () => mSess('gaemailhour', toDataset(await fetchHourlyChannel(propertyId, s, e), s, e), s, e)),
+    () => safe(`emailhour ${P}`, async () => store.setDataset('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e))),
+    () => safe(`trafic horaire ${P}`, async () => mSess('gahourly', toDataset(await fetchHourlyTraffic(propertyId, s, e), s, e), s, e)),
   ];
 
   const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
