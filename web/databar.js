@@ -14,7 +14,9 @@
   const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
   const frd = iso => (iso ? iso.split('-').reverse().join('/') : '');
   let LOADED = [], OPTS = {};
+  const CONFIGURED = new Set(); // connecteurs détectés comme configurés (pour la mise à jour du matin)
   const note = t => { const e = document.getElementById('db_note'); if (e) e.innerHTML = t; };
+  const isoMinusDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 
   function coverageOf(src) { const ds = LOADED.filter(d => d.source === src && d.date_min && d.date_max); if (!ds.length) return null; return { min: ds.map(d => d.date_min).sort()[0], max: ds.map(d => d.date_max).sort().slice(-1)[0] }; }
   const covers = (src, from, to) => { const c = coverageOf(src); return !!(c && c.min <= from && c.max >= to); };
@@ -219,6 +221,24 @@
     } catch (e) { note('⚠ ' + esc(e.message)); }
   }
 
+  // Routine quotidienne en 1 clic : delta OMS (capte nouvelles commandes + changements de statut/
+  // retours sur le passé) puis recharge des 3 DERNIERS JOURS pour GA4/Ads/Meta/Y2 (chiffres finalisés,
+  // fusionnés sans rien écraser). Ne touche que les sources configurées.
+  async function morningUpdate(btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const from = isoMinusDays(today, 3);
+      if (CONFIGURED.has('wshop')) { note('🌅 1 — OMS : synchro delta (nouveautés + changements de statut)…'); await importWshop(true); }
+      for (const [conn, label] of [['ga4', 'GA4'], ['googleads', 'Google Ads'], ['meta', 'Meta Ads'], ['y2', 'Y2']]) {
+        if (CONFIGURED.has(conn)) { note(`🌅 — ${esc(label)} : 3 derniers jours…`); await dataBarLoadRange(conn, from, today); }
+      }
+      note('✅ Mise à jour du matin terminée — tes tableaux sont à jour (chiffres des derniers jours finalisés).');
+      afterLoad();
+    } catch (e) { note('⚠ ' + esc(e.message)); }
+    finally { if (btn) btn.disabled = false; }
+  }
+
   async function initDataBar(opts) {
     OPTS = opts || {};
     const cont = document.getElementById(OPTS.container || 'dataBar'); if (!cont) return;
@@ -237,6 +257,7 @@
       <h3>${esc(OPTS.title || 'Chargement des données')}</h3>
       <div class="note">Données <b>partagées et persistées</b> : charge une fois, c'est dispo dans toutes les briques. Inutile de recharger d'une brique à l'autre.</div>
       <div id="db_loaded"></div>
+      <span class="hidden" id="db_morning"><button class="btn primary" id="db_morningBtn" style="width:100%;margin-top:8px" title="Routine quotidienne en 1 clic : synchro delta OMS + recharge des 3 derniers jours GA4/Ads/Meta/Y2 (chiffres finalisés, fusionnés sans rien écraser)">🌅 Mise à jour du matin (1 clic)</button><div class="note" style="font-size:10px;margin:2px 0 0">Delta OMS + 3 derniers jours des autres sources.</div></span>
       <div class="toolbar" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
         <span class="hidden" id="db_wshop"><button class="btn blue" id="db_impWshop" style="width:100%">🔄 Importer l'OMS (WSHOP)</button></span>
         <span class="hidden" id="db_wshopSync"><button class="btn" id="db_impSync" style="width:100%" title="Récupère seulement les commandes nouvelles/modifiées (économe)">⚡ Synchroniser le delta (WSHOP)</button></span>
@@ -260,9 +281,12 @@
     const allow = Array.isArray(OPTS.connectors) ? OPTS.connectors : ['wshop', 'ga4', 'googleads', 'meta', 'y2'];
     const map = [['wshop', 'db_wshop'], ['ga4', 'db_ga4'], ['googleads', 'db_ads'], ['meta', 'db_meta'], ['y2', 'db_y2']].filter(([c]) => allow.includes(c));
     await Promise.all(map.map(async ([c, box]) => {
-      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') { document.getElementById('db_wshopSync').classList.remove('hidden'); if (!OPTS.slot) { document.getElementById('db_merch').classList.remove('hidden'); document.getElementById('db_merch2').classList.remove('hidden'); } } } } catch (e) { /* */ }
+      try { const s = await (await fetch(`/api/${c}/status`)).json(); if (s && s.configured) { CONFIGURED.add(c); document.getElementById(box).classList.remove('hidden'); if (c === 'wshop') { document.getElementById('db_wshopSync').classList.remove('hidden'); if (!OPTS.slot) { document.getElementById('db_merch').classList.remove('hidden'); document.getElementById('db_merch2').classList.remove('hidden'); } } } } catch (e) { /* */ }
     }));
+    // Mise à jour du matin : visible dès qu'au moins une source est configurée (hors slot saison).
+    if (!OPTS.slot && CONFIGURED.size) { const mm = document.getElementById('db_morning'); if (mm) mm.classList.remove('hidden'); }
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    on('db_morningBtn', e => morningUpdate(e.currentTarget));
     on('db_impWshop', () => importWshop(false));
     on('db_impSync', () => importWshop(true));
     on('db_impReturns', () => importMerch('returns', 'Retours'));
