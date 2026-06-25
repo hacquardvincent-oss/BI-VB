@@ -160,7 +160,7 @@
             const j = await r.json();
             if (!j.running) {
               if (j.error) note(`⚠ ${esc(label)} : ${esc(j.error)}`);
-              else { const w = (j.result && j.result.warnings && j.result.warnings.length) ? ` (${j.result.warnings.length} jeu(x) secondaire(s) ignoré(s))` : ''; note(`✓ ${esc(label)} importé${w}.`); afterLoad(); }
+              else { const wl = (j.result && j.result.warnings) || []; const w = wl.length ? `<div class="note" style="color:#C9A24B;margin:2px 0 0;font-size:10px">⚠ ${wl.length} jeu(x) ignoré(s) : ${esc(wl.slice(0, 4).join(' · '))}</div>` : ''; note(`✓ ${esc(label)} importé.${w}`); afterLoad(); }
               return resolve();
             }
             const mins = Math.floor((Date.now() - start) / 60000);

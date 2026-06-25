@@ -365,13 +365,15 @@ async function fetchCampaignsDaily(propertyId, startDate, endDate) {
 
 // ── Trafic par heure × groupe de canaux : pour estimer l'heure d'envoi email (pic du canal Email) ──
 async function fetchHourlyChannel(propertyId, startDate, endDate) {
+  // `dateHour` (YYYYMMDDHH) = dimension canonique GA4 pour les séries horaires (compatible partout),
+  // qu'on scinde en Date (YYYYMMDD) + Heure (HH) → jeu daté fenêtrable.
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'hour' }, { name: 'sessionDefaultChannelGroup' }],
+    dimensions: [{ name: 'dateHour' }, { name: 'sessionDefaultChannelGroup' }],
     metrics: [{ name: 'sessions' }, { name: 'addToCarts' }],
     limit: 100000,
   });
-  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.dimensionValues[1].value, r.dimensionValues[2].value, r.metricValues[0].value, r.metricValues[1].value]);
+  const rows = (data.rows || []).map(r => { const dh = (r.dimensionValues[0].value || '').toString(); return [dh.slice(0, 8), dh.slice(8, 10), r.dimensionValues[1].value, r.metricValues[0].value, r.metricValues[1].value]; });
   return { hdrs: ['Date', 'Heure', 'Groupe de canaux', 'Sessions', 'Ajouts panier'], rows };
 }
 
