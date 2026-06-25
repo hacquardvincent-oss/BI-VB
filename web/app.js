@@ -3104,6 +3104,11 @@ function renderDailyChart(rep) {
   if (sessN) ds.push(line('Sessions N', sessN, '#E2574D', 'ySess'), line('Sessions N-1', sessN1, '#E2574D', 'ySess', true));
   if (addN) ds.push(line('Ajout panier % N', addN, '#7C4DCB', 'yPct'), line('Ajout panier % N-1', addN1, '#7C4DCB', 'yPct', true));
   if (ttN) ds.push(line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true));
+  // Note : si le jeu horaire daté n'est pas encore importé (sessions N≈N-1, pas de paniers) → inviter au rechargement.
+  if (gran === 'hour' && rep.hourly && rep.hourly.stale) {
+    const cap = document.querySelector('#dailyChart')?.closest('.card')?.querySelector('.note');
+    if (cap) cap.innerHTML = '⚠ <b style="color:var(--r)">Trafic horaire à recharger</b> : recharge GA4 (page Données) pour des sessions N‑1 distinctes + les courbes d\'ajout panier. ' + cap.innerHTML;
+  }
   mk('dailyChart', ds, {
     x: xax,
     y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } },

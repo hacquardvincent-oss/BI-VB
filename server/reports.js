@@ -612,10 +612,13 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const hourly = {
     n: calc.hourlySeries(rowsN, omsN.map),
     n1: (rowsN1 && rowsN1.length) ? calc.hourlySeries(rowsN1, mapN1) : null,
-    sessN: calc.sessionsByHour(gaHourN),
-    sessN1: gaHourN1 ? calc.sessionsByHour(gaHourN1) : null,
-    cartN: calc.cartsByHour(gaHourN),
+    // Sessions : jeu horaire daté (gahourly) en priorité ; repli sur gaemailhour (heure×canal) tant que
+    // gahourly n'est pas encore importé → au moins les sessions s'affichent (N≈N-1 jusqu'au rechargement).
+    sessN: calc.sessionsByHour(gaHourN) || calc.sessionsByHour(gaEmailHourN),
+    sessN1: (gaHourN1 ? calc.sessionsByHour(gaHourN1) : null) || (gaEmailHourN1 ? calc.sessionsByHour(gaEmailHourN1) : null),
+    cartN: calc.cartsByHour(gaHourN),                                  // paniers : uniquement gahourly
     cartN1: gaHourN1 ? calc.cartsByHour(gaHourN1) : null,
+    stale: !gaHourFull,                                                // gahourly absent → rechargement GA4 requis
   };
   // Alertes stock (back-in-stock WSHOP) : produits les plus attendus sur la période
   const bisDs = store.getDataset('bis', 'N');
