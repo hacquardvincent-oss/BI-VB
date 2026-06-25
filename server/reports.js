@@ -126,7 +126,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     return { empty: true, message: `OMS (année N) manquant : importe l'OMS (fichier de secours) ou relance « Importer OMS depuis WSHOP ».${dispo} Les imports sont indépendants — si l'OMS était chargé puis a disparu, le serveur a probablement redémarré en mode mémoire (active DATABASE_URL pour conserver les données).` };
   }
   const omsN1 = await loadN1('oms');
-  const gaN = await loadDataset('ga', 'N'), gaN1 = await loadN1('ga');
+  const gaN = await loadDataset('ga', 'N'); let gaN1 = await loadN1('ga');
   const y2N = await loadDataset('y2', 'N'), y2N1 = await loadN1('y2');
   // Recale le mapping de colonnes Y2 depuis les en-têtes stockés : un jeu importé AVANT une évolution
   // d'alias (ex. ajout de `commercialdoc` pour le code 674SFS) garde sinon un map obsolète → la règle
@@ -144,14 +144,21 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // Période N-1 : plage explicite (sélecteur de dates) sinon décalage d'un an
   const cf = cfrom || autoCompare(from, to, 'from'), ct = cto || autoCompare(from, to, 'to');
 
+  // ── GA4 = MODÈLE OMS ──────────────────────────────────────────────────────
+  // Les jeux GA4 DATÉS (ga/gasess/gatot/gacampdaily) sont CONTINUS dans le slot N (fusion par date).
+  // Le N-1 se DÉRIVE en découpant le slot N sur la fenêtre de comparaison (cf→ct) — comme l'OMS. On ne
+  // dépend donc plus d'un slot « N-1 » (souvent d'une autre année), cause du trafic N-1 manquant.
+  const gaN1d = (n1, n) => { if (noN1) return null; if (n1 && n1.rows && n1.rows.length) return n1; const s = n && calc.gaSliceByDate(n, cf, ct); return (s && s.rows && s.rows.length) ? s : n1; };
+  gaN1 = gaN1d(gaN1, gaN);
+
   // Dimension Global / FR / International : filtre les jeux GA par pays (si dispo)
   const gaNf = calc.filterGADim(gaN, dim);
   const gaN1f = calc.filterGADim(gaN1, dim);
   const gaDimUnavailable = dim !== 'global' && ((gaN && !gaNf) || (gaN1 && !gaN1f));
   // Sessions « propres » (date × pays, non surcomptées) si dispo, sinon repli sur la ventilation
-  const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = await loadN1('gasess');
-  const gaTotN = await loadDataset('gatot', 'N'), gaTotN1 = await loadN1('gatot');
-  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = await loadN1('gacampdaily');
+  const gaSessN = await loadDataset('gasess', 'N'), gaSessN1 = gaN1d(await loadN1('gasess'), gaSessN);
+  const gaTotN = await loadDataset('gatot', 'N'), gaTotN1 = gaN1d(await loadN1('gatot'), gaTotN);
+  const gaCampDailyN = await loadDataset('gacampdaily', 'N'), gaCampDailyN1 = gaN1d(await loadN1('gacampdaily'), gaCampDailyN);
   const gaEmailHourN = await loadDataset('gaemailhour', 'N'), gaEmailHourN1 = await loadN1('gaemailhour');
   // Sessions par PAYS (gasess) : sert aux splits FR/Inter, au TT par pays et aux courbes jour.
   const sessSrcN = calc.filterGADim(gaSessN, dim) || gaNf;

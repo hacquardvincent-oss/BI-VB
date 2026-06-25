@@ -947,6 +947,15 @@ function getTotalSessions(ga) {
   if (si < 0) return 0;
   return ga.rows.reduce((s, r) => s + (parseInt((r[si] || '').toString().replace(/\s/g, '')) || 0), 0);
 }
+// Découpe un jeu GA4 daté (date×…) sur une fenêtre [fromISO, toISO] → DÉRIVE le N-1 d'un slot N
+// CONTINU (modèle OMS appliqué à GA4 : un seul jeu continu, le N-1 se filtre par date).
+function gaSliceByDate(ds, fromISO, toISO) {
+  if (!ds || !ds.rows || !ds.map || ds.map.date === undefined || !fromISO || !toISO) return ds;
+  const di = ds.map.date;
+  const toIso = v => { const s = (v == null ? '' : String(v)).trim(); if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`; if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10); return null; };
+  const rows = ds.rows.filter(r => { const v = toIso(r[di]); return v && v >= fromISO && v <= toISO; });
+  return Object.assign({}, ds, { rows, row_count: rows.length, date_min: fromISO, date_max: toISO });
+}
 function getGADaily(ga) {
   if (!ga || !ga.rows || !ga.hdrs) return null;
   const di = ga.hdrs.findIndex(h => { const n = norm(h); return n === 'date' || n === 'jour' || n === 'day'; });
@@ -2359,7 +2368,7 @@ module.exports = {
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
-  getTotalSessions, getGADaily, getSessionsForPeriod, calcGA,
+  getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
