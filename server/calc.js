@@ -1315,6 +1315,16 @@ function sessionsByHour(gaHour) {
   });
   return Object.keys(by).length ? by : null;
 }
+// Ajouts panier GA par HEURE (jeu gaemailhour enrichi : … × addToCarts) → { 'HH': nb }.
+function cartsByHour(gaHour) {
+  if (!gaHour || !gaHour.rows || !gaHour.hdrs) return null;
+  const hi = gaHour.hdrs.findIndex(h => { const n = norm(h); return n === 'heure' || n === 'hour'; });
+  const ci = gaHour.hdrs.findIndex(h => { const n = norm(h); return n.includes('ajout') || n.includes('addtocart') || n.includes('panier'); });
+  if (hi < 0 || ci < 0) return null;
+  const by = {};
+  gaHour.rows.forEach(r => { let h = (r[hi] || '').toString().trim(); if (!/^\d{1,2}$/.test(h)) return; h = h.padStart(2, '0'); by[h] = (by[h] || 0) + fGA(r[ci]); });
+  return Object.keys(by).length ? by : null;
+}
 
 // ── Référentiel : ref. externe → famille (regroupement prioritaire) ─────────
 function buildRefMap(ref) {
@@ -2370,7 +2380,7 @@ module.exports = {
   filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
-  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour,
+  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,

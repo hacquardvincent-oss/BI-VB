@@ -1177,14 +1177,15 @@ function renderReport(rep) {
        <div class="note">Barres = CA/jour (foncé = N, clair = N-1) · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = N, pointillé = N-1). Permet de relier les pics de CA aux campagnes.</div></div>`
     : '';
 
-  // Suivi temporel (granularité heure/jour/semaine, N vs N-1)
+  // Suivi temporel (granularité heure/jour, N vs N-1). Les cumuls hebdo/mensuels/saison vivent dans
+  // le module 📅 Périodique (pas de doublon ici).
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
   const dailyCard = (rep.daily && rep.daily.length)
     ? `<div class="card"><h3>Suivi temporel (période) — N vs N-1</h3>
        <div class="toolbar" style="margin-bottom:8px"><span class="note" style="margin:0">Granularité</span>
          ${hasHour ? '<button class="pb gran" data-gran="hour">Heure</button>' : ''}
          <button class="pb gran" data-gran="day">Jour</button>
-         <button class="pb gran" data-gran="week">Semaine</button></div>
+         <a class="pb" href="/periodique.html" title="Cumuls hebdo / mensuels / saison → module Périodique">📅 Cumuls (Périodique) →</a></div>
        <div style="height:240px"><canvas id="dailyChart"></canvas></div>
        <h3 style="margin-top:14px">Trafic, taux d'ajout panier & taux de transformation</h3><div style="height:200px"><canvas id="trafChart"></canvas></div></div>`
     : '';
@@ -3060,9 +3061,18 @@ function renderDailyChart(rep) {
   let labels, caN, caN1, sessN, sessN1, ttN, ttN1, addN, addN1;
   if (gran === 'hour') {
     const hN = rep.hourly.n, hN1 = (rep.hourly && rep.hourly.n1) || [];
+    const n1H = {}; hN1.forEach(x => { n1H[x.hour] = x; }); // N-1 indexé par heure (alignement robuste)
     labels = hN.map(x => x.hour + 'h');
-    caN = hN.map(x => Math.round(x.ca)); caN1 = hN.map((x, i) => hN1[i] ? Math.round(hN1[i].ca) : null);
-    sessN = sessN1 = ttN = ttN1 = addN = addN1 = null; // pas de trafic horaire (GA daté au jour)
+    caN = hN.map(x => Math.round(x.ca)); caN1 = hN.map(x => n1H[x.hour] ? Math.round(n1H[x.hour].ca) : null);
+    // Trafic HORAIRE (gaemailhour daté×heure, fenêtré sur le jour) : sessions, ajout panier %, TT %.
+    const sH = rep.hourly.sessN, sH1 = rep.hourly.sessN1, cH = rep.hourly.cartN, cH1 = rep.hourly.cartN1;
+    const at = (o, h) => (o && o[h] != null) ? o[h] : null;
+    sessN = sH ? hN.map(x => at(sH, x.hour)) : null;
+    sessN1 = sH1 ? hN.map(x => at(sH1, x.hour)) : null;
+    addN = (sH && cH) ? hN.map(x => { const s = at(sH, x.hour), c = at(cH, x.hour); return (s && c != null) ? +((c / s) * 100).toFixed(1) : null; }) : null;
+    addN1 = (sH1 && cH1) ? hN.map(x => { const s = at(sH1, x.hour), c = at(cH1, x.hour); return (s && c != null) ? +((c / s) * 100).toFixed(1) : null; }) : null;
+    ttN = sH ? hN.map(x => { const s = at(sH, x.hour); return (s && x.commandes != null) ? +((x.commandes / s) * 100).toFixed(2) : null; }) : null;
+    ttN1 = sH1 ? hN.map(x => { const s = at(sH1, x.hour), o = n1H[x.hour]; return (s && o && o.commandes != null) ? +((o.commandes / s) * 100).toFixed(2) : null; }) : null;
   } else {
     const sN = aggDaily(rep.daily, gran), sN1 = aggDaily(rep.dailyN1 || [], gran);
     labels = sN.map(x => x.label);

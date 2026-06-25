@@ -367,12 +367,12 @@ async function fetchCampaignsDaily(propertyId, startDate, endDate) {
 async function fetchHourlyChannel(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'hour' }, { name: 'sessionDefaultChannelGroup' }],
-    metrics: [{ name: 'sessions' }],
+    dimensions: [{ name: 'date' }, { name: 'hour' }, { name: 'sessionDefaultChannelGroup' }],
+    metrics: [{ name: 'sessions' }, { name: 'addToCarts' }],
     limit: 100000,
   });
-  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.dimensionValues[1].value, r.metricValues[0].value]);
-  return { hdrs: ['Heure', 'Groupe de canaux', 'Sessions'], rows };
+  const rows = (data.rows || []).map(r => [r.dimensionValues[0].value, r.dimensionValues[1].value, r.dimensionValues[2].value, r.metricValues[0].value, r.metricValues[1].value]);
+  return { hdrs: ['Date', 'Heure', 'Groupe de canaux', 'Sessions', 'Ajouts panier'], rows };
 }
 
 function toDataset(parsed, startDate, endDate) {
@@ -434,7 +434,7 @@ async function refresh(opts = {}) {
     () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
-    () => safe(`emailhour ${P}`, async () => mDay('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e), s, e)),
+    () => safe(`emailhour ${P}`, async () => mSess('gaemailhour', toDataset(await fetchHourlyChannel(propertyId, s, e), s, e), s, e)),
   ];
 
   const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
