@@ -184,7 +184,7 @@ function ingestBuffer(source, period, buffer, filename, uploadedBy, opts = {}) {
 
 // Ingère un tableau DÉJÀ parsé (hdrs + rows de tableaux) — pour les connecteurs base de données
 // (ex. Y2 PostgreSQL) : même mapping d'alias + anti-PII que l'upload, sans étape de parsing de fichier.
-function ingestTable(source, period, hdrs, rows, filename, uploadedBy) {
+function ingestTable(source, period, hdrs, rows, filename, uploadedBy, win) {
   if (!Array.isArray(hdrs) || !hdrs.length) throw new Error('Aucune colonne renvoyée par la requête');
   // Anti-PII systématique côté connecteur DB : on ne maîtrise pas le schéma source → on écarte
   // toute colonne identifiée comme PII (privacy by design, ADR-005), comme pour les sources sensibles.
@@ -195,11 +195,15 @@ function ingestTable(source, period, hdrs, rows, filename, uploadedBy) {
   calc.normalizeDateColumn(rows, map.date); // dates US M/J/AAAA (ex. connecteur Y2) → ISO, si clairement US
   let dateMin = null, dateMax = null;
   if (OMS_LIKE.has(source) || source === 'ret') ({ min: dateMin, max: dateMax } = calc.dateBounds(rows, map));
-  store.setDataset(source, period, {
+  const ds = {
     hdrs, rows, map, filename: filename || `${source}-${period}`,
     row_count: rows.length, date_min: dateMin, date_max: dateMax,
     uploaded_by: uploadedBy || 'connecteur', uploaded_at: new Date().toISOString(),
-  });
+  };
+  // FUSION par date si une fenêtre est fournie et qu'une colonne date existe (base continue) →
+  // recharger une journée s'AJOUTE au lieu d'écraser (sinon remplacement comme avant).
+  if (win && win.from && win.to && map.date !== undefined) store.mergeDatasetWindow(source, period, ds, win.from, win.to);
+  else store.setDataset(source, period, ds);
   return { rows: rows.length, columns: hdrs.length, dateMin, dateMax, anonymized: dropped };
 }
 

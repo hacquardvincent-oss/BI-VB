@@ -142,10 +142,11 @@ async function refresh(opts = {}) {
 
   const warnings = [];
   const rowsN = await fetchCampaigns(nStart, nEnd);
-  store.setDataset('ads', 'N', toDataset(rowsN, nStart, nEnd));
+  // FUSION par date (base continue) : recharger une journée s'AJOUTE au lieu d'écraser l'historique.
+  store.mergeDatasetWindow('ads', 'N', toDataset(rowsN, nStart, nEnd), nStart, nEnd);
   let rowsN1 = null;
   if (n1) {
-    try { const r1 = await fetchCampaigns(n1.start, n1.end); store.setDataset('ads', 'N1', toDataset(r1, n1.start, n1.end)); rowsN1 = r1.length; }
+    try { const r1 = await fetchCampaigns(n1.start, n1.end); store.mergeDatasetWindow('ads', 'N1', toDataset(r1, n1.start, n1.end), n1.start, n1.end); rowsN1 = r1.length; }
     catch (e) { warnings.push(`Google Ads N-1 : ${e.message}`); }
   }
   // Impression Share (best-effort : indispo/null pour PMax & Display — n'interrompt pas l'import)

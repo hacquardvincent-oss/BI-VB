@@ -105,11 +105,11 @@ async function refresh(opts = {}, cb = () => {}) {
   const out = {};
   cb(`Requête Y2 N (${from} → ${to})…`);
   const tN = await fetchRange(c.query, from, to);
-  out.N = ingest.ingestTable('y2', 'N', tN.hdrs, tN.rows, `Y2 DB (${from}→${to})`, 'Y2 PostgreSQL');
+  out.N = ingest.ingestTable('y2', 'N', tN.hdrs, tN.rows, `Y2 DB (${from}→${to})`, 'Y2 PostgreSQL', { from, to });
   if (opts.cfrom && opts.cto) {
     cb(`Requête Y2 N-1 (${opts.cfrom} → ${opts.cto})…`);
     const tN1 = await fetchRange(c.queryN1 || c.query, opts.cfrom, opts.cto);
-    out.N1 = ingest.ingestTable('y2', 'N1', tN1.hdrs, tN1.rows, `Y2 DB (${opts.cfrom}→${opts.cto})`, 'Y2 PostgreSQL');
+    out.N1 = ingest.ingestTable('y2', 'N1', tN1.hdrs, tN1.rows, `Y2 DB (${opts.cfrom}→${opts.cto})`, 'Y2 PostgreSQL', { from: opts.cfrom, to: opts.cto });
   }
   return out;
 }
