@@ -169,6 +169,7 @@ const Y2_ALIASES = {
   qte: ['quantite ligne', 'quantite'],
 };
 const GA_ALIASES = {
+  date: ['date', 'jour', 'day'], // ⚠️ indispensable : sans map.date, la fusion par date des jeux GA4 retombe en ÉCRASEMENT
   canal: ['groupe de canaux principal', 'groupe de canaux', 'channel group', 'default channel group'],
   sessions: ['sessions'],
   users: ['utilisateurs actifs', 'active users', 'users'],
