@@ -79,7 +79,10 @@ function mergeDatasetWindow(source, period, data, from, to) {
   const cur = STORE.get(`${source}-${period}`);
   const calc = require('./calc');
   const di = data && data.map ? data.map.date : undefined;
-  if (!cur || di === undefined || !from || !to || !cur.map || cur.map.date === undefined) {
+  // Si la STRUCTURE de colonnes change (ex. gaemailhour passé à date×heure + paniers), on NE fusionne
+  // pas (les anciennes lignes auraient un nombre de colonnes différent → indices faussés) : on remplace.
+  const sameShape = cur && cur.hdrs && data && data.hdrs && cur.hdrs.length === data.hdrs.length && cur.hdrs.every((h, i) => h === data.hdrs[i]);
+  if (!cur || di === undefined || !from || !to || !cur.map || cur.map.date === undefined || !sameShape) {
     setDataset(source, period, data); return data && data.rows ? data.rows.length : 0;
   }
   const iso = v => {
