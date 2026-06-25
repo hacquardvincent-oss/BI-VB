@@ -221,6 +221,12 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     if ((sessionsRawN1 == null || sessionsRawN1 === 0) && sessSrcN1 && sessSrcN1 !== totSrcN1) {
       const alt = calc.getSessionsForPeriod(sessSrcN1, cf, ct, isAll); if (alt) sessionsRawN1 = alt;
     }
+    // Jeux GA4 CONTINUS (fusionnés par date) : le N-1 peut vivre dans le slot N → on le filtre par cf/ct.
+    // Permet d'utiliser des sessions chargées « comme N » (ex. juin 2025) comme comparable N-1.
+    if (sessionsRawN1 == null || sessionsRawN1 === 0) {
+      const altN = calc.getSessionsForPeriod(totSrcN, cf, ct, isAll) || calc.getSessionsForPeriod(sessSrcN, cf, ct, isAll);
+      if (altN) sessionsRawN1 = altN;
+    }
     const sessionsN1 = (sessionsRawN1 != null && rateN1) ? Math.round(sessionsRawN1 / rateN1) : sessionsRawN1;
     kpiEShopN1 = calc.calcKPIEShop(rowsN1, mapN1, sessionsN1);
     caN1 = calc.calcOMS(rowsN1, mapN1);

@@ -414,10 +414,13 @@ async function refresh(opts = {}) {
     const worker = async () => { while (i < tasks.length) { const idx = i++; await tasks[idx](); } };
     await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
   }
+  // Jeux DATÉS (date×…) → FUSION par date dans la base continue (comme l'OMS) : charger une plage
+  // s'AJOUTE au lieu d'écraser → on peut combler une profondeur en petits blocs (léger en mémoire).
+  const mDay = (src, P, ds, s, e) => store.mergeDatasetWindow(src, P, ds, s, e);
   // Liste des fetchers pour une période (P = 'N' ou 'N1') sur [s, e].
   const tasksFor = (P, s, e) => [
-    () => safe(`sessions ${P}`, async () => store.setDataset('gasess', P, toDataset(await fetchSessionsDaily(propertyId, s, e), s, e))),
-    () => safe(`sessions total ${P}`, async () => store.setDataset('gatot', P, toDataset(await fetchSessionsTotal(propertyId, s, e), s, e))),
+    () => safe(`sessions ${P}`, async () => mDay('gasess', P, toDataset(await fetchSessionsDaily(propertyId, s, e), s, e), s, e)),
+    () => safe(`sessions total ${P}`, async () => mDay('gatot', P, toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
     () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), uploaded_at: ts() })),
@@ -425,20 +428,21 @@ async function refresh(opts = {}) {
     () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`campnr ${P}`, async () => store.setDataset('gacampnr', P, { rows: await fetchCampaignsNewReturning(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`campdaily ${P}`, async () => store.setDataset('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e))),
-    () => safe(`pagedaily ${P}`, async () => store.setDataset('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e))),
-    () => safe(`emailhour ${P}`, async () => store.setDataset('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e))),
+    () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
+    () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
+    () => safe(`emailhour ${P}`, async () => mDay('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e), s, e)),
   ];
 
   const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
-  store.setDataset('ga', 'N', toDataset(dataN, nStart, nEnd));
+  mDay('ga', 'N', toDataset(dataN, nStart, nEnd), nStart, nEnd);
   const nTasks = tasksFor('N', nStart, nEnd);
   nTasks.push(() => safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), uploaded_at: ts() }))); // N seul
-  await runPool(nTasks, 5);
+  // Concurrence BORNÉE à 3 (au lieu de 5) : réduit le pic mémoire de l'import (instance contrainte).
+  await runPool(nTasks, 3);
   let n1Count = null;
   if (n1) {
-    await safe('GA N-1', async () => { const dataN1 = await fetchGA4(propertyId, n1.start, n1.end); store.setDataset('ga', 'N1', toDataset(dataN1, n1.start, n1.end)); n1Count = dataN1.rows.length; });
-    await runPool(tasksFor('N1', n1.start, n1.end), 5);
+    await safe('GA N-1', async () => { const dataN1 = await fetchGA4(propertyId, n1.start, n1.end); mDay('ga', 'N1', toDataset(dataN1, n1.start, n1.end), n1.start, n1.end); n1Count = dataN1.rows.length; });
+    await runPool(tasksFor('N1', n1.start, n1.end), 3);
   }
   return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count, warnings };
 }

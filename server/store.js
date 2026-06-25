@@ -82,7 +82,12 @@ function mergeDatasetWindow(source, period, data, from, to) {
   if (!cur || di === undefined || !from || !to || !cur.map || cur.map.date === undefined) {
     setDataset(source, period, data); return data && data.rows ? data.rows.length : 0;
   }
-  const iso = v => { const o = calc.parseFrD(v); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null; };
+  const iso = v => {
+    const s = (v == null ? '' : String(v)).trim();
+    if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`; // GA4 « YYYYMMDD »
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;                                          // ISO
+    const o = calc.parseFrD(s); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null;
+  };
   const cdi = cur.map.date;
   const kept = (cur.rows || []).filter(r => { const v = iso(r[cdi]); return !v || v < from || v > to; }); // tout SAUF la fenêtre rechargée
   const merged = kept.concat(data.rows || []);
@@ -132,7 +137,12 @@ function importAll(obj) {
 // windows = [{ data, from, to }] appliquées dans l'ordre ; la DERNIÈRE fournit hdrs/map/sync finaux.
 function mergeWindows(source, period, windows) {
   const calc = require('./calc');
-  const iso = v => { const o = calc.parseFrD(v); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null; };
+  const iso = v => {
+    const s = (v == null ? '' : String(v)).trim();
+    if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`; // GA4 « YYYYMMDD »
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;                                          // ISO
+    const o = calc.parseFrD(s); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null;
+  };
   let cur = STORE.get(`${source}-${period}`) || null;
   for (const w of windows) {
     if (!w || !w.data) continue;
