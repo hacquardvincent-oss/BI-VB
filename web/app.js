@@ -1186,8 +1186,8 @@ function renderReport(rep) {
          ${hasHour ? '<button class="pb gran" data-gran="hour">Heure</button>' : ''}
          <button class="pb gran" data-gran="day">Jour</button>
          <a class="pb" href="/periodique.html" title="Cumuls hebdo / mensuels / saison → module Périodique">📅 Cumuls (Périodique) →</a></div>
-       <div style="height:240px"><canvas id="dailyChart"></canvas></div>
-       <h3 style="margin-top:14px">Trafic, taux d'ajout panier & taux de transformation</h3><div style="height:200px"><canvas id="trafChart"></canvas></div></div>`
+       <div style="height:320px"><canvas id="dailyChart"></canvas></div>
+       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes superposées = Sessions (ardoise), Ajout panier % (mauve), Taux de transfo % (vert) — N plein / N‑1 pointillé.</div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -3089,26 +3089,27 @@ function renderDailyChart(rep) {
     _charts[id] = new Chart(el.getContext('2d'), {
       data: { labels, datasets }, options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 10 } } }, tooltip: pct ? { callbacks: { label: c => ` ${c.dataset.label} ${c.raw}%` } } : {} },
+        plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } }, tooltip: { callbacks: { label: c => { const v = c.raw; if (v == null) return ` ${c.dataset.label}: —`; return ` ${c.dataset.label}: ${/%/.test(c.dataset.label) ? v + '%' : (typeof v === 'number' ? v.toLocaleString('fr-FR') : v)}`; } } } },
         scales,
       },
     });
   };
-  // CA N vs N-1 (bâtons N et N-1)
-  mk('dailyChart', [
+  // Graphe COMBINÉ : barres CA N/N-1 (axe €) + courbes superposées Sessions (axe sessions, droite) et
+  // Ajout panier % / TT % (axe % caché). N plein / N-1 pointillé. spanGaps pour les trous.
+  const line = (label, data, color, axis, n1) => ({ type: 'line', label, yAxisID: axis, data, borderColor: color, backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: n1 ? 1.5 : 2, borderDash: n1 ? [5, 4] : [], spanGaps: true });
+  const ds = [
     { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
     { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
-  ], { x: xax, y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } } });
-  // Trafic (sessions) + taux d'ajout panier — 1 couleur / indicateur : plein = N, pointillé = N-1
-  if (sessN) mk('trafChart', [
-    { type: 'line', label: 'Sessions N', yAxisID: 'y', data: sessN, borderColor: '#6E7B8B', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'Sessions N-1', yAxisID: 'y', data: sessN1, borderColor: '#6E7B8B', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
-    { type: 'line', label: 'Ajout panier % N', yAxisID: 'y1', data: addN, borderColor: '#9B8AA3', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'Ajout panier % N-1', yAxisID: 'y1', data: addN1, borderColor: '#9B8AA3', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
-    { type: 'line', label: 'TT % N', yAxisID: 'y1', data: ttN, borderColor: '#1B9E6A', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
-    { type: 'line', label: 'TT % N-1', yAxisID: 'y1', data: ttN1, borderColor: '#1B9E6A', borderDash: [5, 4], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true },
-  ], { x: xax, y: { position: 'left', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, y1: { position: 'right', ticks: { color: '#9B8AA3', font: { size: 9 }, callback: v => v + '%' }, grid: { drawOnChartArea: false } } });
-  else if (_charts.trafChart) { _charts.trafChart.destroy(); }
+  ];
+  if (sessN) ds.push(line('Sessions N', sessN, '#6E7B8B', 'ySess'), line('Sessions N-1', sessN1, '#6E7B8B', 'ySess', true));
+  if (addN) ds.push(line('Ajout panier % N', addN, '#9B8AA3', 'yPct'), line('Ajout panier % N-1', addN1, '#9B8AA3', 'yPct', true));
+  if (ttN) ds.push(line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true));
+  mk('dailyChart', ds, {
+    x: xax,
+    y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } },
+    ySess: { position: 'right', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
+    yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true },
+  });
 }
 
 // GA4 API
