@@ -1187,7 +1187,7 @@ function renderReport(rep) {
          <button class="pb gran" data-gran="day">Jour</button>
          <a class="pb" href="/periodique.html" title="Cumuls hebdo / mensuels / saison → module Périodique">📅 Cumuls (Périodique) →</a></div>
        <div style="height:320px"><canvas id="dailyChart"></canvas></div>
-       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes superposées = Sessions (ardoise), Ajout panier % (mauve), Taux de transfo % (vert) — N plein / N‑1 pointillé.</div></div>`
+       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes superposées = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), Taux de transfo % (<b style="color:#1B9E6A">vert</b>) — N plein / N‑1 pointillé.</div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -3101,13 +3101,13 @@ function renderDailyChart(rep) {
     { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
     { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
   ];
-  if (sessN) ds.push(line('Sessions N', sessN, '#6E7B8B', 'ySess'), line('Sessions N-1', sessN1, '#6E7B8B', 'ySess', true));
-  if (addN) ds.push(line('Ajout panier % N', addN, '#9B8AA3', 'yPct'), line('Ajout panier % N-1', addN1, '#9B8AA3', 'yPct', true));
+  if (sessN) ds.push(line('Sessions N', sessN, '#E2574D', 'ySess'), line('Sessions N-1', sessN1, '#E2574D', 'ySess', true));
+  if (addN) ds.push(line('Ajout panier % N', addN, '#7C4DCB', 'yPct'), line('Ajout panier % N-1', addN1, '#7C4DCB', 'yPct', true));
   if (ttN) ds.push(line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true));
   mk('dailyChart', ds, {
     x: xax,
     y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } },
-    ySess: { position: 'right', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
+    ySess: { position: 'right', ticks: { color: '#E2574D', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
     yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true },
   });
 }
