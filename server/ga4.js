@@ -417,10 +417,14 @@ async function refresh(opts = {}) {
   // Jeux DATÉS (date×…) → FUSION par date dans la base continue (comme l'OMS) : charger une plage
   // s'AJOUTE au lieu d'écraser → on peut combler une profondeur en petits blocs (léger en mémoire).
   const mDay = (src, P, ds, s, e) => store.mergeDatasetWindow(src, P, ds, s, e);
+  // SESSIONS (gasess/gatot) : on les écrit TOUJOURS dans le slot N CONTINU, y compris pour la période
+  // N-1 → le slot N couvre N ET N-1 ; le N-1 d'un report se dérive par filtre de date. Évite que la
+  // comparaison N-1 échoue parce que les sessions N-1 vivaient dans un slot N1 d'une autre année.
+  const mSess = (src, ds, s, e) => store.mergeDatasetWindow(src, 'N', ds, s, e);
   // Liste des fetchers pour une période (P = 'N' ou 'N1') sur [s, e].
   const tasksFor = (P, s, e) => [
-    () => safe(`sessions ${P}`, async () => mDay('gasess', P, toDataset(await fetchSessionsDaily(propertyId, s, e), s, e), s, e)),
-    () => safe(`sessions total ${P}`, async () => mDay('gatot', P, toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
+    () => safe(`sessions ${P}`, async () => mSess('gasess', toDataset(await fetchSessionsDaily(propertyId, s, e), s, e), s, e)),
+    () => safe(`sessions total ${P}`, async () => mSess('gatot', toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
     () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), uploaded_at: ts() })),
     () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), uploaded_at: ts() })),
