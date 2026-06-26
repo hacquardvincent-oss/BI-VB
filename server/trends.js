@@ -145,7 +145,9 @@ router.get('/', requireAuth, (req, res) => {
       marketplace.series = marketplace.series.map(s => ({ name: s.name, values: idx.map(i => s.values[i]), total: idx.reduce((a, i) => a + (s.values[i] || 0), 0) })).filter(s => s.total > 0);
     }
     // Cohortes de réachat — OMS N + N-1 combinés (clé client hashée, périmètre EShop).
-    const omsRows = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsRows.push(...d.rows); });
+    // ⚠️ concat et NON push(...d.rows) : le spread d'un grand tableau (130k+ lignes) dépasse la pile
+    // d'arguments → « Maximum call stack size exceeded ». concat gère les gros volumes sans souci.
+    let omsRows = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsRows = omsRows.concat(d.rows); });
     const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
     const cohorts = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.cohortRetention(omsRows, omsCMap) : null;
 
