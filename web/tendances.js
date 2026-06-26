@@ -196,11 +196,11 @@ function periods() { return { n: rangeOf(FP_N, 'nRange'), n1: rangeOf(FP_N1, 'n1
   // Calendriers range (1 par période). Défaut : N = 12 derniers mois, N-1 = l'année d'avant.
   if (window.flatpickr) {
     const L = window.flatpickr.l10ns && window.flatpickr.l10ns.fr;
-    const today = new Date();
-    const nFrom = new Date(today); nFrom.setFullYear(nFrom.getFullYear() - 1); nFrom.setDate(nFrom.getDate() + 1);
-    const n1To = new Date(nFrom); n1To.setDate(n1To.getDate() - 1);
-    const n1From = new Date(n1To); n1From.setFullYear(n1From.getFullYear() - 1); n1From.setDate(n1From.getDate() + 1);
-    FP_N = flatpickr('#nRange', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [nFrom, today] });
+    // Défaut = ANNÉE CALENDAIRE (1er janvier → 31 décembre), N-1 = année précédente complète.
+    const y = new Date().getFullYear();
+    const nFrom = new Date(y, 0, 1), nTo = new Date(y, 11, 31);
+    const n1From = new Date(y - 1, 0, 1), n1To = new Date(y - 1, 11, 31);
+    FP_N = flatpickr('#nRange', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [nFrom, nTo] });
     FP_N1 = flatpickr('#n1Range', { mode: 'range', dateFormat: 'Y-m-d', locale: L, defaultDate: [n1From, n1To] });
   } else {
     // Repli si flatpickr indisponible (CDN) : saisie texte « AAAA-MM-JJ → AAAA-MM-JJ ».
