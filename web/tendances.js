@@ -14,10 +14,10 @@ const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el || !window.Chart) return; try { if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); } catch (e) { /* graphe non dessiné — les cartes restent visibles */ } }
 
 // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
-let OMNI_DATA = {}, OMNI_MONTHS = [], OMNI_COUNTRY = '';
-function omniVals(zone) { // zone : 'global'|'fr'|'inter'|'country' → [{ent,sfs}] par mois
-  return OMNI_MONTHS.map(mo => { const m = OMNI_DATA[mo]; if (!m) return { ent: 0, sfs: 0 }; if (zone === 'country') return (m.pays && m.pays[OMNI_COUNTRY]) || { ent: 0, sfs: 0 }; return m[zone] || { ent: 0, sfs: 0 }; });
-}
+let OMNI_DATA = {}, OMNI_N1 = {}, OMNI_MONTHS = [], OMNI_COUNTRY = '';
+function omniAt(src, mo, zone) { const m = src[mo]; if (!m) return { ent: 0, sfs: 0 }; if (zone === 'country') return (m.pays && m.pays[OMNI_COUNTRY]) || { ent: 0, sfs: 0 }; return m[zone] || { ent: 0, sfs: 0 }; }
+function omniVals(zone) { return OMNI_MONTHS.map(mo => omniAt(OMNI_DATA, mo, zone)); } // N (pour les bâtons)
+const omniDlt = (n, n1) => { if (n1 == null || !n1) return ''; const p = (n - n1) / Math.abs(n1) * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
 const OMNI_STACK_OPTS = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } };
 function drawOmniBar(id, zone) {
   if (!OMNI_MONTHS.length) return;
@@ -41,11 +41,20 @@ function drawOmniBar(id, zone) {
   mk(id, { type: 'bar', data: { labels, datasets }, options: OMNI_STACK_OPTS });
 }
 function omniTableHtml(zone) {
-  const v = omniVals(zone);
-  const rows = OMNI_MONTHS.map((mo, i) => { const e = v[i], t = e.ent + e.sfs, pct = t ? e.sfs / t : null; return `<tr><td>${monthLabel(mo)}</td><td style="text-align:right;color:var(--t2)">${fEur(e.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(e.sfs)}</td><td style="text-align:right"><b>${pct != null ? fPct(pct) : '—'}</b></td></tr>`; }).join('');
-  const tot = v.reduce((a, e) => ({ ent: a.ent + e.ent, sfs: a.sfs + e.sfs }), { ent: 0, sfs: 0 }); const tt = tot.ent + tot.sfs;
-  return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">% SFS</th></tr></thead><tbody>${rows}</tbody>
-    <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right">${fEur(tot.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(tot.sfs)}</td><td style="text-align:right">${tt ? fPct(tot.sfs / tt) : '—'}</td></tr></tfoot></table>`;
+  const totN = { ent: 0, sfs: 0 }, totN1 = { ent: 0, sfs: 0 };
+  const rows = OMNI_MONTHS.map(mo => {
+    const n = omniAt(OMNI_DATA, mo, zone), n1 = omniAt(OMNI_N1, mo, zone);
+    totN.ent += n.ent; totN.sfs += n.sfs; totN1.ent += n1.ent; totN1.sfs += n1.sfs;
+    const t = n.ent + n.sfs, t1 = n1.ent + n1.sfs, pN = t ? n.sfs / t : null, pN1 = t1 ? n1.sfs / t1 : null;
+    return `<tr><td>${monthLabel(mo)}</td>
+      <td style="text-align:right;color:var(--t2);white-space:nowrap">${fEur(n.ent)} ${omniDlt(n.ent, n1.ent)}</td>
+      <td style="text-align:right;color:var(--r);white-space:nowrap">${fEur(n.sfs)} ${omniDlt(n.sfs, n1.sfs)}</td>
+      <td style="text-align:right"><b>${pN != null ? fPct(pN) : '—'}</b></td>
+      <td style="text-align:right;color:var(--t3)">${pN1 != null ? fPct(pN1) : '—'}</td></tr>`;
+  }).join('');
+  const tt = totN.ent + totN.sfs, tt1 = totN1.ent + totN1.sfs;
+  return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">🟥 SFS N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">% SFS N</th><th style="text-align:right">% SFS N‑1</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right;white-space:nowrap">${fEur(totN.ent)} ${omniDlt(totN.ent, totN1.ent)}</td><td style="text-align:right;color:var(--r);white-space:nowrap">${fEur(totN.sfs)} ${omniDlt(totN.sfs, totN1.sfs)}</td><td style="text-align:right">${tt ? fPct(totN.sfs / tt) : '—'}</td><td style="text-align:right;color:var(--t3)">${tt1 ? fPct(totN1.sfs / tt1) : '—'}</td></tr></tfoot></table>`;
 }
 window.omniSetCountry = function (c) { OMNI_COUNTRY = c; drawOmniBar('ch_omni_inter', c ? 'country' : 'inter'); const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter'); };
 
@@ -139,7 +148,7 @@ function render(d) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
   // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
-  OMNI_DATA = d.sfsMix || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
+  OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
   let omniCard = '';
   if (OMNI_MONTHS.length) {
     // Pays international présents (pour le filtre du tableau Inter).

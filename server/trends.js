@@ -151,12 +151,20 @@ router.get('/', requireAuth, (req, res) => {
     const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
     const cohorts = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.cohortRetention(omsRows, omsCMap) : null;
 
-    // Mix Entrepôt vs Ship-from-store par mois × zone (Global/FR/Inter/UK/US) — fluctuation du poids SFS.
-    let sfsMix = {};
-    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); sfsMix = calc.sfsMixMonthly(od.rows, od.map); } }
-    if (nMonths && nMonths.length) { const keep = new Set(nMonths); const out = {}; for (const k of Object.keys(sfsMix)) if (keep.has(k)) out[k] = sfsMix[k]; sfsMix = out; } // borné à la période N saisie
+    // Mix Entrepôt vs Ship-from-store par mois × zone (Global/FR/Inter/UK/US/pays) — fluctuation du poids SFS.
+    let sfsAll = {};
+    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); sfsAll = calc.sfsMixMonthly(od.rows, od.map); } }
+    // Borné à la période N saisie + N-1 ALIGNÉ mois par mois (clé = le mois N, valeur = mix du mois N-1).
+    let sfsMix = {}, sfsMixN1 = {};
+    if (nMonths && nMonths.length) {
+      nMonths.forEach((mo, i) => {
+        if (sfsAll[mo]) sfsMix[mo] = sfsAll[mo];
+        const prev = (n1Months && n1Months[i]) ? n1Months[i] : `${+mo.slice(0, 4) - 1}-${mo.slice(5)}`;
+        if (sfsAll[prev]) sfsMixN1[mo] = sfsAll[prev];
+      });
+    } else { sfsMix = sfsAll; }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix,
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
