@@ -320,6 +320,33 @@ function render(d) {
   } else if (!d.has.cohorts) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
+  // CRM : nouveaux clients vs récurrents (CA) par mois.
+  const cf = d.crmFlow; let crmFlowCard = '';
+  if (cf && cf.months && cf.months.length) {
+    const tNew = cf.months.reduce((a, m) => a + m.caNew, 0), tRet = cf.months.reduce((a, m) => a + m.caRet, 0), tt = tNew + tRet;
+    const rows = cf.months.map(m => `<tr><td><b>${monthLabel(m.month)}</b></td>
+      <td style="text-align:right">${fEur(m.caNew)}</td>
+      <td style="text-align:right;color:var(--g)">${fEur(m.caRet)}</td>
+      <td style="text-align:right"><b>${m.shareRet != null ? fPct(m.shareRet) : '—'}</b></td>
+      <td style="text-align:right;color:var(--t3)">${fInt(m.custNew)}</td>
+      <td style="text-align:right;color:var(--t3)">${fInt(m.custRet)}</td></tr>`).join('');
+    crmFlowCard = `<div class="card"><h3>👥 Nouveaux clients vs récurrents (CA)</h3>
+      <div class="note" style="margin:-6px 0 8px">Part du CA EShop des <b style="color:var(--g)">clients récurrents</b> (ont déjà commandé) vs <b style="color:var(--b)">nouveaux clients</b> (1ʳᵉ commande), mois par mois. Sur la période : récurrents = <b>${tt ? fPct(tRet / tt) : '—'}</b> du CA. Clé client pseudonymisée.</div>
+      <div style="height:240px"><canvas id="ch_crmflow"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th>Mois</th><th style="text-align:right">CA nouveaux</th><th style="text-align:right">CA récurrents</th><th style="text-align:right">% récurrent</th><th style="text-align:right">Nb nouveaux</th><th style="text-align:right">Nb récurrents</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  // CRM : segmentation RFM.
+  const rf = d.crmRfm; let rfmCard = '';
+  if (rf && rf.segments && rf.segments.length) {
+    const o = rf.overall; const f2 = v => (Math.round((v || 0) * 100) / 100).toLocaleString('fr-FR');
+    const tiles = `<div class="kgrid"><div class="kc"><div class="l">Clients</div><div class="v">${fInt(o.customers)}</div></div><div class="kc"><div class="l">Cmd / client</div><div class="v">${f2(o.avgOrders)}</div></div><div class="kc"><div class="l">CA / client (LTV)</div><div class="v">${fEur(o.avgCa)}</div></div><div class="kc"><div class="l">Multi-acheteurs</div><div class="v">${fPct(o.pctMulti)}</div></div><div class="kc"><div class="l">CA multi-acheteurs</div><div class="v">${fPct(o.shareCaMulti)}</div></div></div>`;
+    const rows = rf.segments.map(s => `<tr><td><span style="color:${SEG_COLOR[s.segment] || '#888'}">●</span> <b>${esc(s.segment)}</b></td><td style="text-align:right">${fInt(s.count)}</td><td style="text-align:right">${fPct(s.shareCust)}</td><td style="text-align:right">${fEur(s.ca)}</td><td style="text-align:right"><b>${fPct(s.shareCa)}</b></td></tr>`).join('');
+    rfmCard = `<div class="card"><h3>🎯 Segmentation clients RFM</h3>
+      <div class="note" style="margin:-6px 0 8px">Récence × Fréquence × Montant (proxy depuis l'OMS${o.asof ? `, arrêté au ${o.asof.split('-').reverse().join('/')}` : ''}). Champions = fréquents & récents · À risque / Endormis = à réactiver. Clé client pseudonymisée.</div>
+      ${tiles}
+      <div style="height:230px;margin-top:12px"><canvas id="ch_rfm"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th>Segment</th><th style="text-align:right">Clients</th><th style="text-align:right">% clients</th><th style="text-align:right">CA</th><th style="text-align:right">% CA</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
   // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
   OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
   OMNI_FAM = d.sfsFamily || { global: {}, france: {}, inter: {}, byCountry: {} };
@@ -362,15 +389,16 @@ function render(d) {
   const intlBlock = (intlPerfCard || omniCard) ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${intlPerfCard}${omniCard}</div>` : '';
   // Bloc Acquisition : mix canaux + suivi campagnes (N vs N-1) + trafic/paid + marketplace.
   const acqBlock = (acqGrid || acqMixCard || campCard || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqMixCard}${campCard}${acqGrid}${mktCard}</div>` : '';
-  const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
-  // Ordre : Synthèse → EStore → International → Acquisition → Cohortes.
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${wrapId('tr_coh', cohCard)}`;
+  // Bloc CRM & fidélisation : nouveaux vs récurrents (€) + cohortes de réachat + segmentation RFM.
+  const crmBlock = (crmFlowCard || cohCard || rfmCard) ? `<div id="tr_crm" style="scroll-margin-top:80px">${head('🔁 CRM & fidélisation')}${crmFlowCard}${cohCard}${rfmCard}</div>` : '';
+  // Ordre : Synthèse → EStore → International → Acquisition → CRM.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${crmBlock}`;
   // Sommaire d'ancres (droite).
   const navItems = [{ id: 'tr_synth', label: '📋 Synthèse KPI' }];
   if (estoreBlock) navItems.push({ id: 'tr_estore', label: '🛍️ EStore' });
   if (intlBlock) navItems.push({ id: 'tr_intl', label: '✈️ International' });
   if (acqBlock) navItems.push({ id: 'tr_acq', label: '📣 Acquisition' });
-  if (cohCard) navItems.push({ id: 'tr_coh', label: '🔁 Cohortes' });
+  if (crmBlock) navItems.push({ id: 'tr_crm', label: '🔁 CRM & fidélité' });
   buildTrendsNav(navItems);
   synthPlot((d.series.some(s => s.n.ca != null)) ? 'ca' : ((SYNTH_PLOT.find(m => d.series.some(s => s.n[m.key] != null)) || {}).key || 'ca'));
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
@@ -379,6 +407,25 @@ function render(d) {
     const cl = coh.cohorts.map(c => monthLabel(c.month));
     const ds = (lbl, k, col) => ({ label: lbl, data: coh.cohorts.map(c => c[k]), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true });
     mk('ch_coh', { type: 'line', data: { labels: cl, datasets: [ds('≤ 30 j', 'r30', '#1B9E6A'), ds('≤ 60 j', 'r60', '#A8854A'), ds('≤ 90 j', 'r90', '#6E7B8B')] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fPct(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => (Math.round(v * 1000) / 10) + '%', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } } });
+  }
+  if (cf && cf.months && cf.months.length) {
+    const cl = cf.months.map(m => monthLabel(m.month));
+    mk('ch_crmflow', {
+      type: 'bar',
+      data: { labels: cl, datasets: [
+        { label: 'CA nouveaux', data: cf.months.map(m => Math.round(m.caNew)), backgroundColor: 'rgba(110,123,139,.85)', stack: 'ca', order: 2 },
+        { label: 'CA récurrents', data: cf.months.map(m => Math.round(m.caRet)), backgroundColor: 'rgba(27,158,106,.85)', stack: 'ca', order: 2 },
+        { label: '% récurrent', type: 'line', data: cf.months.map(m => m.shareRet != null ? Math.round(m.shareRet * 1000) / 10 : null), borderColor: '#A8854A', backgroundColor: 'transparent', yAxisID: 'y1', tension: .25, pointRadius: 2, borderWidth: 2, order: 1, spanGaps: true },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y1' ? `${c.dataset.label} : ${c.parsed.y}%` : `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } }, y1: { position: 'right', min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { display: false } } } },
+    });
+  }
+  if (rf && rf.segments && rf.segments.length) {
+    mk('ch_rfm', {
+      type: 'doughnut',
+      data: { labels: rf.segments.map(s => s.segment), datasets: [{ data: rf.segments.map(s => s.ca), backgroundColor: rf.segments.map(s => SEG_COLOR[s.segment] || '#888'), borderColor: '#fff', borderWidth: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.label} : ${fEur(c.parsed)}` } } } },
+    });
   }
   if (mkt && mkt.series && mkt.series.length) {
     const ml = mkt.months.map(monthLabel);
@@ -426,6 +473,8 @@ function render(d) {
 const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B', '#5B8DB8', '#D08B5B'];
 // Couleurs sémantiques par type de canal d'acquisition.
 const CHAN_COLOR = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
+// Couleurs par segment RFM.
+const SEG_COLOR = { Champions: '#1B9E6A', 'Fidèles': '#A8854A', Nouveaux: '#5B8DB8', Occasionnels: '#6E7B8B', 'À risque': '#C8A35B', Endormis: '#E2574D' };
 
 let COMPARE = true;   // comparatif N-1 actif par défaut
 async function run() {

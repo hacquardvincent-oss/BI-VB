@@ -570,6 +570,79 @@ function cohortRetention(rows, map) {
   return { cohorts: arr, overall: { customers: totCust, r30: totCust ? t30 / totCust : 0, r60: totCust ? t60 / totCust : 0, r90: totCust ? t90 / totCust : 0 } };
 }
 
+// ── CRM : part du CA « nouveaux clients » vs « clients récurrents » par mois (clé client hashée) ──
+// Une commande est « acquisition » si c'est la 1ʳᵉ commande du client (date = 1ʳᵉ commande), sinon « réachat ».
+// Périmètre EShop (hors mkt + Outstore). Sert au suivi fidélisation dans le temps.
+function crmNewVsReturning(rows, map) {
+  const ci = map.client, di = map.date, ni = map.num, ti = map.type, li = map.lieu, pi = map.prix, qi = map.qte;
+  if (ci === undefined || di === undefined || pi === undefined) return null;
+  const byClient = {};
+  rows.forEach(r => {
+    const cli = (r[ci] || '').toString().trim(); if (!cli) return;
+    if (ti !== undefined && isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const d = parseFrD(r[di]); if (!d) return;
+    const ms = Date.UTC(d.y, d.m - 1, d.d);
+    const ord = ni !== undefined ? (r[ni] || '').toString() : (cli + ':' + ms);
+    const c = byClient[cli] || (byClient[cli] = { orders: {}, first: Infinity });
+    const o = c.orders[ord] || (c.orders[ord] = { ms, ca: 0 });
+    if (ms < o.ms) o.ms = ms; o.ca += fN(r[pi]);
+    if (ms < c.first) c.first = ms;
+  });
+  const moOf = ms => { const dt = new Date(ms); return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}`; };
+  const byMonth = {};
+  const ensure = mo => byMonth[mo] || (byMonth[mo] = { month: mo, caNew: 0, caRet: 0, ordNew: 0, ordRet: 0, custNew: 0, custRet: 0 });
+  Object.values(byClient).forEach(c => {
+    const retMonths = {};
+    Object.values(c.orders).forEach(o => {
+      const e = ensure(moOf(o.ms));
+      if (o.ms === c.first) { e.caNew += o.ca; e.ordNew++; }
+      else { e.caRet += o.ca; e.ordRet++; retMonths[moOf(o.ms)] = true; }
+    });
+    ensure(moOf(c.first)).custNew++;                                  // 1 client = 1 acquisition
+    Object.keys(retMonths).forEach(mo => { ensure(mo).custRet++; });  // clients récurrents distincts/mois
+  });
+  const months = Object.keys(byMonth).sort().map(k => { const e = byMonth[k]; const tot = e.caNew + e.caRet; return { ...e, caTot: tot, shareRet: tot ? e.caRet / tot : null, pmNew: e.ordNew ? e.caNew / e.ordNew : null, pmRet: e.ordRet ? e.caRet / e.ordRet : null }; });
+  return { months };
+}
+
+// ── CRM : segmentation RFM légère (Récence / Fréquence / Montant) sur l'OMS (clé client hashée) ──
+// asof = dernière date observée. Segments à règles simples (proxy, sans connecteur CRM).
+function crmRFM(rows, map) {
+  const ci = map.client, di = map.date, ni = map.num, ti = map.type, li = map.lieu, pi = map.prix;
+  if (ci === undefined || di === undefined || pi === undefined) return null;
+  const DAY = 86400000;
+  const byClient = {}; let asof = 0;
+  rows.forEach(r => {
+    const cli = (r[ci] || '').toString().trim(); if (!cli) return;
+    if (ti !== undefined && isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const d = parseFrD(r[di]); if (!d) return;
+    const ms = Date.UTC(d.y, d.m - 1, d.d); if (ms > asof) asof = ms;
+    const ord = ni !== undefined ? (r[ni] || '').toString() : (cli + ':' + ms);
+    const c = byClient[cli] || (byClient[cli] = { orders: {}, last: 0, ca: 0 });
+    if (!c.orders[ord]) c.orders[ord] = true;
+    if (ms > c.last) c.last = ms; c.ca += fN(r[pi]);
+  });
+  const segs = {}; const seg = k => segs[k] || (segs[k] = { segment: k, count: 0, ca: 0 });
+  let totCust = 0, totCa = 0, totOrders = 0, multi = 0, caMulti = 0;
+  Object.values(byClient).forEach(c => {
+    const freq = Object.keys(c.orders).length; const rec = Math.round((asof - c.last) / DAY);
+    totCust++; totCa += c.ca; totOrders += freq; if (freq >= 2) { multi++; caMulti += c.ca; }
+    let k;
+    if (freq >= 3 && rec <= 90) k = 'Champions';
+    else if (freq >= 2 && rec <= 180) k = 'Fidèles';
+    else if (freq === 1 && rec <= 90) k = 'Nouveaux';
+    else if (freq >= 2 && rec <= 365) k = 'À risque';
+    else if (rec > 365) k = 'Endormis';
+    else k = 'Occasionnels';
+    const s = seg(k); s.count++; s.ca += c.ca;
+  });
+  const ORDER = ['Champions', 'Fidèles', 'Nouveaux', 'Occasionnels', 'À risque', 'Endormis'];
+  const segments = ORDER.filter(k => segs[k]).map(k => ({ ...segs[k], shareCust: totCust ? segs[k].count / totCust : 0, shareCa: totCa ? segs[k].ca / totCa : 0 }));
+  return { segments, overall: { customers: totCust, ca: Math.round(totCa), avgOrders: totCust ? totOrders / totCust : 0, avgCa: totCust ? totCa / totCust : 0, pctMulti: totCust ? multi / totCust : 0, shareCaMulti: totCa ? caMulti / totCa : 0, asof: asof ? new Date(asof).toISOString().slice(0, 10) : null } };
+}
+
 // ── Agrégation MENSUELLE du CA EShop (hors mkt + Outstore) → { "YYYY-MM": {ca, commandes, pieces, caOP} }
 // Sert au module Objectifs (historique + prévision par mois). Périmètre = même que le Bilan EShop.
 function monthlyEShopCA(rows, map) {
@@ -2471,7 +2544,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, crmNewVsReturning, crmRFM, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,

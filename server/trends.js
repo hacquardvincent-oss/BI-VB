@@ -210,6 +210,9 @@ router.get('/', requireAuth, (req, res) => {
     let omsRows = []; ['N', 'N1'].forEach(p => { const d = store.getDataset('oms', p); if (d && d.rows) omsRows = omsRows.concat(d.rows); });
     const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
     const cohorts = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.cohortRetention(omsRows, omsCMap) : null;
+    // CRM (clé client hashée) : nouveaux vs récurrents en € par mois + segmentation RFM.
+    const crmFlow = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.crmNewVsReturning(omsRows, omsCMap) : null;
+    const crmRfm = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.crmRFM(omsRows, omsCMap) : null;
 
     // Mix Entrepôt vs Ship-from-store par mois × zone (Global/FR/Inter/UK/US/pays) — fluctuation du poids SFS.
     let sfsAll = {};
@@ -300,7 +303,7 @@ router.get('/', requireAuth, (req, res) => {
       }
     }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, sfsFamilyN1, familyTrend, intlTrend, acqTrend, campaignTrend,
+      url: url || null, series, marketplace, cohorts, crmFlow, crmRfm, sfsMix, sfsMixN1, sfsFamily, sfsFamilyN1, familyTrend, intlTrend, acqTrend, campaignTrend,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')), campaigns: !!(store.getDataset('gacampdaily', 'N') || store.getDataset('gacampdaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
