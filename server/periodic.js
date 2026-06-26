@@ -65,4 +65,64 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── COCKPIT « CUMULS » : Jour / Semaine WTD / Mois MTD / Année YTD, chacun avec réalisé, N-1 à date,
+// objectif (mois/année), atterrissage projeté et avance/retard → jauges « suis-je en avance ? ». ────
+const shiftYear = (iso, d) => { const p = iso.split('-'); return `${+p[0] + d}-${p[1]}-${p[2]}`; };
+const lastDayOfMonth = (y, mo) => new Date(Date.UTC(y, mo, 0)).getUTCDate();
+function eshopOf(from, to) { const b = bundleFor({ from, to }); return b ? b.global : null; }
+function cumulBlock(label, from, to, opts = {}) {
+  const cf = shiftYear(from, -1), ct = shiftYear(to, -1);
+  const n = eshopOf(from, to) || { ca: 0, commandes: 0, pieces: 0, caFP: 0, caOP: 0, sessions: 0 };
+  const n1 = eshopOf(cf, ct);
+  const out = {
+    label, from, to, cf, ct,
+    ca: n.ca, commandes: n.commandes, pieces: n.pieces, caFP: n.caFP, caOP: n.caOP, sessions: n.sessions,
+    caN1: n1 ? n1.ca : null, commandesN1: n1 ? n1.commandes : null,
+    deltaN1: (n1 && n1.ca) ? (n.ca - n1.ca) / n1.ca : null,
+  };
+  // Atterrissage = cumul N + reste de période observé en N-1 (sinon extrapolation linéaire).
+  if (opts.periodStart && opts.periodEnd) {
+    const n1full = eshopOf(shiftYear(opts.periodStart, -1), shiftYear(opts.periodEnd, -1));
+    if (n1full && n1 && n1full.ca > 0) out.atterrissage = Math.round(n.ca + Math.max(0, n1full.ca - n1.ca));
+    else if (opts.elapsed && opts.total) out.atterrissage = Math.round(n.ca * opts.total / opts.elapsed);
+  }
+  if (Number.isFinite(opts.objectif) && opts.objectif > 0) {
+    out.objectif = Math.round(opts.objectif);
+    out.pctObjectif = n.ca / opts.objectif;
+    out.resteAFaire = Math.round(opts.objectif - n.ca);
+    if (out.atterrissage != null) out.projVsObjectif = out.atterrissage / opts.objectif;
+  }
+  if (opts.elapsed && opts.total) out.pctTemps = opts.elapsed / opts.total; // % de la période écoulé (repère de rythme)
+  return out;
+}
+router.get('/cumuls', requireAuth, async (req, res) => {
+  try {
+    if (store.whenReady) await store.whenReady();
+    const objectives = require('./objectives');
+    let asof = okDate(req.query.asof);
+    if (!asof) { const o = store.getDataset('oms', 'N'); asof = (o && o.date_max) || new Date().toISOString().slice(0, 10); }
+    const d = new Date(asof + 'T00:00:00Z');
+    const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, day = d.getUTCDate();
+    const pad = n => String(n).padStart(2, '0');
+    const dim = lastDayOfMonth(y, mo);
+    const monthKey = `${y}-${pad(mo)}`;
+    const dow = (d.getUTCDay() + 6) % 7;                 // lundi = 0
+    const weekStart = shiftISO(asof, -dow);
+    // Objectifs : mois (direct) ; année = somme des 12 mensuels.
+    let objMonth = null, objYear = 0;
+    try { objMonth = objectives.getMonthObjectiveCA(monthKey); } catch (_) { /* */ }
+    try { for (let m = 1; m <= 12; m++) { const v = objectives.getMonthObjectiveCA(`${y}-${pad(m)}`); if (Number.isFinite(v)) objYear += v; } } catch (_) { /* */ }
+    // Jour de l'année écoulé (pour le rythme annuel).
+    const doy = Math.floor((d - new Date(Date.UTC(y, 0, 1))) / 86400000) + 1;
+    const daysInYear = ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+    const cumuls = {
+      jour: cumulBlock('Jour', asof, asof),
+      semaine: cumulBlock('Semaine (WTD)', weekStart, asof, { elapsed: dow + 1, total: 7 }),
+      mois: cumulBlock('Mois (MTD)', `${y}-${pad(mo)}-01`, asof, { periodStart: `${y}-${pad(mo)}-01`, periodEnd: `${y}-${pad(mo)}-${pad(dim)}`, objectif: objMonth, elapsed: day, total: dim }),
+      annee: cumulBlock('Année (YTD)', `${y}-01-01`, asof, { periodStart: `${y}-01-01`, periodEnd: `${y}-12-31`, objectif: objYear || null, elapsed: doy, total: daysInYear }),
+    };
+    res.json({ asof, cumuls, hasObj: !!(objMonth || objYear), has: { oms: !!(store.getDataset('oms', 'N') || store.getDataset('saisonoms', 'N')) } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = { router };
