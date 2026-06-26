@@ -386,10 +386,11 @@ function sfsMixMonthly(rows, map) {
     const p = fN(r[pi]);
     const ent = (r[mi] || '').trim().toLowerCase() === 'webstore eur';        // Entrepôt vs ship-from-store
     const paysN = normCountry(r[pai]);
-    const m = by[mo] || (by[mo] = {});
-    const add = z => { const e = m[z] || (m[z] = { ent: 0, sfs: 0 }); if (ent) e.ent += p; else e.sfs += p; };
-    add('global');
-    if (paysN === 'france') add('fr'); else { add('inter'); if (paysN === 'royaume-uni') add('uk'); else if (paysN === 'etats-unis') add('us'); }
+    const m = by[mo] || (by[mo] = { pays: {} });
+    const add = (obj, z) => { const e = obj[z] || (obj[z] = { ent: 0, sfs: 0 }); if (ent) e.ent += p; else e.sfs += p; };
+    add(m, 'global');
+    if (paysN === 'france') add(m, 'fr');
+    else { add(m, 'inter'); add(m.pays, paysN || '(?)'); if (paysN === 'royaume-uni') add(m, 'uk'); else if (paysN === 'etats-unis') add(m, 'us'); } // détail par pays pour le filtre International
   });
   return by;
 }

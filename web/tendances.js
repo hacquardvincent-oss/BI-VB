@@ -13,23 +13,41 @@ const monthLabel = mo => { const [y, m] = mo.split('-'); return `${MLABEL[+m - 1
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el || !window.Chart) return; try { if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); } catch (e) { /* graphe non dessiné — les cartes restent visibles */ } }
 
-// ── Mix Entrepôt / Ship-from-store : état + bascule % poids ↔ € montants ──
-let SFS_DATA = {}, SFS_MONTHS = [], SFS_MODE = 'pct';
-const SFS_ZONES = [['global', '🌍 Global', '#6E7B8B'], ['fr', '🇫🇷 France', '#A8854A'], ['inter', '✈️ Inter', '#1B9E6A'], ['uk', '🇬🇧 UK', '#7C4DCB'], ['us', '🇺🇸 US', '#E2574D']];
-function sfsPct(mo, z) { const e = SFS_DATA[mo] && SFS_DATA[mo][z]; if (!e) return null; const t = e.ent + e.sfs; return t ? e.sfs / t : null; }
-function drawSfsChart() {
-  if (!SFS_MONTHS.length) return;
-  const labels = SFS_MONTHS.map(monthLabel);
-  let cfg;
-  if (SFS_MODE === 'eur') { // bâtons empilés Entrepôt + SFS pour le Global (montants €)
-    const val = (mo, k) => { const e = SFS_DATA[mo] && SFS_DATA[mo].global; return e ? Math.round(e[k]) : 0; };
-    cfg = { type: 'bar', data: { labels, datasets: [{ label: 'Entrepôt €', data: SFS_MONTHS.map(mo => val(mo, 'ent')), backgroundColor: 'rgba(110,123,139,.75)', stack: 'g' }, { label: 'Ship-from-store €', data: SFS_MONTHS.map(mo => val(mo, 'sfs')), backgroundColor: 'rgba(226,87,77,.8)', stack: 'g' }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } } };
-  } else { // courbes % SFS par zone
-    cfg = { type: 'line', data: { labels, datasets: SFS_ZONES.map(([z, lbl, col]) => ({ label: lbl, data: SFS_MONTHS.map(mo => { const p = sfsPct(mo, z); return p != null ? +(p * 100).toFixed(1) : null; }), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 1, borderWidth: 2, spanGaps: true })) }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${c.parsed.y}% SFS` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: '% ship-from-store', font: { size: 9 } } } } } };
-  }
-  mk('ch_sfs', cfg);
+// ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
+let OMNI_DATA = {}, OMNI_MONTHS = [], OMNI_COUNTRY = '';
+function omniVals(zone) { // zone : 'global'|'fr'|'inter'|'country' → [{ent,sfs}] par mois
+  return OMNI_MONTHS.map(mo => { const m = OMNI_DATA[mo]; if (!m) return { ent: 0, sfs: 0 }; if (zone === 'country') return (m.pays && m.pays[OMNI_COUNTRY]) || { ent: 0, sfs: 0 }; return m[zone] || { ent: 0, sfs: 0 }; });
 }
-window.setSfsMode = function (m) { SFS_MODE = m; document.querySelectorAll('.sfs-mode').forEach(b => b.classList.toggle('on', b.dataset.m === m)); drawSfsChart(); };
+const OMNI_STACK_OPTS = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } };
+function drawOmniBar(id, zone) {
+  if (!OMNI_MONTHS.length) return;
+  const labels = OMNI_MONTHS.map(monthLabel);
+  let datasets;
+  if (zone === 'global') { // Global = répartition Entrepôt/SFS ENTRE FR et Inter (4 segments gris/rouge)
+    const fr = omniVals('fr'), it = omniVals('inter');
+    datasets = [
+      { label: 'Entrepôt FR', data: fr.map(v => Math.round(v.ent)), backgroundColor: 'rgba(78,88,102,.92)', stack: 'o' },
+      { label: 'Entrepôt Inter', data: it.map(v => Math.round(v.ent)), backgroundColor: 'rgba(150,160,172,.85)', stack: 'o' },
+      { label: 'SFS FR', data: fr.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(196,60,52,.92)', stack: 'o' },
+      { label: 'SFS Inter', data: it.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(240,150,142,.9)', stack: 'o' },
+    ];
+  } else {
+    const v = omniVals(zone);
+    datasets = [
+      { label: 'Entrepôt €', data: v.map(x => Math.round(x.ent)), backgroundColor: 'rgba(110,123,139,.85)', stack: 'o' },
+      { label: 'Ship-from-store €', data: v.map(x => Math.round(x.sfs)), backgroundColor: 'rgba(226,87,77,.88)', stack: 'o' },
+    ];
+  }
+  mk(id, { type: 'bar', data: { labels, datasets }, options: OMNI_STACK_OPTS });
+}
+function omniTableHtml(zone) {
+  const v = omniVals(zone);
+  const rows = OMNI_MONTHS.map((mo, i) => { const e = v[i], t = e.ent + e.sfs, pct = t ? e.sfs / t : null; return `<tr><td>${monthLabel(mo)}</td><td style="text-align:right;color:var(--t2)">${fEur(e.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(e.sfs)}</td><td style="text-align:right"><b>${pct != null ? fPct(pct) : '—'}</b></td></tr>`; }).join('');
+  const tot = v.reduce((a, e) => ({ ent: a.ent + e.ent, sfs: a.sfs + e.sfs }), { ent: 0, sfs: 0 }); const tt = tot.ent + tot.sfs;
+  return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">% SFS</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right">${fEur(tot.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(tot.sfs)}</td><td style="text-align:right">${tt ? fPct(tot.sfs / tt) : '—'}</td></tr></tfoot></table>`;
+}
+window.omniSetCountry = function (c) { OMNI_COUNTRY = c; drawOmniBar('ch_omni_inter', c ? 'country' : 'inter'); const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter'); };
 
 // Formateurs par type de métrique.
 const KIND = {
@@ -120,23 +138,29 @@ function render(d) {
   } else if (!d.has.cohorts) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
-  // Mix Entrepôt vs Ship-from-store par zone, dans le temps — vue % poids OU € montants (toggle).
-  SFS_DATA = d.sfsMix || {}; SFS_MONTHS = Object.keys(SFS_DATA).sort();
-  let sfsCard = '';
-  if (SFS_MONTHS.length) {
-    const head = `<tr><th>Mois</th>${SFS_ZONES.map(([z, lbl]) => `<th style="text-align:right">${lbl}</th>`).join('')}</tr>`;
-    const cell = (mo, z) => { const e = SFS_DATA[mo] && SFS_DATA[mo][z]; const p = sfsPct(mo, z); if (!e) return '<td style="text-align:right">—</td>'; return `<td style="text-align:right;white-space:nowrap" title="Entrepôt ${fEur(e.ent)} · SFS ${fEur(e.sfs)}"><b>${fPct(p)}</b><div class="note" style="margin:0;font-size:10px">${fEur(e.sfs)} SFS</div></td>`; };
-    const trows = SFS_MONTHS.map(mo => `<tr><td>${monthLabel(mo)}</td>${SFS_ZONES.map(([z]) => cell(mo, z)).join('')}</tr>`).join('');
-    sfsCard = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3 style="margin:0">🏭 Mix Entrepôt vs Ship‑from‑store — dans le temps</h3>
-      <div class="toolbar" style="gap:4px"><button class="pb sfs-mode${SFS_MODE === 'pct' ? ' on' : ''}" data-m="pct" onclick="setSfsMode('pct')">% poids</button><button class="pb sfs-mode${SFS_MODE === 'eur' ? ' on' : ''}" data-m="eur" onclick="setSfsMode('eur')">€ montants</button></div></div>
-      <div class="note" style="margin:6px 0 10px">% du CA EShop en <b>ship‑from‑store</b> (corners) vs <b>entrepôt</b> (webstore), par zone et par mois. Vue € = bâtons Entrepôt/SFS empilés (Global). Détail € au survol du tableau.</div>
-      <div style="height:240px"><canvas id="ch_sfs"></canvas></div>
-      <div style="overflow-x:auto;margin-top:10px"><table style="font-size:12px;width:100%"><thead>${head}</thead><tbody>${trows}</tbody></table></div></div>`;
+  // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
+  OMNI_DATA = d.sfsMix || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
+  let omniCard = '';
+  if (OMNI_MONTHS.length) {
+    // Pays international présents (pour le filtre du tableau Inter).
+    const ctrySet = new Set(); OMNI_MONTHS.forEach(mo => { const py = OMNI_DATA[mo] && OMNI_DATA[mo].pays; if (py) Object.keys(py).forEach(c => ctrySet.add(c)); });
+    const cap = s => s ? s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-') : s;
+    const ctryOpts = `<option value="">Tout l'international</option>` + [...ctrySet].sort().map(c => `<option value="${esc(c)}">${esc(cap(c))}</option>`).join('');
+    const zoneBlock = (title, id, zone, extra) => `<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3 style="margin:0;font-size:14px">${title}</h3>${extra || ''}</div>
+      <div style="height:210px;margin-top:6px"><canvas id="${id}"></canvas></div>
+      <div id="${id}_tbl" style="overflow-x:auto;margin-top:8px">${omniTableHtml(zone)}</div></div>`;
+    const interSelect = `<select id="omni_ctry" class="dt" style="font-size:12px" onchange="omniSetCountry(this.value)">${ctryOpts}</select>`;
+    omniCard = `<div class="card"><h3>🔀 Mix Omnicanal — Entrepôt vs Ship‑from‑store dans le temps</h3>
+      <div class="note" style="margin:-6px 0 6px">Bâtons empilés par mois : <b style="color:#6E7B8B">Entrepôt</b> (webstore) en gris / <b style="color:var(--r)">Ship‑from‑store</b> (corners, magasins) en rouge. Périmètre EShop, hors marketplace.</div>
+      ${zoneBlock('🌍 Global — réparti FR / International', 'ch_omni_global', 'global')}
+      ${zoneBlock('🇫🇷 France', 'ch_omni_fr', 'fr')}
+      ${zoneBlock('✈️ International', 'ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter', interSelect)}
+    </div>`;
   }
-  // Ordre : KPI eshop + acquisition (grille) → marketplace → mix SFS → cohortes.
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${sfsCard}${cohCard}`;
+  // Ordre : KPI eshop + acquisition (grille) → marketplace → Mix Omnicanal → cohortes.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${omniCard}${cohCard}`;
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
-  drawSfsChart();
+  if (OMNI_MONTHS.length) { drawOmniBar('ch_omni_global', 'global'); drawOmniBar('ch_omni_fr', 'fr'); drawOmniBar('ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter'); }
   if (coh && coh.cohorts && coh.cohorts.length) {
     const cl = coh.cohorts.map(c => monthLabel(c.month));
     const ds = (lbl, k, col) => ({ label: lbl, data: coh.cohorts.map(c => c[k]), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true });
