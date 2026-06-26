@@ -60,6 +60,23 @@ function adsMonthly(slot) {
   d.rows.forEach(r => { const mo = monthOf(r[m.date]); if (!mo) return; const e = by[mo] || (by[mo] = { spend: 0, conv: 0, convValue: 0 }); e.spend += num(r[m.cost]); if (m.conversions != null) e.conv += num(r[m.conversions]); if (m.convValue != null) e.convValue += num(r[m.convValue]); });
   return by;
 }
+// Acquisition par mois × TYPE de canal (Paid/CRM/SEO/Direct/Social/Referral) depuis le jeu `ga`.
+// → { mois: { type: {sessions, revenue, conv} } } (CA = revenu GA attribué au canal).
+function channelMonthly(slot) {
+  const d = store.getDataset('ga', slot);
+  if (!d || !d.rows || !d.map || d.map.canal == null) return {};
+  const m = d.map, di = m.date != null ? m.date : 0, by = {};
+  d.rows.forEach(r => {
+    const mo = monthOf(r[di]); if (!mo) return;
+    const t = calc.channelType(r[m.canal]);
+    const e = by[mo] || (by[mo] = {});
+    const c = e[t] || (e[t] = { sessions: 0, revenue: 0, conv: 0 });
+    c.sessions += num(r[m.sessions]);
+    if (m.revenue != null) c.revenue += num(r[m.revenue]);
+    if (m.purchases != null) c.conv += num(r[m.purchases]);
+  });
+  return by;
+}
 // Retours par mois (jeu `ret`/`saisonret`) → { mois: {montant, count} } (taux de retour + suivi volume).
 function retMonthly(source, slot) {
   const d = store.getDataset(source, slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
@@ -219,8 +236,24 @@ router.get('/', requireAuth, (req, res) => {
         };
       }
     }
+    // Mix d'acquisition dans le temps : par TYPE de canal (Paid/CRM/SEO/…), efficacité N vs N-1 — bloc Acquisition.
+    let acqTrend = { months: [], channels: [] };
+    { const chMonthly = mergeFirst(['N', 'N1'].map(channelMonthly));
+      if (Object.keys(chMonthly).length) {
+        const ORDER = ['Paid', 'CRM', 'SEO', 'Direct', 'Social', 'Referral', 'Autre'];
+        const sum = a => a.reduce((x, y) => x + y, 0);
+        const at = (mo, t, k) => Math.round(((chMonthly[mo] || {})[t] || {})[k] || 0);
+        const present = ORDER.filter(t => series.some(s => (chMonthly[s.month] || {})[t]));
+        acqTrend = { months: series.map(s => s.month), channels: present.map(t => {
+          const sessions = series.map(s => at(s.month, t, 'sessions')), sessionsN1 = series.map(s => at(s.n1month, t, 'sessions'));
+          const ca = series.map(s => at(s.month, t, 'revenue')), caN1 = series.map(s => at(s.n1month, t, 'revenue'));
+          const conv = series.map(s => at(s.month, t, 'conv')), convN1 = series.map(s => at(s.n1month, t, 'conv'));
+          return { type: t, sessions, ca, conv, sessTot: sum(sessions), sessTotN1: sum(sessionsN1), caTot: sum(ca), caTotN1: sum(caN1), convTot: sum(conv), convTotN1: sum(convN1) };
+        }) };
+      }
+    }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend, intlTrend,
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend, intlTrend, acqTrend,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

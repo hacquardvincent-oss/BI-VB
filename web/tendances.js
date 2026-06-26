@@ -219,6 +219,23 @@ function render(d) {
       <div style="height:240px"><canvas id="ch_intlctry"></canvas></div>
       <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Pays</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Poids</th></tr></thead><tbody>${crows}</tbody></table></div>`;
   }
+  // Mix d'acquisition dans le temps : CA attribué GA par type de canal + efficacité N vs N-1 — bloc Acquisition.
+  const aq = d.acqTrend; let acqMixCard = '';
+  if (aq && aq.channels && aq.channels.length) {
+    const dlt = (n, n1, inv) => { if (!n1) return ''; const p = (n - n1) / n1 * 100; const good = inv ? p <= 0 : p >= 0; return `<span class="${good ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
+    const arows = aq.channels.map(c => {
+      const tcN = c.sessTot ? c.convTot / c.sessTot : null, tcN1 = c.sessTotN1 ? c.convTotN1 / c.sessTotN1 : null;
+      return `<tr><td><span style="color:${CHAN_COLOR[c.type] || '#888'}">●</span> <b>${esc(c.type)}</b></td>
+        <td style="text-align:right">${fInt(c.sessTot)} ${dlt(c.sessTot, c.sessTotN1)}</td>
+        <td style="text-align:right">${fEur(c.caTot)} ${dlt(c.caTot, c.caTotN1)}</td>
+        <td style="text-align:right">${fInt(c.convTot)} ${dlt(c.convTot, c.convTotN1)}</td>
+        <td style="text-align:right">${tcN != null ? fPct(tcN) : '—'} ${(tcN != null && tcN1) ? dlt(tcN, tcN1) : ''}</td></tr>`;
+    }).join('');
+    acqMixCard = `<div class="card"><h3>📣 Mix d'acquisition dans le temps</h3>
+      <div class="note" style="margin:-6px 0 8px">CA attribué (GA) par type de canal, mois par mois (barres empilées). Table = efficacité N vs N-1 : sessions, CA, conversions, taux de conversion.</div>
+      <div style="height:250px"><canvas id="ch_acqmix"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Canal</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th><th style="text-align:right">Conv. N (Δ)</th><th style="text-align:right">Taux conv. (Δ)</th></tr></thead><tbody>${arows}</tbody></table></div>`;
+  }
   // Cohortes de réachat (clé client pseudonymisée).
   const coh = d.cohorts; let cohCard = '';
   if (coh && coh.cohorts && coh.cohorts.length) {
@@ -262,8 +279,8 @@ function render(d) {
   const estoreBlock = (estoreGrid || famCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}</div>` : '';
   // Bloc International / Omnicanal : zoom perfs (CA inter, top pays) + Mix Entrepôt vs SFS + familles par pays.
   const intlBlock = (intlPerfCard || omniCard) ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${intlPerfCard}${omniCard}</div>` : '';
-  // Bloc Acquisition : trafic + paid (sessions, nouveaux, ROAS, CPA, dépense) + marketplace.
-  const acqBlock = (acqGrid || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqGrid}${mktCard}</div>` : '';
+  // Bloc Acquisition : mix canaux (efficacité vs N-1) + trafic/paid (sessions, ROAS, CPA, dépense) + marketplace.
+  const acqBlock = (acqGrid || acqMixCard || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqMixCard}${acqGrid}${mktCard}</div>` : '';
   const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
   // Ordre : Synthèse → EStore → International → Acquisition → Cohortes.
   body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${wrapId('tr_coh', cohCard)}`;
@@ -316,8 +333,17 @@ function render(d) {
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: euY } },
     });
   }
+  if (aq && aq.channels && aq.channels.length) {
+    mk('ch_acqmix', {
+      type: 'bar',
+      data: { labels: aq.months.map(monthLabel), datasets: aq.channels.map(c => ({ label: c.type, data: c.ca, backgroundColor: CHAN_COLOR[c.type] || '#888', stack: 'ca' })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+    });
+  }
 }
 const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B', '#5B8DB8', '#D08B5B'];
+// Couleurs sémantiques par type de canal d'acquisition.
+const CHAN_COLOR = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
 
 async function run() {
   const url = document.getElementById('urlFilter').value.trim();

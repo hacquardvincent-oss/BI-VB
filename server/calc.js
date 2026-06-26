@@ -2464,7 +2464,7 @@ module.exports = {
   filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
-  channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
+  channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
