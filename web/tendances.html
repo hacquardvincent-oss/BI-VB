@@ -33,7 +33,7 @@
   <button class="btn" id="logout">Déconnexion</button>
 </div>
 
-<div class="wrap layout-side no-rightnav">
+<div class="wrap layout-side">
   <aside id="setupCol">
     <!-- 1 · PÉRIODE -->
     <div class="card setup-card">
@@ -58,6 +58,12 @@
       <div class="card"><div class="note">Choisis une période puis « Analyser ».</div></div>
     </div>
   </main>
+
+  <!-- Sommaire d'ancres (droite, fixe) — rempli par tendances.js après l'analyse -->
+  <aside id="reportNav">
+    <div class="rn-head">Sommaire</div>
+    <div class="rn-list" id="trendsNavList"></div>
+  </aside>
 </div>
 
 <script src="/databar.js"></script>

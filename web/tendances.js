@@ -94,6 +94,33 @@ const METRICS = [
   { key: 'addToCarts', label: 'Ajouts panier (volume)', kind: 'int', color: '#9B8AA3' },
 ];
 
+// ── Synthèse KPI dans le temps : 1 tableau linéaire (mois en lignes, KPI clés en colonnes) ──
+const SYNTH = [
+  { key: 'ca', label: 'CA', kind: 'eur' },
+  { key: 'sessions', label: 'Sessions', kind: 'int' },
+  { key: 'tt', label: 'TT', kind: 'pct' },
+  { key: 'pm', label: 'Panier moyen', kind: 'eur' },
+  { key: 'iv', label: 'Indice vente', kind: 'num' },
+  { key: 'addRate', label: 'Ajout panier', kind: 'pct' },
+  { key: 'tauxRetour', label: 'Taux retour', kind: 'pct', inv: true },
+];
+function synthCell(n, n1, kind, inv) {
+  const K = KIND[kind] || KIND.int;
+  let dl = '';
+  if (n != null && n1 != null && n1 !== 0) { const p = (n - n1) / Math.abs(n1) * 100; const good = inv ? p <= 0 : p >= 0; dl = ` <span class="${good ? 'up' : 'dn'}" style="font-size:9px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; }
+  return `<td style="text-align:right;white-space:nowrap">${K.fmt(n)}${dl}</td>`;
+}
+function synthTableHtml(series) {
+  const cols = SYNTH.filter(m => series.some(s => s.n[m.key] != null));
+  if (!cols.length) return '';
+  const head = `<tr><th style="text-align:left">Mois</th>${cols.map(m => `<th style="text-align:right">${esc(m.label)}</th>`).join('')}</tr>`;
+  const rows = series.map(s => `<tr><td><b>${monthLabel(s.month)}</b></td>${cols.map(m => synthCell(s.n[m.key], s.n1[m.key], m.kind, m.inv)).join('')}</tr>`).join('');
+  // Pied : cumul (€/nb) ou moyenne (taux/indice) — cohérent avec les cartes par KPI.
+  const aggOf = (k, mode) => { const v = series.filter(s => s.n[k] != null); if (!v.length) return null; const t = v.reduce((a, s) => a + s.n[k], 0); return mode === 'avg' ? t / v.length : t; };
+  const foot = `<tr style="border-top:2px solid var(--br);font-weight:700"><td>${series.length} mois</td>${cols.map(m => { const K = KIND[m.kind] || KIND.int; const a = aggOf(m.key, K.agg), a1 = (() => { const v = series.filter(s => s.n1[m.key] != null); if (!v.length) return null; const t = v.reduce((x, s) => x + s.n1[m.key], 0); return K.agg === 'avg' ? t / v.length : t; })(); return synthCell(a, a1, m.kind, m.inv); }).join('')}</tr>`;
+  return `<table style="font-size:12px;width:100%"><thead>${head}</thead><tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
 function lineChart(id, labels, nData, n1Data, color, kind) {
   const K = KIND[kind] || KIND.int;
   mk(id, {
@@ -113,9 +140,33 @@ function lineChart(id, labels, nData, n1Data, color, kind) {
   });
 }
 
+// ── Sommaire d'ancres (droite) : navigation rapide entre blocs + surlignage au scroll ──
+let _spyItems = [];
+function trendsSpy() {
+  if (!_spyItems.length) return;
+  const y = window.scrollY + 130;
+  let cur = _spyItems[0].id;
+  for (const it of _spyItems) { const el = document.getElementById(it.id); if (el && el.offsetTop <= y) cur = it.id; }
+  document.querySelectorAll('#trendsNavList a').forEach(a => a.classList.toggle('on', a.dataset.tgt === cur));
+}
+function buildTrendsNav(items) {
+  const list = document.getElementById('trendsNavList'), nav = document.getElementById('reportNav');
+  if (!list || !nav) return;
+  _spyItems = items || [];
+  if (!_spyItems.length) { nav.classList.remove('open'); list.innerHTML = ''; return; }
+  list.innerHTML = _spyItems.map(it => `<a href="#${it.id}" data-tgt="${it.id}">${esc(it.label)}</a>`).join('');
+  nav.classList.add('open');
+  list.querySelectorAll('a').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault(); const el = document.getElementById(a.dataset.tgt); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  trendsSpy();
+}
+window.addEventListener('scroll', () => requestAnimationFrame(trendsSpy), { passive: true });
+
 function render(d) {
   const body = document.getElementById('body');
   if (!d.series || !d.series.length) {
+    buildTrendsNav([]);
     body.innerHTML = `<div class="card"><div class="note">Aucune donnée mensuelle disponible${d.url ? ` pour l'URL « ${esc(d.url)} »` : ''}. Charge l'<b>OMS</b> et/ou <b>GA4</b> via le panneau « 2 · Chargement des données » à gauche (sur une période longue, ex. 1 an + l'année N-1), puis clique « Analyser ».${d.url && !d.has.gapagedaily ? ' Le filtre URL nécessite un import GA4 (jeu pages/jour).' : ''}</div></div>`;
     return;
   }
@@ -176,8 +227,18 @@ function render(d) {
         <div id="omni_fam_tbl" style="overflow-x:auto">${omniFamTableHtml(OMNI_COUNTRY)}</div></div>
     </div>`;
   }
-  // Ordre : KPI eshop + acquisition (grille) → marketplace → Mix Omnicanal → cohortes.
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${omniCard}${cohCard}`;
+  // Synthèse KPI dans le temps (tableau linéaire, en tête).
+  const synthCard = `<div class="card" id="tr_synth" style="scroll-margin-top:80px"><h3>📋 Synthèse KPI dans le temps</h3><div class="note" style="margin:-6px 0 8px">Mois par mois : valeur N et écart vs N-1. Pied = cumul (CA, sessions) ou moyenne (taux, indice).</div><div style="overflow-x:auto">${synthTableHtml(d.series)}</div></div>`;
+  // Ordre : Synthèse → KPI eshop + acquisition (grille) → marketplace → Mix Omnicanal → cohortes.
+  const kpiBlock = `<div id="tr_kpis" style="scroll-margin-top:80px"><h3 style="margin:18px 4px 8px;font-family:var(--disp);font-size:14px">📈 Indicateurs eShop & acquisition</h3><div class="grid cols2">${cards}</div></div>`;
+  const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${kpiBlock}${wrapId('tr_mkt', mktCard)}${wrapId('tr_omni', omniCard)}${wrapId('tr_coh', cohCard)}`;
+  // Sommaire d'ancres (droite).
+  const navItems = [{ id: 'tr_synth', label: '📋 Synthèse KPI' }, { id: 'tr_kpis', label: '📈 Indicateurs' }];
+  if (mktCard) navItems.push({ id: 'tr_mkt', label: '🏬 Marketplace' });
+  if (omniCard) navItems.push({ id: 'tr_omni', label: '🔀 Mix Omnicanal' });
+  if (cohCard) navItems.push({ id: 'tr_coh', label: '🔁 Cohortes' });
+  buildTrendsNav(navItems);
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
   if (OMNI_MONTHS.length) { drawOmniBar('ch_omni_global', 'global'); drawOmniBar('ch_omni_fr', 'fr'); drawOmniBar('ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter'); }
   if (coh && coh.cohorts && coh.cohorts.length) {
