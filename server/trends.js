@@ -102,6 +102,15 @@ function familyMonthlyAll(dim) {
   });
   return mergeFirst(maps);
 }
+// CA EShop par mois × pays (International), oms priorité + saisonoms.
+function countryMonthlyAll() {
+  const maps = [];
+  [['oms', 'N'], ['oms', 'N1'], ['saisonoms', 'N'], ['saisonoms', 'N1']].forEach(([s, p]) => {
+    const d = store.getDataset(s, p); if (!d || !d.rows || !d.map) return;
+    maps.push(calc.countryMonthlyCA(d.rows, d.map));
+  });
+  return mergeFirst(maps);
+}
 
 router.get('/', requireAuth, (req, res) => {
   try {
@@ -190,8 +199,28 @@ router.get('/', requireAuth, (req, res) => {
         }) };
       }
     }
+    // Zoom International : CA par mois × pays (top 8) + total inter N vs N-1 — bloc International.
+    let intlTrend = { months: [], total: [], totalN1: [], countries: [] };
+    { const cMonthly = countryMonthlyAll();
+      if (Object.keys(cMonthly).length) {
+        const tot = {};
+        series.forEach(s => { const cm = cMonthly[s.month] || {}; Object.entries(cm).forEach(([c, v]) => { tot[c] = (tot[c] || 0) + v; }); });
+        const topC = Object.entries(tot).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
+        const sumMonth = (cm) => Object.values(cm || {}).reduce((a, b) => a + b, 0);
+        intlTrend = {
+          months: series.map(s => s.month),
+          total: series.map(s => Math.round(sumMonth(cMonthly[s.month]))),
+          totalN1: series.map(s => Math.round(sumMonth(cMonthly[s.n1month]))),
+          countries: topC.map(c => {
+            const values = series.map(s => Math.round((cMonthly[s.month] || {})[c] || 0));
+            const valuesN1 = series.map(s => Math.round((cMonthly[s.n1month] || {})[c] || 0));
+            return { name: c, values, valuesN1, total: values.reduce((a, b) => a + b, 0), totalN1: valuesN1.reduce((a, b) => a + b, 0) };
+          }),
+        };
+      }
+    }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend,
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend, intlTrend,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

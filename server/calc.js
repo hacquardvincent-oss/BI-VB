@@ -616,6 +616,26 @@ function familyMonthlyCA(rows, map, refMap, dim) {
   return out;
 }
 
+// CA EShop par mois ET par pays — INTERNATIONAL uniquement (hors France, hors mkt + Outstore).
+// → { 'YYYY-MM': { pays: ca } } pour le zoom International dans le temps.
+function countryMonthlyCA(rows, map) {
+  const pi = map.prix, ti = map.type, di = map.date, li = map.lieu, pai = map.pays;
+  if (di === undefined) return {};
+  const by = {};
+  (rows || []).forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const paysN = normCountry(r[pai]); if (!paysN || paysN === 'france') return;
+    const d = parseFrD(r[di]); if (!d) return;
+    const key = `${d.y}-${String(d.m).padStart(2, '0')}`;
+    const e = by[key] || (by[key] = {});
+    e[paysN] = (e[paysN] || 0) + fN(r[pi]);
+  });
+  const out = {};
+  Object.entries(by).forEach(([k, v]) => { const o = {}; Object.entries(v).forEach(([c, ca]) => { o[c] = Math.round(ca * 100) / 100; }); out[k] = o; });
+  return out;
+}
+
 // ── CA quotidien d'un mois donné (EShop hors mkt + Outstore) → { jour: {ca, commandes:Set, pieces, caOP} }
 // Brique interne de cumulMTD. Même périmètre que monthlyEShopCA.
 function dailyCAofMonth(rows, map, year, mon) {
@@ -2441,7 +2461,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
-  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,

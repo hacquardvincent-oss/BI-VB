@@ -204,6 +204,21 @@ function render(d) {
       <div style="height:260px"><canvas id="ch_famtrend"></canvas></div>
       <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Famille</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
+  // Zoom International : CA inter total dans le temps (N vs N-1) + top pays — bloc International.
+  const it = d.intlTrend; let intlPerfCard = '';
+  if (it && it.countries && it.countries.length) {
+    const capC = s => s ? s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-') : s;
+    const totN = it.total.reduce((a, b) => a + b, 0), totN1 = it.totalN1.reduce((a, b) => a + b, 0);
+    const dl = totN1 ? (() => { const p = (totN - totN1) / totN1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : '';
+    const grand = it.countries.reduce((a, c) => a + c.total, 0) || totN || 1;
+    const crows = it.countries.map((c, i) => { const d1 = c.totalN1 ? (() => { const p = (c.total - c.totalN1) / c.totalN1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : ''; return `<tr><td><span style="color:${MKT_PALETTE[i % MKT_PALETTE.length]}">●</span> <b>${esc(capC(c.name))}</b></td><td style="text-align:right">${fEur(c.total)} ${d1}</td><td style="text-align:right;color:var(--t3)">${fEur(c.totalN1)}</td><td style="text-align:right">${fPct(c.total / grand)}</td></tr>`; }).join('');
+    intlPerfCard = `<div class="card"><h3>✈️ CA International dans le temps</h3>
+      <div class="note" style="margin:-6px 0 8px">Total International N : <b>${fEur(totN)}</b> · N-1 : ${fEur(totN1)} ${dl}. Hors France, périmètre EShop. Trait plein = N.</div>
+      <div style="height:220px"><canvas id="ch_intltotal"></canvas></div>
+      <div style="font-weight:700;font-size:13px;margin:14px 0 4px">🌐 Top pays — CA mensuel</div>
+      <div style="height:240px"><canvas id="ch_intlctry"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Pays</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Poids</th></tr></thead><tbody>${crows}</tbody></table></div>`;
+  }
   // Cohortes de réachat (clé client pseudonymisée).
   const coh = d.cohorts; let cohCard = '';
   if (coh && coh.cohorts && coh.cohorts.length) {
@@ -245,8 +260,8 @@ function render(d) {
   // Bloc EStore : perfs onsite (conversion, panier, retours) + familles de produits dans l'année.
   const estoreGrid = gridFor('estore'), acqGrid = gridFor('acq');
   const estoreBlock = (estoreGrid || famCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}</div>` : '';
-  // Bloc International / Omnicanal : Mix Entrepôt vs SFS + zoom familles par pays.
-  const intlBlock = omniCard ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${omniCard}</div>` : '';
+  // Bloc International / Omnicanal : zoom perfs (CA inter, top pays) + Mix Entrepôt vs SFS + familles par pays.
+  const intlBlock = (intlPerfCard || omniCard) ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${intlPerfCard}${omniCard}</div>` : '';
   // Bloc Acquisition : trafic + paid (sessions, nouveaux, ROAS, CPA, dépense) + marketplace.
   const acqBlock = (acqGrid || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqGrid}${mktCard}</div>` : '';
   const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
@@ -280,6 +295,25 @@ function render(d) {
       type: 'line',
       data: { labels: fl, datasets: ft.families.map((f, i) => ({ label: f.name, data: f.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+    });
+  }
+  if (it && it.countries && it.countries.length) {
+    const il = it.months.map(monthLabel);
+    const euY = { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } };
+    // Total International : barres N (foncé) vs N-1 (clair).
+    mk('ch_intltotal', {
+      type: 'bar',
+      data: { labels: il, datasets: [
+        { label: 'CA Inter N', data: it.total, backgroundColor: 'rgba(168,133,74,.9)' },
+        { label: 'CA Inter N-1', data: it.totalN1, backgroundColor: 'rgba(168,133,74,.35)' },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: euY } },
+    });
+    // Top pays : multi-lignes CA mensuel N.
+    mk('ch_intlctry', {
+      type: 'line',
+      data: { labels: il, datasets: it.countries.map((c, i) => ({ label: (c.name || '').replace(/\b\w/g, m => m.toUpperCase()), data: c.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: euY } },
     });
   }
 }
