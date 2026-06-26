@@ -149,8 +149,11 @@ router.get('/', requireAuth, (req, res) => {
     const omsCMap = (store.getDataset('oms', 'N') || store.getDataset('oms', 'N1') || {}).map;
     const cohorts = (omsCMap && omsCMap.client != null && omsRows.length) ? calc.cohortRetention(omsRows, omsCMap) : null;
 
+    // Mix Entrepôt vs Ship-from-store par mois × zone (Global/FR/Inter/UK/US) — fluctuation du poids SFS.
+    let sfsMix = {};
+    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); sfsMix = calc.sfsMixMonthly(od.rows, od.map); } }
     res.json({
-      url: url || null, series, marketplace, cohorts,
+      url: url || null, series, marketplace, cohorts, sfsMix,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -372,6 +372,28 @@ function calcOMS(rows, map) {
   return { caGlob, caEShop: caFR + caInt, caFR, caInt, caEnt, caSFS, caMkt, caOmni: caEnt + caSFS, total, caFP, caOP };
 }
 
+// Mix CA Entrepôt vs Ship-from-store PAR MOIS et PAR ZONE (Global / FR / Inter / UK / US) → fluctuation
+// du poids SFS dans le temps. Hors marketplace, périmètre EShop (Outstore). Renvoie { 'YYYY-MM': { zone:{ent,sfs} } }.
+function sfsMixMonthly(rows, map) {
+  const pi = map.prix, pai = map.pays, mi = map.mag, ti = map.type, di = map.date, li = map.lieu;
+  if (di === undefined || !rows) return {};
+  const moKey = v => { const s = (v == null ? '' : String(v)).trim(); if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7); const o = parseFrD(s); return o ? `${o.y}-${String(o.m).padStart(2, '0')}` : null; };
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;                                  // hors marketplace
+    if (li !== undefined && /instore/i.test((r[li] || '').toString())) return; // périmètre EShop = Outstore
+    const mo = moKey(r[di]); if (!mo) return;
+    const p = fN(r[pi]);
+    const ent = (r[mi] || '').trim().toLowerCase() === 'webstore eur';        // Entrepôt vs ship-from-store
+    const paysN = normCountry(r[pai]);
+    const m = by[mo] || (by[mo] = {});
+    const add = z => { const e = m[z] || (m[z] = { ent: 0, sfs: 0 }); if (ent) e.ent += p; else e.sfs += p; };
+    add('global');
+    if (paysN === 'france') add('fr'); else { add('inter'); if (paysN === 'royaume-uni') add('uk'); else if (paysN === 'etats-unis') add('us'); }
+  });
+  return by;
+}
+
 // ── Décomposition HEBDOMADAIRE d'une période (page Prévisionnel) ──
 // Périmètre EShop (hors mkt + Outstore). Renvoie le cumul (CA, full/off, top familles/produits)
 // + le détail par semaine ISO (lundi→dimanche) avec dates, full/off, top familles/produits,
@@ -2377,7 +2399,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
-  filterRows, filterTimeMax, calcOMS, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,

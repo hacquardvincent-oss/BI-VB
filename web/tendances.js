@@ -102,9 +102,25 @@ function render(d) {
   } else if (!d.has.cohorts) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
-  // Ordre : KPI eshop + acquisition (grille) → marketplace → cohortes.
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${cohCard}`;
+  // Mix Entrepôt vs Ship-from-store par zone, dans le temps (poids SFS).
+  const SFS_ZONES = [['global', '🌍 Global', '#6E7B8B'], ['fr', '🇫🇷 France', '#A8854A'], ['inter', '✈️ Inter', '#1B9E6A'], ['uk', '🇬🇧 UK', '#7C4DCB'], ['us', '🇺🇸 US', '#E2574D']];
+  const sfs = d.sfsMix || {}, sfsMonths = Object.keys(sfs).sort();
+  const pctSfs = (mo, z) => { const e = sfs[mo] && sfs[mo][z]; if (!e) return null; const t = e.ent + e.sfs; return t ? e.sfs / t : null; };
+  let sfsCard = '';
+  if (sfsMonths.length) {
+    const head = `<tr><th>Mois</th>${SFS_ZONES.map(([z, lbl]) => `<th style="text-align:right">${lbl}</th>`).join('')}</tr>`;
+    const trows = sfsMonths.map(mo => `<tr><td>${monthLabel(mo)}</td>${SFS_ZONES.map(([z]) => { const p = pctSfs(mo, z); const e = sfs[mo] && sfs[mo][z]; const ttl = e ? `Entrepôt ${fEur(e.ent)} · SFS ${fEur(e.sfs)}` : 'pas de vente'; return `<td style="text-align:right" title="${ttl}">${p != null ? fPct(p) : '—'}</td>`; }).join('')}</tr>`).join('');
+    sfsCard = `<div class="card"><h3>🏭 Mix Entrepôt vs Ship‑from‑store — poids SFS dans le temps</h3>
+      <div class="note" style="margin:-6px 0 10px">Part du CA EShop réalisée en <b>ship‑from‑store</b> (corners/magasins) vs <b>entrepôt</b> (webstore), par zone et par mois → on voit le mix bouger. Survole une cellule pour le détail €.</div>
+      <div style="height:240px"><canvas id="ch_sfs"></canvas></div>
+      <div style="overflow-x:auto;margin-top:10px"><table style="font-size:12px;width:100%"><thead>${head}</thead><tbody>${trows}</tbody></table></div></div>`;
+  }
+  // Ordre : KPI eshop + acquisition (grille) → marketplace → mix SFS → cohortes.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${sfsCard}${cohCard}`;
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
+  if (sfsMonths.length) {
+    mk('ch_sfs', { type: 'line', data: { labels: sfsMonths.map(monthLabel), datasets: SFS_ZONES.map(([z, lbl, col]) => ({ label: lbl, data: sfsMonths.map(mo => { const p = pctSfs(mo, z); return p != null ? +(p * 100).toFixed(1) : null; }), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 1, borderWidth: 2, spanGaps: true })) }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${c.parsed.y}% SFS` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: '% ship-from-store', font: { size: 9 } } } } } });
+  }
   if (coh && coh.cohorts && coh.cohorts.length) {
     const cl = coh.cohorts.map(c => monthLabel(c.month));
     const ds = (lbl, k, col) => ({ label: lbl, data: coh.cohorts.map(c => c[k]), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true });
