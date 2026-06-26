@@ -77,6 +77,30 @@ function channelMonthly(slot) {
   });
   return by;
 }
+// Agrège le jeu date×campagne (gacampdaily, slots N+N1 dédupliqués) sur une fenêtre [from,to]
+// → { campagne: { sessions, ca (revenu GA), conv (achats), first, last } }. Pour le suivi campagne.
+function campaignAgg(fromISO, toISO) {
+  const out = {}, seen = new Set();
+  const dn = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const skip = c => /not set|^\(.*\)$|^direct$|organic|referral/i.test(c);
+  ['N', 'N1'].forEach(slot => {
+    const ds = store.getDataset('gacampdaily', slot); if (!ds || !ds.rows || !ds.hdrs) return;
+    const H = ds.hdrs.map(h => dn(h));
+    const di = H.findIndex(h => h === 'date'), ci = H.findIndex(h => h === 'campagne' || h === 'campaign');
+    const si = H.findIndex(h => h === 'sessions'), ri = H.findIndex(h => /revenu|revenue/.test(h)), pi = H.findIndex(h => /achat|purchase/.test(h));
+    if (di < 0 || ci < 0 || si < 0) return;
+    const toIso = raw => /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null);
+    ds.rows.forEach(r => {
+      const iso = toIso((r[di] || '').toString().trim()); if (!iso || iso < fromISO || iso > toISO) return;
+      const camp = (r[ci] || '').toString().trim(); if (!camp || skip(camp)) return;
+      const key = camp + '|' + iso; if (seen.has(key)) return; seen.add(key);   // dédup inter-slots
+      const e = out[camp] || (out[camp] = { name: camp, sessions: 0, ca: 0, conv: 0, first: null, last: null });
+      e.sessions += num(r[si]); if (ri >= 0) e.ca += num(r[ri]); if (pi >= 0) e.conv += num(r[pi]);
+      if (!e.first || iso < e.first) e.first = iso; if (!e.last || iso > e.last) e.last = iso;
+    });
+  });
+  return out;
+}
 // Retours par mois (jeu `ret`/`saisonret`) → { mois: {montant, count} } (taux de retour + suivi volume).
 function retMonthly(source, slot) {
   const d = store.getDataset(source, slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
@@ -199,9 +223,12 @@ router.get('/', requireAuth, (req, res) => {
         if (sfsAll[prev]) sfsMixN1[mo] = sfsAll[prev];
       });
     } else { sfsMix = sfsAll; }
-    // International : poids CA par famille × pays (Entrepôt vs SFS) sur la période N saisie.
+    // International : poids CA par famille × pays (Entrepôt vs SFS) sur la période N saisie + N-1 (comparatif).
     let sfsFamily = { global: {}, france: {}, inter: {}, byCountry: {} };
-    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); const rf = require('./refoverrides').fullRefMap(); const pr = (nMonths && nMonths.length) ? calc.filterRows(od.rows, od.map, req.query.from.slice(0, 10), req.query.to.slice(0, 10), false) : od.rows; sfsFamily = calc.sfsFamilyMix(pr, od.map, rf); } }
+    let sfsFamilyN1 = { global: {}, france: {}, inter: {}, byCountry: {} };
+    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); const rf = require('./refoverrides').fullRefMap(); const pr = (nMonths && nMonths.length) ? calc.filterRows(od.rows, od.map, req.query.from.slice(0, 10), req.query.to.slice(0, 10), false) : od.rows; sfsFamily = calc.sfsFamilyMix(pr, od.map, rf);
+      const cf = (req.query.cfrom || '').slice(0, 10), ct = (req.query.cto || '').slice(0, 10);
+      if (cf && ct) { const pr1 = calc.filterRows(od.rows, od.map, cf, ct, false); sfsFamilyN1 = calc.sfsFamilyMix(pr1, od.map, rf); } } }
     // Familles de produits dans le temps (CA EShop par mois × famille, top 8) — bloc EStore.
     let familyTrend = { months: [], families: [] };
     { const famMonthly = familyMonthlyAll('global');
@@ -252,9 +279,29 @@ router.get('/', requireAuth, (req, res) => {
         }) };
       }
     }
+    // Suivi des campagnes d'acquisition (gacampdaily) : campagne par campagne, N vs N-1, CA généré,
+    // 1ʳᵉ vue (date de lancement), statut nouvelle / arrêtée / maintenue — bloc Acquisition.
+    let campaignTrend = { campaigns: [], newWin: [], removed: [] };
+    { const nf = (req.query.from || '').slice(0, 10), nt = (req.query.to || '').slice(0, 10);
+      const cf = (req.query.cfrom || '').slice(0, 10), ct = (req.query.cto || '').slice(0, 10);
+      if (nf && nt) {
+        const aN = campaignAgg(nf, nt), aN1 = (cf && ct) ? campaignAgg(cf, ct) : {};
+        const names = new Set([...Object.keys(aN), ...Object.keys(aN1)]);
+        const list = [...names].map(name => {
+          const n = aN[name], o = aN1[name];
+          const sN = n ? Math.round(n.sessions) : 0, convN = n ? Math.round(n.conv) : 0;
+          return { name, caN: n ? Math.round(n.ca) : 0, caN1: o ? Math.round(o.ca) : 0, sessN: sN, sessN1: o ? Math.round(o.sessions) : 0, convN, tt: sN ? convN / sN : null, first: n ? n.first : null, firstN1: o ? o.first : null, status: (n && !o) ? 'new' : (!n && o) ? 'removed' : 'kept' };
+        }).sort((a, b) => (b.caN + b.caN1) - (a.caN + a.caN1));
+        campaignTrend = {
+          campaigns: list.slice(0, 40),
+          newWin: list.filter(c => c.status === 'new' && c.caN > 0).sort((a, b) => b.caN - a.caN).slice(0, 10),
+          removed: list.filter(c => c.status === 'removed' && c.caN1 > 0).sort((a, b) => b.caN1 - a.caN1).slice(0, 10),
+        };
+      }
+    }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend, intlTrend, acqTrend,
-      has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, sfsFamilyN1, familyTrend, intlTrend, acqTrend, campaignTrend,
+      has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')), campaigns: !!(store.getDataset('gacampdaily', 'N') || store.getDataset('gacampdaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

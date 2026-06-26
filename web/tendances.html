@@ -41,8 +41,14 @@
       <div class="note">Choisis la profondeur à analyser. Idéalement <b>~1 an</b> en N et l'<b>année N-1</b> juste avant.</div>
       <label class="setlabel">Période N — début → fin (1 calendrier)</label>
       <input id="nRange" class="dt" style="width:100%;cursor:pointer" placeholder="Choisir la période N…" readonly>
-      <label class="setlabel" style="margin-top:7px">Période N-1 — début → fin (1 calendrier)</label>
-      <input id="n1Range" class="dt" style="width:100%;cursor:pointer" placeholder="Choisir la période N-1…" readonly>
+      <div class="toolbar" style="margin-top:9px;gap:8px;align-items:center">
+        <span class="setlabel" style="margin:0">Comparer à N-1</span>
+        <button class="pb on" id="cmpToggle" title="Désactiver pour analyser la période N seule, sans comparatif N-1">✓ Oui</button>
+      </div>
+      <div id="n1Wrap">
+        <label class="setlabel" style="margin-top:7px">Période N-1 — début → fin (1 calendrier)</label>
+        <input id="n1Range" class="dt" style="width:100%;cursor:pointer" placeholder="Choisir la période N-1…" readonly>
+      </div>
       <label class="setlabel" style="margin-top:7px">Filtre URL (optionnel — comme GA4)</label>
       <input id="urlFilter" class="dt" style="width:100%" placeholder="Ex. /soldes, /robes…">
       <button class="btn blue" id="run" style="margin-top:10px;width:100%">📈 Analyser</button>

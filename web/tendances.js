@@ -48,20 +48,39 @@ function omniTableHtml(zone) {
   return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">🟥 SFS N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">% SFS N</th><th style="text-align:right">% SFS N‑1</th></tr></thead><tbody>${rows}</tbody>
     <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right;white-space:nowrap">${fEur(totN.ent)} ${omniDlt(totN.ent, totN1.ent)}</td><td style="text-align:right;color:var(--r);white-space:nowrap">${fEur(totN.sfs)} ${omniDlt(totN.sfs, totN1.sfs)}</td><td style="text-align:right">${tt ? fPct(totN.sfs / tt) : '—'}</td><td style="text-align:right;color:var(--t3)">${tt1 ? fPct(totN1.sfs / tt1) : '—'}</td></tr></tfoot></table>`;
 }
-// Tableau « poids CA par famille » (Entrepôt vs SFS) sur la période, pour une zone donnée.
+// Tableau « poids CA par famille » (Entrepôt vs SFS) sur la période : CA Entrepôt/SFS + % Entrepôt
+// et % SFS, chacun avec le détail vs N-1 (en points). N et N-1 = mêmes familles, périodes saisies.
 let OMNI_FAM = { global: {}, france: {}, inter: {}, byCountry: {} };
-function omniFamTableHtml(src, emptyLabel) {
-  const fams = Object.entries(src || {}).map(([f, v]) => ({ f, ent: v.ent, sfs: v.sfs, tot: v.ent + v.sfs })).filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot);
+let OMNI_FAM_N1 = { global: {}, france: {}, inter: {}, byCountry: {} };
+let OMNI_FAM_COUNTRY = '';   // filtre INDÉPENDANT du tableau familles International
+// delta en points (%N − %N-1) ; neutre (gris) car un glissement Entrepôt↔SFS n'est ni bon ni mauvais.
+const ptsDelta = (pN, pN1) => { if (pN == null || pN1 == null) return ''; const d = (pN - pN1) * 100; if (Math.abs(d) < 0.05) return ''; return `<span style="font-size:9px;color:var(--t3)">(${d >= 0 ? '+' : ''}${d.toFixed(1)} pts)</span>`; };
+function omniFamTableHtml(srcN, srcN1, emptyLabel) {
+  const fams = Object.entries(srcN || {}).map(([f, v]) => ({ f, ent: v.ent, sfs: v.sfs, tot: v.ent + v.sfs })).filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot);
   if (!fams.length) return `<div class="note">Pas de vente ${esc(emptyLabel || '')} sur la période.</div>`;
-  const grand = fams.reduce((a, x) => a + x.tot, 0);
-  const rows = fams.map(x => `<tr><td><b>${esc(x.f)}</b></td><td style="text-align:right;color:var(--t2)">${fEur(x.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(x.sfs)}</td><td style="text-align:right">${fEur(x.tot)}</td><td style="text-align:right"><b>${x.tot ? fPct(x.sfs / x.tot) : '—'}</b></td><td style="text-align:right;color:var(--t3)">${fPct(x.tot / grand)}</td></tr>`).join('');
-  return `<table style="font-size:12px;width:100%"><thead><tr><th>Famille</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">CA total</th><th style="text-align:right">% SFS</th><th style="text-align:right">Poids</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const rows = fams.map(x => {
+    const o1 = (srcN1 || {})[x.f]; const tot1 = o1 ? o1.ent + o1.sfs : 0;
+    const pEntN = x.tot ? x.ent / x.tot : null, pSfsN = x.tot ? x.sfs / x.tot : null;
+    const pEntN1 = tot1 ? o1.ent / tot1 : null, pSfsN1 = tot1 ? o1.sfs / tot1 : null;
+    return `<tr><td><b>${esc(x.f)}</b></td>
+      <td style="text-align:right;color:var(--t2)">${fEur(x.ent)}</td>
+      <td style="text-align:right;color:var(--r)">${fEur(x.sfs)}</td>
+      <td style="text-align:right">${fEur(x.tot)}</td>
+      <td style="text-align:right;white-space:nowrap"><b>${pEntN != null ? fPct(pEntN) : '—'}</b> ${ptsDelta(pEntN, pEntN1)}</td>
+      <td style="text-align:right;white-space:nowrap"><b>${pSfsN != null ? fPct(pSfsN) : '—'}</b> ${ptsDelta(pSfsN, pSfsN1)}</td></tr>`;
+  }).join('');
+  return `<table style="font-size:12px;width:100%"><thead><tr><th>Famille</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">CA total</th><th style="text-align:right">% Entrepôt <span class="note" style="font-size:9px">(Δ N-1)</span></th><th style="text-align:right">% SFS <span class="note" style="font-size:9px">(Δ N-1)</span></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+const famSrc = (root, c) => c ? (root.byCountry[c] || {}) : root.inter;
 window.omniSetCountry = function (c) {
   OMNI_COUNTRY = c;
   drawOmniBar('ch_omni_inter', c ? 'country' : 'inter');
   const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter');
-  const fe = document.getElementById('omni_fam_tbl'); if (fe) fe.innerHTML = omniFamTableHtml(c ? (OMNI_FAM.byCountry[c] || {}) : OMNI_FAM.inter, c ? 'ce pays' : 'International');
+};
+// Filtre indépendant du tableau familles International (n'affecte QUE ce tableau).
+window.omniSetFamCountry = function (c) {
+  OMNI_FAM_COUNTRY = c;
+  const fe = document.getElementById('omni_fam_tbl'); if (fe) fe.innerHTML = omniFamTableHtml(famSrc(OMNI_FAM, c), famSrc(OMNI_FAM_N1, c), c ? 'ce pays' : 'International');
 };
 
 // Formateurs par type de métrique.
@@ -120,6 +139,23 @@ function synthTableHtml(series) {
   return `<table style="font-size:12px;width:100%"><thead>${head}</thead><tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>`;
 }
 
+// Courbe de la synthèse : 1 KPI choisi, N vs N-1 (CA, Sessions, TT, Panier, Indice de vente…).
+let SYNTH_SERIES = [];
+const SYNTH_PLOT = [
+  { key: 'ca', label: 'CA', kind: 'eur', color: '#A8854A' },
+  { key: 'sessions', label: 'Sessions', kind: 'int', color: '#E2574D' },
+  { key: 'tt', label: 'Taux de transfo', kind: 'pct', color: '#1B9E6A' },
+  { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A' },
+  { key: 'iv', label: 'Indice de vente', kind: 'num', color: '#6E7B8B' },
+  { key: 'addRate', label: 'Ajout panier', kind: 'pct', color: '#9B8AA3' },
+  { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D' },
+];
+window.synthPlot = function (key) {
+  const m = SYNTH_PLOT.find(x => x.key === key) || SYNTH_PLOT[0];
+  const labels = SYNTH_SERIES.map(s => monthLabel(s.month));
+  lineChart('ch_synth', labels, SYNTH_SERIES.map(s => s.n[m.key]), SYNTH_SERIES.map(s => (s.n1 || {})[m.key]), m.color, m.kind);
+};
+
 function lineChart(id, labels, nData, n1Data, color, kind) {
   const K = KIND[kind] || KIND.int;
   mk(id, {
@@ -161,6 +197,20 @@ function buildTrendsNav(items) {
   trendsSpy();
 }
 window.addEventListener('scroll', () => requestAnimationFrame(trendsSpy), { passive: true });
+
+// Mode « sans comparatif N-1 » : neutralise toutes les données N-1 (la plupart des deltas se masquent
+// d'eux-mêmes quand la valeur N-1 est nulle/absente ; le reste est gardé via le flag d._noCompare).
+function stripN1(d) {
+  d._noCompare = true;
+  (d.series || []).forEach(s => { s.n1 = {}; });
+  d.sfsMixN1 = {};
+  d.sfsFamilyN1 = { global: {}, france: {}, inter: {}, byCountry: {} };
+  if (d.familyTrend && d.familyTrend.families) d.familyTrend.families.forEach(f => { f.valuesN1 = (f.values || []).map(() => 0); f.totalN1 = 0; });
+  if (d.intlTrend) { d.intlTrend.totalN1 = (d.intlTrend.total || []).map(() => 0); (d.intlTrend.countries || []).forEach(c => { c.valuesN1 = (c.values || []).map(() => 0); c.totalN1 = 0; }); }
+  if (d.acqTrend && d.acqTrend.channels) d.acqTrend.channels.forEach(c => { c.sessTotN1 = 0; c.caTotN1 = 0; c.convTotN1 = 0; });
+  if (d.campaignTrend) { (d.campaignTrend.campaigns || []).forEach(c => { c.caN1 = 0; c.sessN1 = 0; c.status = 'kept'; }); d.campaignTrend.newWin = []; d.campaignTrend.removed = []; }
+  return d;
+}
 
 function render(d) {
   const body = document.getElementById('body');
@@ -236,6 +286,30 @@ function render(d) {
       <div style="height:250px"><canvas id="ch_acqmix"></canvas></div>
       <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Canal</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th><th style="text-align:right">Conv. N (Δ)</th><th style="text-align:right">Taux conv. (Δ)</th></tr></thead><tbody>${arows}</tbody></table></div>`;
   }
+  // Suivi des campagnes d'acquisition : lancement, CA généré, N vs N-1, nouvelles / arrêtées — bloc Acquisition.
+  const ct = d.campaignTrend; let campCard = '';
+  if (ct && ct.campaigns && ct.campaigns.length) {
+    const cmp = !d._noCompare;
+    const dEur = (n, n1) => { if (!cmp || !n1) return ''; const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
+    const stTag = s => s === 'new' ? '<span class="up" style="font-size:10px">🆕 nouvelle</span>' : s === 'removed' ? '<span class="dn" style="font-size:10px">❌ arrêtée</span>' : '<span class="note" style="font-size:10px;margin:0">↔ maintenue</span>';
+    const frd = iso => iso ? iso.split('-').reverse().join('/') : '—';
+    const rows = ct.campaigns.map(c => `<tr>
+      <td><b>${esc(c.name)}</b>${cmp ? ' ' + stTag(c.status) : ''}</td>
+      <td style="text-align:right;white-space:nowrap;color:var(--t3)">${frd(c.first)}</td>
+      <td style="text-align:right;white-space:nowrap">${fInt(c.sessN)} ${dEur(c.sessN, c.sessN1)}</td>
+      <td style="text-align:right;white-space:nowrap">${fEur(c.caN)} ${dEur(c.caN, c.caN1)}</td>
+      ${cmp ? `<td style="text-align:right;color:var(--t3)">${fEur(c.caN1)}</td>` : ''}
+      <td style="text-align:right">${c.tt != null ? fPct(c.tt) : '—'}</td>
+    </tr>`).join('');
+    const callout = (title, arr, valKey, color) => arr && arr.length ? `<div style="margin-top:10px"><div style="font-weight:700;font-size:12px;color:${color}">${title}</div><div class="note" style="margin:2px 0 0">${arr.map(c => `${esc(c.name)} (${fEur(c[valKey])})`).join(' · ')}</div></div>` : '';
+    campCard = `<div class="card"><h3>🎯 Suivi des campagnes d'acquisition — N vs N-1</h3>
+      <div class="note" style="margin:-6px 0 8px">Chaque campagne (GA, jeu date×campagne) : <b>1ʳᵉ vue</b> (lancement), sessions, <b>CA généré</b> (revenu GA attribué)${cmp ? ', écart vs N-1 et statut <b>🆕 nouvelle</b> / <b>❌ arrêtée</b> (présente N-1, absente N) / ↔ maintenue' : ''}. Trié par CA. Top ${ct.campaigns.length}.</div>
+      <div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th style="text-align:left">Campagne</th><th style="text-align:right">1ʳᵉ vue</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th>${cmp ? '<th style="text-align:right">CA N-1</th>' : ''}<th style="text-align:right">TT</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${cmp ? callout('🆕 Nouvelles campagnes qui ont performé', ct.newWin, 'caN', 'var(--g)') : ''}
+      ${cmp ? callout('❌ Campagnes arrêtées qui rapportaient en N-1 (à ré-évaluer)', ct.removed, 'caN1', 'var(--r)') : ''}
+      <div class="note" style="margin-top:6px">CA = revenu attribué par GA à la campagne (≠ CA OMS total). Les canaux Direct/Organic/Referral sont exclus (campagnes uniquement). Nécessite l'import GA4 « campagnes/jour ».</div>
+    </div>`;
+  }
   // Cohortes de réachat (clé client pseudonymisée).
   const coh = d.cohorts; let cohCard = '';
   if (coh && coh.cohorts && coh.cohorts.length) {
@@ -247,7 +321,9 @@ function render(d) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
   // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
-  OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort(); OMNI_FAM = d.sfsFamily || { inter: {}, byCountry: {} };
+  OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
+  OMNI_FAM = d.sfsFamily || { global: {}, france: {}, inter: {}, byCountry: {} };
+  OMNI_FAM_N1 = d.sfsFamilyN1 || { global: {}, france: {}, inter: {}, byCountry: {} };
   let omniCard = '';
   if (OMNI_MONTHS.length) {
     // Pays international présents (pour le filtre du tableau Inter).
@@ -264,23 +340,28 @@ function render(d) {
       ${zoneBlock('🇫🇷 France', 'ch_omni_fr', 'fr')}
       ${zoneBlock('✈️ International', 'ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter', interSelect)}
       <div style="margin-top:16px;border-top:1px solid var(--br);padding-top:12px"><h3 style="margin:0;font-size:14px">📦 Poids CA par famille — Entrepôt vs Ship‑from‑store (sur la période)</h3>
-        <div class="note" style="margin:4px 0 8px">Par famille, le CA <b style="color:#6E7B8B">Entrepôt</b> vs <b style="color:var(--r)">Ship‑from‑store</b> et le poids. 3 zones : Global, France, International (filtre pays).</div>
-        <div style="margin-top:8px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🌍 Global</div><div id="omni_fam_global" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.global, 'global')}</div></div>
-        <div style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🇫🇷 France</div><div id="omni_fam_fr" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.france, 'France')}</div></div>
-        <div style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">✈️ International <span class="note" style="font-size:11px">— suit le filtre pays ci‑dessus</span></div><div id="omni_fam_tbl" style="overflow-x:auto">${omniFamTableHtml(OMNI_COUNTRY ? (OMNI_FAM.byCountry[OMNI_COUNTRY] || {}) : OMNI_FAM.inter, OMNI_COUNTRY ? 'ce pays' : 'International')}</div></div>
+        <div class="note" style="margin:4px 0 8px">Par famille : CA <b style="color:#6E7B8B">Entrepôt</b> vs <b style="color:var(--r)">Ship‑from‑store</b>, puis <b>% Entrepôt</b> et <b>% SFS</b> avec l'écart vs N-1 (en points). 3 zones : Global, France, International (avec son propre filtre pays).</div>
+        <div style="margin-top:8px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🌍 Global</div><div id="omni_fam_global" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.global, OMNI_FAM_N1.global, 'global')}</div></div>
+        <div style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🇫🇷 France</div><div id="omni_fam_fr" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.france, OMNI_FAM_N1.france, 'France')}</div></div>
+        <div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div style="font-weight:700;font-size:13px">✈️ International</div><select id="omni_fam_ctry" class="dt" style="font-size:12px" onchange="omniSetFamCountry(this.value)">${ctryOpts}</select></div><div id="omni_fam_tbl" style="overflow-x:auto;margin-top:4px">${omniFamTableHtml(famSrc(OMNI_FAM, OMNI_FAM_COUNTRY), famSrc(OMNI_FAM_N1, OMNI_FAM_COUNTRY), OMNI_FAM_COUNTRY ? 'ce pays' : 'International')}</div></div>
       </div>
     </div>`;
   }
-  // Synthèse KPI dans le temps (tableau linéaire, en tête).
-  const synthCard = `<div class="card" id="tr_synth" style="scroll-margin-top:80px"><h3>📋 Synthèse KPI dans le temps</h3><div class="note" style="margin:-6px 0 8px">Mois par mois : valeur N et écart vs N-1. Pied = cumul (CA, sessions) ou moyenne (taux, indice).</div><div style="overflow-x:auto">${synthTableHtml(d.series)}</div></div>`;
+  // Synthèse KPI dans le temps (courbe N vs N-1 + tableau linéaire, en tête).
+  SYNTH_SERIES = d.series;
+  const synthOpts = SYNTH_PLOT.filter(m => d.series.some(s => s.n[m.key] != null)).map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join('');
+  const synthCard = `<div class="card" id="tr_synth" style="scroll-margin-top:80px"><h3>📋 Synthèse KPI dans le temps</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:-4px 0 8px"><div class="note" style="margin:0">Courbe N vs N-1 (trait plein = N) + tableau mois par mois.</div><label class="note" style="margin:0">Courbe : <select id="synth_metric" class="dt" style="font-size:12px" onchange="synthPlot(this.value)">${synthOpts}</select></label></div>
+    <div style="height:230px;margin-bottom:12px"><canvas id="ch_synth"></canvas></div>
+    <div style="overflow-x:auto">${synthTableHtml(d.series)}</div></div>`;
   const head = (txt) => `<h3 style="margin:20px 4px 8px;font-family:var(--disp);font-size:15px;border-bottom:2px solid var(--accent-line, var(--br));padding-bottom:6px">${txt}</h3>`;
   // Bloc EStore : perfs onsite (conversion, panier, retours) + familles de produits dans l'année.
   const estoreGrid = gridFor('estore'), acqGrid = gridFor('acq');
   const estoreBlock = (estoreGrid || famCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}</div>` : '';
   // Bloc International / Omnicanal : zoom perfs (CA inter, top pays) + Mix Entrepôt vs SFS + familles par pays.
   const intlBlock = (intlPerfCard || omniCard) ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${intlPerfCard}${omniCard}</div>` : '';
-  // Bloc Acquisition : mix canaux (efficacité vs N-1) + trafic/paid (sessions, ROAS, CPA, dépense) + marketplace.
-  const acqBlock = (acqGrid || acqMixCard || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqMixCard}${acqGrid}${mktCard}</div>` : '';
+  // Bloc Acquisition : mix canaux + suivi campagnes (N vs N-1) + trafic/paid + marketplace.
+  const acqBlock = (acqGrid || acqMixCard || campCard || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqMixCard}${campCard}${acqGrid}${mktCard}</div>` : '';
   const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
   // Ordre : Synthèse → EStore → International → Acquisition → Cohortes.
   body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${wrapId('tr_coh', cohCard)}`;
@@ -291,6 +372,7 @@ function render(d) {
   if (acqBlock) navItems.push({ id: 'tr_acq', label: '📣 Acquisition' });
   if (cohCard) navItems.push({ id: 'tr_coh', label: '🔁 Cohortes' });
   buildTrendsNav(navItems);
+  synthPlot((d.series.some(s => s.n.ca != null)) ? 'ca' : ((SYNTH_PLOT.find(m => d.series.some(s => s.n[m.key] != null)) || {}).key || 'ca'));
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
   if (OMNI_MONTHS.length) { drawOmniBar('ch_omni_global', 'global'); drawOmniBar('ch_omni_fr', 'fr'); drawOmniBar('ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter'); }
   if (coh && coh.cohorts && coh.cohorts.length) {
@@ -345,6 +427,7 @@ const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8
 // Couleurs sémantiques par type de canal d'acquisition.
 const CHAN_COLOR = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
 
+let COMPARE = true;   // comparatif N-1 actif par défaut
 async function run() {
   const url = document.getElementById('urlFilter').value.trim();
   document.getElementById('tnote').textContent = 'Analyse…';
@@ -353,12 +436,13 @@ async function run() {
     const params = new URLSearchParams();
     if (url) params.set('url', url);
     if (p.n && p.n.from && p.n.to) { params.set('from', p.n.from); params.set('to', p.n.to); }
-    if (p.n1 && p.n1.from && p.n1.to) { params.set('cfrom', p.n1.from); params.set('cto', p.n1.to); }
+    if (COMPARE && p.n1 && p.n1.from && p.n1.to) { params.set('cfrom', p.n1.from); params.set('cto', p.n1.to); }
     const qs = params.toString();
     const r = await fetch('/api/trends' + (qs ? '?' + qs : ''));
     const d = await r.json();
     if (!r.ok) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(d.error || 'Erreur')}</div></div>`; return; }
     document.getElementById('tnote').textContent = '';
+    if (!COMPARE) stripN1(d);
     render(d);
   } catch (e) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
@@ -385,6 +469,9 @@ function periods() { return { n: rangeOf(FP_N, 'nRange'), n1: rangeOf(FP_N1, 'n1
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
   document.getElementById('run').addEventListener('click', run);
   document.getElementById('urlFilter').addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  // Toggle « Comparer à N-1 » : OFF = analyse de la période N seule (masque le calendrier N-1).
+  { const cb = document.getElementById('cmpToggle'), w = document.getElementById('n1Wrap');
+    if (cb) cb.addEventListener('click', () => { COMPARE = !COMPARE; cb.classList.toggle('on', COMPARE); cb.textContent = COMPARE ? '✓ Oui' : '✗ Non'; if (w) w.style.display = COMPARE ? '' : 'none'; run(); }); }
   // Calendriers range (1 par période). Défaut : N = 12 derniers mois, N-1 = l'année d'avant.
   if (window.flatpickr) {
     const L = window.flatpickr.l10ns && window.flatpickr.l10ns.fr;
