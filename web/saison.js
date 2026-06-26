@@ -254,10 +254,36 @@ function render(rep) {
       </tr>`).join('');
       dropBlock = `<table><thead><tr><th>Drop</th><th>CA N</th><th>Poids</th><th>Qté N</th><th>Réfs</th><th>vs N-1</th></tr></thead><tbody>${dr}</tbody></table>`;
     }
+    // c) Couverture catalogue par drop au niveau RC : RC vendues / RC implantées = activation / sell-through réf.
+    let covBlock = '';
+    if (sc.dropCoverage && sc.dropCoverage.length) {
+      const ord = { 'PER': 0, 'P0': 1, 'P1': 2, 'P2': 3, 'P3': 4, 'P4': 5, 'P5': 6 };
+      const rows = sc.dropCoverage.slice().sort((a, b) => (ord[a.drop] ?? 99) - (ord[b.drop] ?? 99));
+      const covPct = (sold, count) => count > 0 ? sold / count : null;
+      const covCell = c => c == null ? '<span class="na">—</span>' : `<span style="color:${c >= 0.6 ? 'var(--g)' : c >= 0.3 ? 'var(--a)' : 'var(--r)'};font-weight:700">${fPct(c)}</span>`;
+      let tC = 0, tS = 0, tC1 = 0, tS1 = 0;
+      const cr = rows.map(d => {
+        const c = covPct(d.sold, d.rc), c1 = covPct(d.soldN1, d.rcN1);
+        const jamais = Math.max(0, (d.rc || 0) - (d.sold || 0));
+        tC += d.rc || 0; tS += d.sold || 0; tC1 += d.rcN1 || 0; tS1 += d.soldN1 || 0;
+        return `<tr>
+          <td><b>${esc(d.drop)}</b></td>
+          <td style="text-align:right">${fInt(d.rc)}</td>
+          <td style="text-align:right">${fInt(d.sold)}</td>
+          <td style="text-align:right">${covCell(c)}</td>
+          <td style="text-align:right">${jamais > 0 ? `<span style="color:var(--r)">${fInt(jamais)}</span>` : '0'}</td>
+          <td style="text-align:right;color:var(--t3)">${c1 != null ? fPct(c1) : '—'}</td>
+        </tr>`;
+      }).join('');
+      const tc = covPct(tS, tC), tc1 = covPct(tS1, tC1);
+      covBlock = `<table><thead><tr><th>Drop</th><th style="text-align:right">RC catalogue</th><th style="text-align:right">RC vendues</th><th style="text-align:right">Couverture</th><th style="text-align:right">Jamais vendues</th><th style="text-align:right">Couv. N-1</th></tr></thead><tbody>${cr}
+        <tr style="font-weight:700;border-top:2px solid var(--br)"><td>Total</td><td style="text-align:right">${fInt(tC)}</td><td style="text-align:right">${fInt(tS)}</td><td style="text-align:right">${covCell(tc)}</td><td style="text-align:right">${fInt(Math.max(0, tC - tS))}</td><td style="text-align:right;color:var(--t3)">${tc1 != null ? fPct(tc1) : '—'}</td></tr></tbody></table>`;
+    }
     dropCard = `<div class="card">
       <h3>📅 Ventes par drop &amp; saisonnalité — N vs N-1</h3>
       ${psBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:0">Permanents vs Saisonniers</div>${psBlock}` : ''}
       ${dropBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">Détail par drop (vague d'implantation)</div>${dropBlock}` : ''}
+      ${covBlock ? `<div class="note" style="font-weight:700;color:var(--t2);margin-top:12px">📦 Couverture catalogue par drop (activation des RC)</div>${covBlock}<div class="note" style="margin-top:4px"><b>Couverture</b> = RC (références/variantes) vendues ÷ RC implantées au catalogue d'un drop = part du catalogue réellement activée par les ventes (sell-through par RC, niveau coloris/taille). « Jamais vendues » = RC implantées sans aucune vente sur la période (à pousser / déstocker). <span style="color:var(--t3)">⚠ Proxy d'activation (implantation × ventes) : ne reflète pas l'état de mise en ligne / stock en temps réel.</span></div>` : ''}
       <div class="note">Croisement <b>implantation</b> (DROP : PER = permanent, P1/P2/P3 = saisonnier) × <b>ventes OMS</b> × <b>référentiel</b> (regroupements). N = réfs implantées en N (E26), N-1 = réfs implantées en N-1 (E25). Permet de mesurer le poids du fonds de rayon vs les nouveautés saison et la performance de chaque vague de drop.</div>
     </div>`;
   }

@@ -2195,6 +2195,15 @@ function calcSeasonCompare(implN, implN1, salesRef, salesRefN1) {
   const drops = dropN.map(d => ({ ...d, caN1: (dropN1m[d.drop] || {}).ca || 0, qteN1: (dropN1m[d.drop] || {}).qte || 0 }))
     .concat(byDrop(allN1).filter(d => !dropN.some(x => x.drop === d.drop)).map(d => ({ drop: d.drop, ca: 0, qte: 0, count: 0, caN1: d.ca, qteN1: d.qte })))
     .sort((a, b) => (b.ca + b.caN1) - (a.ca + a.caN1));
+  // ── Couverture catalogue par drop au niveau RC (variante) : nb RC implantées vs RC réellement
+  // vendues (qté>0) = sell-through par référence / taux d'activation du catalogue d'un drop.
+  // Niveau RC (et non modèle) pour révéler les variantes mortes (ex. un coloris jamais vendu).
+  const rcCov = (items, sales) => { const o = {}; items.forEach(x => { const d = ((x.drop || '').trim().toUpperCase()) || '(n.c.)'; const e = o[d] || (o[d] = { drop: d, rc: 0, sold: 0 }); e.rc++; const s = sales && sales[x.rc]; if (s && (s.qte || 0) > 0) e.sold++; }); return o; };
+  const covN = rcCov(N, salesRef), covN1 = rcCov(N1, salesRefN1);
+  const dropCoverage = [...new Set([...Object.keys(covN), ...Object.keys(covN1)])].map(d => ({
+    drop: d, rc: (covN[d] || {}).rc || 0, sold: (covN[d] || {}).sold || 0,
+    rcN1: (covN1[d] || {}).rc || 0, soldN1: (covN1[d] || {}).sold || 0,
+  }));
   // Permanents vs Saisonniers — N vs N-1 (CA, qté, nb modèles).
   const agg = (arr, pred) => arr.filter(x => pred(x.drop)).reduce((s, x) => ({ ca: s.ca + x.ca, qte: s.qte + x.qte, count: s.count + 1 }), { ca: 0, qte: 0, count: 0 });
   const permSaiso = {
@@ -2208,7 +2217,7 @@ function calcSeasonCompare(implN, implN1, salesRef, salesRefN1) {
       vendus: sold.length, nonVendus: nonVendus.length,
       caSaisonniers: saisonniers.reduce((s, x) => s + x.ca, 0), caPermanents: permanents.reduce((s, x) => s + x.ca, 0),
     },
-    familles, drops, permSaiso,
+    familles, drops, dropCoverage, permSaiso,
     saisonniers: saisonniers.slice(0, 15), permanents: permanents.slice(0, 15), manquants: manquants.slice(0, 15),
     bests, slowers, nonVendus: nonVendus.slice(0, 15),
   };
