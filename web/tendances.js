@@ -48,12 +48,11 @@ function omniTableHtml(zone) {
   return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">🟥 SFS N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">% SFS N</th><th style="text-align:right">% SFS N‑1</th></tr></thead><tbody>${rows}</tbody>
     <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right;white-space:nowrap">${fEur(totN.ent)} ${omniDlt(totN.ent, totN1.ent)}</td><td style="text-align:right;color:var(--r);white-space:nowrap">${fEur(totN.sfs)} ${omniDlt(totN.sfs, totN1.sfs)}</td><td style="text-align:right">${tt ? fPct(totN.sfs / tt) : '—'}</td><td style="text-align:right;color:var(--t3)">${tt1 ? fPct(totN1.sfs / tt1) : '—'}</td></tr></tfoot></table>`;
 }
-// Tableau « poids CA par famille » (Entrepôt vs SFS) pour l'International ou un pays précis, sur la période.
-let OMNI_FAM = { inter: {}, byCountry: {} };
-function omniFamTableHtml(country) {
-  const src = country ? (OMNI_FAM.byCountry[country] || {}) : (OMNI_FAM.inter || {});
-  const fams = Object.entries(src).map(([f, v]) => ({ f, ent: v.ent, sfs: v.sfs, tot: v.ent + v.sfs })).filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot);
-  if (!fams.length) return '<div class="note">Pas de vente International pour ce filtre sur la période.</div>';
+// Tableau « poids CA par famille » (Entrepôt vs SFS) sur la période, pour une zone donnée.
+let OMNI_FAM = { global: {}, france: {}, inter: {}, byCountry: {} };
+function omniFamTableHtml(src, emptyLabel) {
+  const fams = Object.entries(src || {}).map(([f, v]) => ({ f, ent: v.ent, sfs: v.sfs, tot: v.ent + v.sfs })).filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot);
+  if (!fams.length) return `<div class="note">Pas de vente ${esc(emptyLabel || '')} sur la période.</div>`;
   const grand = fams.reduce((a, x) => a + x.tot, 0);
   const rows = fams.map(x => `<tr><td><b>${esc(x.f)}</b></td><td style="text-align:right;color:var(--t2)">${fEur(x.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(x.sfs)}</td><td style="text-align:right">${fEur(x.tot)}</td><td style="text-align:right"><b>${x.tot ? fPct(x.sfs / x.tot) : '—'}</b></td><td style="text-align:right;color:var(--t3)">${fPct(x.tot / grand)}</td></tr>`).join('');
   return `<table style="font-size:12px;width:100%"><thead><tr><th>Famille</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">CA total</th><th style="text-align:right">% SFS</th><th style="text-align:right">Poids</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -62,7 +61,7 @@ window.omniSetCountry = function (c) {
   OMNI_COUNTRY = c;
   drawOmniBar('ch_omni_inter', c ? 'country' : 'inter');
   const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter');
-  const fe = document.getElementById('omni_fam_tbl'); if (fe) fe.innerHTML = omniFamTableHtml(c);
+  const fe = document.getElementById('omni_fam_tbl'); if (fe) fe.innerHTML = omniFamTableHtml(c ? (OMNI_FAM.byCountry[c] || {}) : OMNI_FAM.inter, c ? 'ce pays' : 'International');
 };
 
 // Formateurs par type de métrique.
@@ -222,9 +221,12 @@ function render(d) {
       ${zoneBlock('🌍 Global', 'ch_omni_global', 'global')}
       ${zoneBlock('🇫🇷 France', 'ch_omni_fr', 'fr')}
       ${zoneBlock('✈️ International', 'ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter', interSelect)}
-      <div style="margin-top:12px"><h3 style="margin:0;font-size:14px">📦 International — poids CA par famille (Entrepôt vs SFS, sur la période)</h3>
-        <div class="note" style="margin:4px 0 6px">Par famille, le CA Entrepôt vs Ship‑from‑store et le poids. Suit le <b>filtre pays</b> de l'International ci‑dessus (sinon tout l'inter).</div>
-        <div id="omni_fam_tbl" style="overflow-x:auto">${omniFamTableHtml(OMNI_COUNTRY)}</div></div>
+      <div style="margin-top:16px;border-top:1px solid var(--br);padding-top:12px"><h3 style="margin:0;font-size:14px">📦 Poids CA par famille — Entrepôt vs Ship‑from‑store (sur la période)</h3>
+        <div class="note" style="margin:4px 0 8px">Par famille, le CA <b style="color:#6E7B8B">Entrepôt</b> vs <b style="color:var(--r)">Ship‑from‑store</b> et le poids. 3 zones : Global, France, International (filtre pays).</div>
+        <div style="margin-top:8px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🌍 Global</div><div id="omni_fam_global" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.global, 'global')}</div></div>
+        <div style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">🇫🇷 France</div><div id="omni_fam_fr" style="overflow-x:auto">${omniFamTableHtml(OMNI_FAM.france, 'France')}</div></div>
+        <div style="margin-top:12px"><div style="font-weight:700;font-size:13px;margin-bottom:4px">✈️ International <span class="note" style="font-size:11px">— suit le filtre pays ci‑dessus</span></div><div id="omni_fam_tbl" style="overflow-x:auto">${omniFamTableHtml(OMNI_COUNTRY ? (OMNI_FAM.byCountry[OMNI_COUNTRY] || {}) : OMNI_FAM.inter, OMNI_COUNTRY ? 'ce pays' : 'International')}</div></div>
+      </div>
     </div>`;
   }
   // Synthèse KPI dans le temps (tableau linéaire, en tête).

@@ -399,18 +399,19 @@ function sfsMixMonthly(rows, map) {
 function sfsFamilyMix(rows, map, refMap) {
   const pi = map.prix, pai = map.pays, mi = map.mag, ti = map.type, li = map.lieu;
   const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
-  const inter = {}, byCountry = {};
+  const global = {}, france = {}, inter = {}, byCountry = {};
   (rows || []).forEach(r => {
     if (isMkt((r[ti] || '').trim())) return;
     if (li !== undefined && /instore/i.test((r[li] || '').toString())) return;
-    const paysN = normCountry(r[pai]); if (paysN === 'france') return;        // International uniquement
+    const paysN = normCountry(r[pai]);
     const p = fN(r[pi]); const ent = (r[mi] || '').trim().toLowerCase() === 'webstore eur';
     const fam = (ri !== undefined && refMap && refMap[(r[ri] || '').trim()]) || '(non classé)';
     const addTo = obj => { const f = obj[fam] || (obj[fam] = { ent: 0, sfs: 0 }); if (ent) f.ent += p; else f.sfs += p; };
-    addTo(inter);
-    addTo(byCountry[paysN] || (byCountry[paysN] = {}));
+    addTo(global);
+    if (paysN === 'france') { addTo(france); }
+    else { addTo(inter); addTo(byCountry[paysN] || (byCountry[paysN] = {})); }
   });
-  return { inter, byCountry };
+  return { global, france, inter, byCountry };
 }
 
 // ── Décomposition HEBDOMADAIRE d'une période (page Prévisionnel) ──
