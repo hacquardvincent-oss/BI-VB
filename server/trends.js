@@ -101,6 +101,58 @@ function campaignAgg(fromISO, toISO) {
   });
   return out;
 }
+// Normalise un en-tête (minuscule, sans accents) pour repérer les colonnes par nom.
+const dn = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Sessions par mois × pays (gasess : date×pays), International uniquement (hors France), pays normalisés
+// (mêmes clés que le CA OMS → permet de croiser CA et Sessions par pays).
+function countrySessionsMonthly() {
+  const out = {};
+  ['N', 'N1'].forEach(slot => {
+    const ds = store.getDataset('gasess', slot); if (!ds || !ds.rows || !ds.hdrs) return;
+    const H = ds.hdrs.map(dn); const di = H.findIndex(h => h === 'date'), pi = H.findIndex(h => /pays|country/.test(h)), si = H.findIndex(h => h === 'sessions');
+    if (di < 0 || pi < 0 || si < 0) return;
+    ds.rows.forEach(r => {
+      const mo = monthOf(r[di]); if (!mo) return;
+      const pays = calc.normCountry(r[pi]); if (!pays || pays === 'france') return;
+      const e = out[mo] || (out[mo] = {}); e[pays] = (e[pays] || 0) + num(r[si]);
+    });
+  });
+  return out;
+}
+// Top pages dans le temps (gapagedaily : date×pagePath) → { mois: { page: sessions } }.
+function pageMonthly() {
+  const out = {};
+  ['N', 'N1'].forEach(slot => {
+    const ds = store.getDataset('gapagedaily', slot); if (!ds || !ds.rows || !ds.hdrs) return;
+    const H = ds.hdrs.map(dn); const di = H.findIndex(h => h === 'date'), pi = H.findIndex(h => /page|landing|chemin|path/.test(h)), si = H.findIndex(h => h === 'sessions');
+    if (di < 0 || pi < 0 || si < 0) return;
+    ds.rows.forEach(r => {
+      const mo = monthOf(r[di]); if (!mo) return;
+      const pg = (r[pi] || '').toString().trim(); if (!pg) return;
+      const e = out[mo] || (out[mo] = {}); e[pg] = (e[pg] || 0) + num(r[si]);
+    });
+  });
+  return out;
+}
+// Campagnes dans le temps (gacampdaily : date×campagne) → { mois: { campagne: {s, ca} } } (dédup inter-slots).
+function campaignMonthly() {
+  const out = {}, seen = new Set();
+  const skip = c => /not set|^\(.*\)$|^direct$|organic|referral/i.test(c);
+  ['N', 'N1'].forEach(slot => {
+    const ds = store.getDataset('gacampdaily', slot); if (!ds || !ds.rows || !ds.hdrs) return;
+    const H = ds.hdrs.map(dn); const di = H.findIndex(h => h === 'date'), ci = H.findIndex(h => h === 'campagne' || h === 'campaign'), si = H.findIndex(h => h === 'sessions'), ri = H.findIndex(h => /revenu|revenue/.test(h));
+    if (di < 0 || ci < 0 || si < 0) return;
+    ds.rows.forEach(r => {
+      const raw = (r[di] || '').toString().trim(); const iso = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null);
+      const mo = iso ? iso.slice(0, 7) : monthOf(raw); if (!mo) return;
+      const camp = (r[ci] || '').toString().trim(); if (!camp || skip(camp)) return;
+      const key = camp + '|' + (iso || raw); if (seen.has(key)) return; seen.add(key);
+      const e = out[mo] || (out[mo] = {}); const c = e[camp] || (e[camp] = { s: 0, ca: 0 });
+      c.s += num(r[si]); if (ri >= 0) c.ca += num(r[ri]);
+    });
+  });
+  return out;
+}
 // Retours par mois (jeu `ret`/`saisonret`) → { mois: {montant, count} } (taux de retour + suivi volume).
 function retMonthly(source, slot) {
   const d = store.getDataset(source, slot); if (!d || !d.rows || !d.map || d.map.date == null || d.map.montant == null) return {};
@@ -246,28 +298,35 @@ router.get('/', requireAuth, (req, res) => {
         }) };
       }
     }
-    // Zoom International : CA par mois × pays (top 8) + total inter N vs N-1 — bloc International.
-    let intlTrend = { months: [], total: [], totalN1: [], countries: [] };
-    { const cMonthly = countryMonthlyAll();
-      if (Object.keys(cMonthly).length) {
+    // Zoom International : CA + Sessions par mois × pays (top 8) + totaux N vs N-1 — bloc International.
+    let intlTrend = { months: [], total: [], totalN1: [], totalSess: [], totalSessN1: [], countries: [] };
+    { const cMonthly = countryMonthlyAll(), csMonthly = countrySessionsMonthly();
+      if (Object.keys(cMonthly).length || Object.keys(csMonthly).length) {
         const tot = {};
         series.forEach(s => { const cm = cMonthly[s.month] || {}; Object.entries(cm).forEach(([c, v]) => { tot[c] = (tot[c] || 0) + v; }); });
-        const topC = Object.entries(tot).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
-        const sumMonth = (cm) => Object.values(cm || {}).reduce((a, b) => a + b, 0);
+        // Complète avec les pays vus seulement côté sessions (si pas de CA).
+        series.forEach(s => { const cm = csMonthly[s.month] || {}; Object.keys(cm).forEach(c => { if (tot[c] == null) tot[c] = 0; }); });
+        const topC = Object.entries(tot).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c).filter(Boolean);
+        const sumMonth = (m) => Object.values(m || {}).reduce((a, b) => a + b, 0);
         intlTrend = {
           months: series.map(s => s.month),
           total: series.map(s => Math.round(sumMonth(cMonthly[s.month]))),
           totalN1: series.map(s => Math.round(sumMonth(cMonthly[s.n1month]))),
+          totalSess: series.map(s => Math.round(sumMonth(csMonthly[s.month]))),
+          totalSessN1: series.map(s => Math.round(sumMonth(csMonthly[s.n1month]))),
           countries: topC.map(c => {
             const values = series.map(s => Math.round((cMonthly[s.month] || {})[c] || 0));
             const valuesN1 = series.map(s => Math.round((cMonthly[s.n1month] || {})[c] || 0));
-            return { name: c, values, valuesN1, total: values.reduce((a, b) => a + b, 0), totalN1: valuesN1.reduce((a, b) => a + b, 0) };
+            const sess = series.map(s => Math.round((csMonthly[s.month] || {})[c] || 0));
+            const sessN1 = series.map(s => Math.round((csMonthly[s.n1month] || {})[c] || 0));
+            return { name: c, values, valuesN1, sess, sessN1, total: values.reduce((a, b) => a + b, 0), totalN1: valuesN1.reduce((a, b) => a + b, 0), totalSess: sess.reduce((a, b) => a + b, 0), totalSessN1: sessN1.reduce((a, b) => a + b, 0) };
           }),
         };
       }
     }
     // Mix d'acquisition dans le temps : par TYPE de canal (Paid/CRM/SEO/…), efficacité N vs N-1 — bloc Acquisition.
     let acqTrend = { months: [], channels: [] };
+    let crmTimeline = { months: [], sessN: [], sessN1: [], caN: [], caN1: [] };   // canal CRM aligné série (synthèse).
     { const chMonthly = mergeFirst(['N', 'N1'].map(channelMonthly));
       if (Object.keys(chMonthly).length) {
         const ORDER = ['Paid', 'CRM', 'SEO', 'Direct', 'Social', 'Referral', 'Autre'];
@@ -279,6 +338,21 @@ router.get('/', requireAuth, (req, res) => {
           const ca = series.map(s => at(s.month, t, 'revenue')), caN1 = series.map(s => at(s.n1month, t, 'revenue'));
           const conv = series.map(s => at(s.month, t, 'conv')), convN1 = series.map(s => at(s.n1month, t, 'conv'));
           return { type: t, sessions, ca, conv, sessTot: sum(sessions), sessTotN1: sum(sessionsN1), caTot: sum(ca), caTotN1: sum(caN1), convTot: sum(conv), convTotN1: sum(convN1) };
+        }) };
+        crmTimeline = { months: series.map(s => s.month), sessN: series.map(s => at(s.month, 'CRM', 'sessions')), sessN1: series.map(s => at(s.n1month, 'CRM', 'sessions')), caN: series.map(s => at(s.month, 'CRM', 'revenue')), caN1: series.map(s => at(s.n1month, 'CRM', 'revenue')) };
+      }
+    }
+    // E-Store : top pages vues dans le temps (gapagedaily) — courbes multi-pages — bloc EStore.
+    let pageTrend = { months: [], pages: [] };
+    { const pm = pageMonthly();
+      if (Object.keys(pm).length) {
+        const tot = {};
+        series.forEach(s => { const e = pm[s.month] || {}; Object.entries(e).forEach(([p, v]) => { tot[p] = (tot[p] || 0) + v; }); });
+        const topP = Object.entries(tot).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([p]) => p);
+        pageTrend = { months: series.map(s => s.month), pages: topP.map(p => {
+          const values = series.map(s => Math.round((pm[s.month] || {})[p] || 0));
+          const valuesN1 = series.map(s => Math.round((pm[s.n1month] || {})[p] || 0));
+          return { name: p, values, valuesN1, total: values.reduce((a, b) => a + b, 0), totalN1: valuesN1.reduce((a, b) => a + b, 0) };
         }) };
       }
     }
@@ -295,15 +369,22 @@ router.get('/', requireAuth, (req, res) => {
           const sN = n ? Math.round(n.sessions) : 0, convN = n ? Math.round(n.conv) : 0;
           return { name, caN: n ? Math.round(n.ca) : 0, caN1: o ? Math.round(o.ca) : 0, sessN: sN, sessN1: o ? Math.round(o.sessions) : 0, convN, tt: sN ? convN / sN : null, first: n ? n.first : null, firstN1: o ? o.first : null, status: (n && !o) ? 'new' : (!n && o) ? 'removed' : 'kept' };
         }).sort((a, b) => (b.caN + b.caN1) - (a.caN + a.caN1));
+        // Courbe campagnes : top 6 (par CA N) en CA mensuel sur la période N.
+        const cm = campaignMonthly();
+        const topCurve = list.filter(c => c.caN > 0).slice(0, 6).map(c => c.name);
+        const curve = topCurve.length ? { months: series.map(s => s.month), campaigns: topCurve.map(name => ({
+          name, ca: series.map(s => Math.round(((cm[s.month] || {})[name] || {}).ca || 0)), sess: series.map(s => Math.round(((cm[s.month] || {})[name] || {}).s || 0)),
+        })) } : { months: [], campaigns: [] };
         campaignTrend = {
           campaigns: list.slice(0, 40),
           newWin: list.filter(c => c.status === 'new' && c.caN > 0).sort((a, b) => b.caN - a.caN).slice(0, 10),
           removed: list.filter(c => c.status === 'removed' && c.caN1 > 0).sort((a, b) => b.caN1 - a.caN1).slice(0, 10),
+          curve,
         };
       }
     }
     res.json({
-      url: url || null, series, marketplace, cohorts, crmFlow, crmRfm, sfsMix, sfsMixN1, sfsFamily, sfsFamilyN1, familyTrend, intlTrend, acqTrend, campaignTrend,
+      url: url || null, series, marketplace, cohorts, crmFlow, crmRfm, crmTimeline, sfsMix, sfsMixN1, sfsFamily, sfsFamilyN1, familyTrend, pageTrend, intlTrend, acqTrend, campaignTrend,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')), campaigns: !!(store.getDataset('gacampdaily', 'N') || store.getDataset('gacampdaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

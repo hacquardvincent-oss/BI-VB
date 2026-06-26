@@ -141,19 +141,88 @@ function synthTableHtml(series) {
 
 // Courbe de la synthèse : 1 KPI choisi, N vs N-1 (CA, Sessions, TT, Panier, Indice de vente…).
 let SYNTH_SERIES = [];
-const SYNTH_PLOT = [
-  { key: 'ca', label: 'CA', kind: 'eur', color: '#A8854A' },
-  { key: 'sessions', label: 'Sessions', kind: 'int', color: '#E2574D' },
-  { key: 'tt', label: 'Taux de transfo', kind: 'pct', color: '#1B9E6A' },
-  { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A' },
-  { key: 'iv', label: 'Indice de vente', kind: 'num', color: '#6E7B8B' },
-  { key: 'addRate', label: 'Ajout panier', kind: 'pct', color: '#9B8AA3' },
-  { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D' },
-];
-window.synthPlot = function (key) {
-  const m = SYNTH_PLOT.find(x => x.key === key) || SYNTH_PLOT[0];
+let SYNTH_CRM = null;
+// Graphe combiné « suivi temporel » à l'échelle de l'année (comme le Reporting) :
+// CA N/N-1 en bâtons + Sessions, Taux d'ajout panier, TT en courbes (N plein / N-1 pointillé)
+// + campagnes CRM (N = ✕ croix, N-1 = + ) positionnées au niveau des sessions CRM.
+function drawSynthCombo() {
   const labels = SYNTH_SERIES.map(s => monthLabel(s.month));
-  lineChart('ch_synth', labels, SYNTH_SERIES.map(s => s.n[m.key]), SYNTH_SERIES.map(s => (s.n1 || {})[m.key]), m.color, m.kind);
+  const N = SYNTH_SERIES.map(s => s.n || {}), N1 = SYNTH_SERIES.map(s => s.n1 || {});
+  const pct = v => (v == null ? null : Math.round(v * 1000) / 10);
+  const curve = (data, color, dash, axis, label) => ({ type: 'line', label, data, borderColor: color, backgroundColor: 'transparent', borderDash: dash ? [5, 4] : [], yAxisID: axis, tension: .25, pointRadius: 0, borderWidth: dash ? 1.4 : 2, spanGaps: true, order: 1 });
+  const crm = SYNTH_CRM || { sessN: [], sessN1: [] };
+  const crossN = labels.map((_, i) => crm.sessN && crm.sessN[i] ? crm.sessN[i] : null);
+  const crossN1 = labels.map((_, i) => crm.sessN1 && crm.sessN1[i] ? crm.sessN1[i] : null);
+  const datasets = [
+    { type: 'bar', label: 'CA N', data: N.map(n => n.ca ?? null), backgroundColor: 'rgba(168,133,74,.85)', yAxisID: 'yEur', order: 5 },
+    { type: 'bar', label: 'CA N-1', data: N1.map(n => n.ca ?? null), backgroundColor: 'rgba(168,133,74,.35)', yAxisID: 'yEur', order: 5 },
+    curve(N.map(n => n.sessions ?? null), '#E2574D', false, 'ySess', 'Sessions N'),
+    curve(N1.map(n => n.sessions ?? null), '#E2574D', true, 'ySess', 'Sessions N-1'),
+    curve(N.map(n => pct(n.addRate)), '#9B8AA3', false, 'yPct', 'Ajout panier % N'),
+    curve(N1.map(n => pct(n.addRate)), '#9B8AA3', true, 'yPct', 'Ajout panier % N-1'),
+    curve(N.map(n => pct(n.tt)), '#1B9E6A', false, 'yPct', 'TT % N'),
+    curve(N1.map(n => pct(n.tt)), '#1B9E6A', true, 'yPct', 'TT % N-1'),
+    { type: 'line', label: 'CRM N ✕', data: crossN, showLine: false, pointStyle: 'crossRot', pointRadius: 6, pointBorderWidth: 2, borderColor: '#7A4FAE', pointBorderColor: '#7A4FAE', yAxisID: 'ySess', order: 0 },
+    { type: 'line', label: 'CRM N-1 +', data: crossN1, showLine: false, pointStyle: 'cross', pointRadius: 6, pointBorderWidth: 2, borderColor: '#B79BD6', pointBorderColor: '#B79BD6', yAxisID: 'ySess', order: 0 },
+  ];
+  mk('ch_synth', {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 9 }, usePointStyle: true } }, tooltip: { callbacks: { label: c => { const l = c.dataset.label || ''; const v = c.parsed.y; if (/%/.test(l)) return `${l} : ${v}%`; if (/CA/.test(l)) return `${l} : ${fEur(v)}`; return `${l} : ${fInt(v)}`; } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+        yEur: { position: 'left', ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: 'CA €', font: { size: 9 } } },
+        ySess: { position: 'right', ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { display: false }, title: { display: true, text: 'Sessions', font: { size: 9 } } },
+        yPct: { position: 'right', ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { display: false }, offset: true },
+      },
+    },
+  });
+}
+
+// ── International : bascule CA / Sessions sur le total et les courbes pays ──
+let INTL = null, INTL_METRIC = 'ca';
+const intlCap = s => s ? s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-') : s;
+const _euY = { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } };
+function drawIntlTotal() {
+  if (!INTL) return; const sess = INTL_METRIC === 'sess';
+  const n = sess ? INTL.totalSess : INTL.total, n1 = sess ? INTL.totalSessN1 : INTL.totalN1, lbl = sess ? 'Sessions' : 'CA';
+  const fmt = sess ? fInt : fEur;
+  mk('ch_intltotal', { type: 'bar', data: { labels: INTL.months.map(monthLabel), datasets: [
+    { label: `${lbl} Inter N`, data: n, backgroundColor: 'rgba(168,133,74,.9)' },
+    { label: `${lbl} Inter N-1`, data: n1, backgroundColor: 'rgba(168,133,74,.35)' },
+  ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fmt(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: _euY } } });
+}
+function drawIntlCountries() {
+  if (!INTL) return; const sess = INTL_METRIC === 'sess'; const fmt = sess ? fInt : fEur;
+  mk('ch_intlctry', { type: 'line', data: { labels: INTL.months.map(monthLabel), datasets: INTL.countries.map((c, i) => ({ label: intlCap(c.name), data: sess ? c.sess : c.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fmt(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: _euY } } });
+}
+window.intlSetMetric = function (m) {
+  INTL_METRIC = m; drawIntlTotal(); drawIntlCountries();
+  document.querySelectorAll('#intl_metric_btns .pb').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  const t = document.getElementById('intl_ctry_title'); if (t) t.textContent = m === 'sess' ? '🌐 Top pays — Sessions mensuelles' : '🌐 Top pays — CA mensuel';
+};
+
+// ── Suivi campagnes : table triable (par date / sessions / CA) ──
+let CAMP = [], CAMP_CMP = true, CAMP_SORT = 'ca';
+const _frd = iso => iso ? iso.split('-').reverse().join('/') : '—';
+function campRowsHtml() {
+  const cmp = CAMP_CMP;
+  const dEur = (n, n1) => { if (!cmp || !n1) return ''; const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
+  const stTag = s => s === 'new' ? '<span class="up" style="font-size:10px">🆕 nouvelle</span>' : s === 'removed' ? '<span class="dn" style="font-size:10px">❌ arrêtée</span>' : '<span class="note" style="font-size:10px;margin:0">↔ maintenue</span>';
+  const list = CAMP.slice().sort((a, b) => CAMP_SORT === 'date' ? ((b.first || '').localeCompare(a.first || '')) : CAMP_SORT === 'sess' ? (b.sessN - a.sessN) : (b.caN - a.caN));
+  return list.map(c => `<tr>
+    <td><b>${esc(c.name)}</b>${cmp ? ' ' + stTag(c.status) : ''}</td>
+    <td style="text-align:right;white-space:nowrap;color:var(--t3)">${_frd(c.first)}</td>
+    <td style="text-align:right;white-space:nowrap">${fInt(c.sessN)} ${dEur(c.sessN, c.sessN1)}</td>
+    <td style="text-align:right;white-space:nowrap">${fEur(c.caN)} ${dEur(c.caN, c.caN1)}</td>
+    ${cmp ? `<td style="text-align:right;color:var(--t3)">${fEur(c.caN1)}</td>` : ''}
+    <td style="text-align:right">${c.tt != null ? fPct(c.tt) : '—'}</td></tr>`).join('');
+}
+window.campSort = function (k) {
+  CAMP_SORT = k; const tb = document.getElementById('camp_tbody'); if (tb) tb.innerHTML = campRowsHtml();
+  document.querySelectorAll('#camp_sort_btns .pb').forEach(b => b.classList.toggle('on', b.dataset.k === k));
 };
 
 function lineChart(id, labels, nData, n1Data, color, kind) {
@@ -206,7 +275,9 @@ function stripN1(d) {
   d.sfsMixN1 = {};
   d.sfsFamilyN1 = { global: {}, france: {}, inter: {}, byCountry: {} };
   if (d.familyTrend && d.familyTrend.families) d.familyTrend.families.forEach(f => { f.valuesN1 = (f.values || []).map(() => 0); f.totalN1 = 0; });
-  if (d.intlTrend) { d.intlTrend.totalN1 = (d.intlTrend.total || []).map(() => 0); (d.intlTrend.countries || []).forEach(c => { c.valuesN1 = (c.values || []).map(() => 0); c.totalN1 = 0; }); }
+  if (d.intlTrend) { d.intlTrend.totalN1 = (d.intlTrend.total || []).map(() => 0); d.intlTrend.totalSessN1 = (d.intlTrend.totalSess || []).map(() => 0); (d.intlTrend.countries || []).forEach(c => { c.valuesN1 = (c.values || []).map(() => 0); c.sessN1 = (c.sess || []).map(() => 0); c.totalN1 = 0; c.totalSessN1 = 0; }); }
+  if (d.pageTrend && d.pageTrend.pages) d.pageTrend.pages.forEach(p => { p.valuesN1 = (p.values || []).map(() => 0); p.totalN1 = 0; });
+  if (d.crmTimeline) { d.crmTimeline.sessN1 = (d.crmTimeline.sessN || []).map(() => 0); d.crmTimeline.caN1 = (d.crmTimeline.caN || []).map(() => 0); }
   if (d.acqTrend && d.acqTrend.channels) d.acqTrend.channels.forEach(c => { c.sessTotN1 = 0; c.caTotN1 = 0; c.convTotN1 = 0; });
   if (d.campaignTrend) { (d.campaignTrend.campaigns || []).forEach(c => { c.caN1 = 0; c.sessN1 = 0; c.status = 'kept'; }); d.campaignTrend.newWin = []; d.campaignTrend.removed = []; }
   return d;
@@ -254,20 +325,39 @@ function render(d) {
       <div style="height:260px"><canvas id="ch_famtrend"></canvas></div>
       <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Famille</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
+  // E-Store : top pages vues dans le temps (sessions/page/mois).
+  const pt = d.pageTrend; let pageCard = '';
+  if (pt && pt.pages && pt.pages.length) {
+    const shortPage = p => { let s = (p || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0]; if (s.length > 32) s = s.slice(0, 30) + '…'; return s || '/'; };
+    const rows = pt.pages.map((p, i) => { const dl = (p.totalN1 ? (() => { const q = (p.total - p.totalN1) / p.totalN1 * 100; return `<span class="${q >= 0 ? 'up' : 'dn'}" style="font-size:10px">${q >= 0 ? '+' : ''}${q.toFixed(0)}%</span>`; })() : ''); return `<tr><td><span style="color:${MKT_PALETTE[i % MKT_PALETTE.length]}">●</span> <b title="${esc(p.name)}">${esc(shortPage(p.name))}</b></td><td style="text-align:right">${fInt(p.total)} ${dl}</td><td style="text-align:right;color:var(--t3)">${fInt(p.totalN1)}</td></tr>`; }).join('');
+    pageCard = `<div class="card"><h3>📄 Top pages vues dans le temps</h3>
+      <div class="note" style="margin:-6px 0 8px">Top ${pt.pages.length} pages par trafic (sessions GA) sur la période, mois par mois. Trait plein = N. Nécessite l'import GA4 « pages/jour ».</div>
+      <div style="height:260px"><canvas id="ch_pagetrend"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Page</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">N-1</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
   // Zoom International : CA inter total dans le temps (N vs N-1) + top pays — bloc International.
   const it = d.intlTrend; let intlPerfCard = '';
   if (it && it.countries && it.countries.length) {
-    const capC = s => s ? s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-') : s;
-    const totN = it.total.reduce((a, b) => a + b, 0), totN1 = it.totalN1.reduce((a, b) => a + b, 0);
-    const dl = totN1 ? (() => { const p = (totN - totN1) / totN1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : '';
+    INTL = it; INTL_METRIC = 'ca';
+    const sum = a => (a || []).reduce((x, y) => x + y, 0);
+    const totN = sum(it.total), totN1 = sum(it.totalN1), sN = sum(it.totalSess), sN1 = sum(it.totalSessN1);
+    const pdl = (n, n1) => n1 ? (() => { const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : '';
     const grand = it.countries.reduce((a, c) => a + c.total, 0) || totN || 1;
-    const crows = it.countries.map((c, i) => { const d1 = c.totalN1 ? (() => { const p = (c.total - c.totalN1) / c.totalN1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : ''; return `<tr><td><span style="color:${MKT_PALETTE[i % MKT_PALETTE.length]}">●</span> <b>${esc(capC(c.name))}</b></td><td style="text-align:right">${fEur(c.total)} ${d1}</td><td style="text-align:right;color:var(--t3)">${fEur(c.totalN1)}</td><td style="text-align:right">${fPct(c.total / grand)}</td></tr>`; }).join('');
-    intlPerfCard = `<div class="card"><h3>✈️ CA International dans le temps</h3>
-      <div class="note" style="margin:-6px 0 8px">Total International N : <b>${fEur(totN)}</b> · N-1 : ${fEur(totN1)} ${dl}. Hors France, périmètre EShop. Trait plein = N.</div>
+    // Table croisée CA × Sessions par pays (N + Δ vs N-1) + poids CA.
+    const crows = it.countries.map((c, i) => `<tr><td><span style="color:${MKT_PALETTE[i % MKT_PALETTE.length]}">●</span> <b>${esc(intlCap(c.name))}</b></td>
+      <td style="text-align:right;white-space:nowrap">${fEur(c.total)} ${pdl(c.total, c.totalN1)}</td>
+      <td style="text-align:right;white-space:nowrap">${fInt(c.totalSess)} ${pdl(c.totalSess, c.totalSessN1)}</td>
+      <td style="text-align:right">${fPct(c.total / grand)}</td></tr>`).join('');
+    intlPerfCard = `<div class="card"><h3>✈️ International dans le temps — CA & Sessions</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:-4px 0 8px">
+        <div class="note" style="margin:0">Inter N : <b>${fEur(totN)}</b> CA ${pdl(totN, totN1)} · <b>${fInt(sN)}</b> sessions ${pdl(sN, sN1)}. Hors France, EShop.</div>
+        <div id="intl_metric_btns" class="toolbar" style="gap:4px;margin:0"><span class="note" style="margin:0">Graphe :</span><button class="pb on" data-m="ca" onclick="intlSetMetric('ca')">CA</button><button class="pb" data-m="sess" onclick="intlSetMetric('sess')">Sessions</button></div>
+      </div>
       <div style="height:220px"><canvas id="ch_intltotal"></canvas></div>
-      <div style="font-weight:700;font-size:13px;margin:14px 0 4px">🌐 Top pays — CA mensuel</div>
+      <div id="intl_ctry_title" style="font-weight:700;font-size:13px;margin:14px 0 4px">🌐 Top pays — CA mensuel</div>
       <div style="height:240px"><canvas id="ch_intlctry"></canvas></div>
-      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Pays</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Poids</th></tr></thead><tbody>${crows}</tbody></table></div>`;
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Pays</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">Poids CA</th></tr></thead><tbody>${crows}</tbody></table>
+      <div class="note" style="margin-top:4px">Croisement CA (OMS) × Sessions (GA) par pays. Bascule le graphe entre CA et Sessions ci-dessus.</div></div>`;
   }
   // Mix d'acquisition dans le temps : CA attribué GA par type de canal + efficacité N vs N-1 — bloc Acquisition.
   const aq = d.acqTrend; let acqMixCard = '';
@@ -286,28 +376,21 @@ function render(d) {
       <div style="height:250px"><canvas id="ch_acqmix"></canvas></div>
       <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Canal</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th><th style="text-align:right">Conv. N (Δ)</th><th style="text-align:right">Taux conv. (Δ)</th></tr></thead><tbody>${arows}</tbody></table></div>`;
   }
-  // Suivi des campagnes d'acquisition : lancement, CA généré, N vs N-1, nouvelles / arrêtées — bloc Acquisition.
+  // Suivi des campagnes d'acquisition : courbe + table triable, N vs N-1, nouvelles / arrêtées — bloc Acquisition.
   const ct = d.campaignTrend; let campCard = '';
   if (ct && ct.campaigns && ct.campaigns.length) {
     const cmp = !d._noCompare;
-    const dEur = (n, n1) => { if (!cmp || !n1) return ''; const p = (n - n1) / n1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; };
-    const stTag = s => s === 'new' ? '<span class="up" style="font-size:10px">🆕 nouvelle</span>' : s === 'removed' ? '<span class="dn" style="font-size:10px">❌ arrêtée</span>' : '<span class="note" style="font-size:10px;margin:0">↔ maintenue</span>';
-    const frd = iso => iso ? iso.split('-').reverse().join('/') : '—';
-    const rows = ct.campaigns.map(c => `<tr>
-      <td><b>${esc(c.name)}</b>${cmp ? ' ' + stTag(c.status) : ''}</td>
-      <td style="text-align:right;white-space:nowrap;color:var(--t3)">${frd(c.first)}</td>
-      <td style="text-align:right;white-space:nowrap">${fInt(c.sessN)} ${dEur(c.sessN, c.sessN1)}</td>
-      <td style="text-align:right;white-space:nowrap">${fEur(c.caN)} ${dEur(c.caN, c.caN1)}</td>
-      ${cmp ? `<td style="text-align:right;color:var(--t3)">${fEur(c.caN1)}</td>` : ''}
-      <td style="text-align:right">${c.tt != null ? fPct(c.tt) : '—'}</td>
-    </tr>`).join('');
+    CAMP = ct.campaigns; CAMP_CMP = cmp; CAMP_SORT = 'ca';
     const callout = (title, arr, valKey, color) => arr && arr.length ? `<div style="margin-top:10px"><div style="font-weight:700;font-size:12px;color:${color}">${title}</div><div class="note" style="margin:2px 0 0">${arr.map(c => `${esc(c.name)} (${fEur(c[valKey])})`).join(' · ')}</div></div>` : '';
+    const hasCurve = ct.curve && ct.curve.campaigns && ct.curve.campaigns.length;
     campCard = `<div class="card"><h3>🎯 Suivi des campagnes d'acquisition — N vs N-1</h3>
-      <div class="note" style="margin:-6px 0 8px">Chaque campagne (GA, jeu date×campagne) : <b>1ʳᵉ vue</b> (lancement), sessions, <b>CA généré</b> (revenu GA attribué)${cmp ? ', écart vs N-1 et statut <b>🆕 nouvelle</b> / <b>❌ arrêtée</b> (présente N-1, absente N) / ↔ maintenue' : ''}. Trié par CA. Top ${ct.campaigns.length}.</div>
-      <div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th style="text-align:left">Campagne</th><th style="text-align:right">1ʳᵉ vue</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th>${cmp ? '<th style="text-align:right">CA N-1</th>' : ''}<th style="text-align:right">TT</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="note" style="margin:-6px 0 8px">Chaque campagne (GA, jeu date×campagne) : <b>1ʳᵉ vue</b> (lancement), sessions, <b>CA généré</b> (revenu GA attribué)${cmp ? ', écart vs N-1 et statut <b>🆕 nouvelle</b> / <b>❌ arrêtée</b> / ↔ maintenue' : ''}.</div>
+      ${hasCurve ? `<div style="font-weight:700;font-size:13px;margin:2px 0 4px">📈 CA mensuel des principales campagnes (N)</div><div style="height:250px"><canvas id="ch_campcurve"></canvas></div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:14px 0 6px"><div style="font-weight:700;font-size:13px">📋 Détail par campagne (top ${ct.campaigns.length})</div><div id="camp_sort_btns" class="toolbar" style="gap:4px;margin:0"><span class="note" style="margin:0">Trier :</span><button class="pb on" data-k="ca" onclick="campSort('ca')">CA</button><button class="pb" data-k="sess" onclick="campSort('sess')">Sessions</button><button class="pb" data-k="date" onclick="campSort('date')">Date</button></div></div>
+      <div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th style="text-align:left">Campagne</th><th style="text-align:right">1ʳᵉ vue</th><th style="text-align:right">Sessions N (Δ)</th><th style="text-align:right">CA GA N (Δ)</th>${cmp ? '<th style="text-align:right">CA N-1</th>' : ''}<th style="text-align:right">TT</th></tr></thead><tbody id="camp_tbody">${campRowsHtml()}</tbody></table></div>
       ${cmp ? callout('🆕 Nouvelles campagnes qui ont performé', ct.newWin, 'caN', 'var(--g)') : ''}
       ${cmp ? callout('❌ Campagnes arrêtées qui rapportaient en N-1 (à ré-évaluer)', ct.removed, 'caN1', 'var(--r)') : ''}
-      <div class="note" style="margin-top:6px">CA = revenu attribué par GA à la campagne (≠ CA OMS total). Les canaux Direct/Organic/Referral sont exclus (campagnes uniquement). Nécessite l'import GA4 « campagnes/jour ».</div>
+      <div class="note" style="margin-top:6px">CA = revenu attribué par GA à la campagne (≠ CA OMS total). Direct/Organic/Referral exclus. Nécessite l'import GA4 « campagnes/jour ».</div>
     </div>`;
   }
   // Cohortes de réachat (clé client pseudonymisée).
@@ -374,33 +457,35 @@ function render(d) {
       </div>
     </div>`;
   }
-  // Synthèse KPI dans le temps (courbe N vs N-1 + tableau linéaire, en tête).
-  SYNTH_SERIES = d.series;
-  const synthOpts = SYNTH_PLOT.filter(m => d.series.some(s => s.n[m.key] != null)).map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join('');
+  // Synthèse KPI dans le temps : graphe combiné « suivi temporel » annuel + tableau linéaire.
+  SYNTH_SERIES = d.series; SYNTH_CRM = d.crmTimeline || null;
   const synthCard = `<div class="card" id="tr_synth" style="scroll-margin-top:80px"><h3>📋 Synthèse KPI dans le temps</h3>
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:-4px 0 8px"><div class="note" style="margin:0">Courbe N vs N-1 (trait plein = N) + tableau mois par mois.</div><label class="note" style="margin:0">Courbe : <select id="synth_metric" class="dt" style="font-size:12px" onchange="synthPlot(this.value)">${synthOpts}</select></label></div>
-    <div style="height:230px;margin-bottom:12px"><canvas id="ch_synth"></canvas></div>
+    <div class="note" style="margin:-4px 0 8px">Vue annuelle façon « suivi temporel » : <b style="color:#A8854A">CA</b> N (foncé) / N-1 (clair) en bâtons · <b style="color:#E2574D">Sessions</b> · <b style="color:#9B8AA3">ajout panier %</b> · <b style="color:#1B9E6A">TT %</b> en courbes (plein = N, pointillé = N-1) · campagnes <b style="color:#7A4FAE">CRM</b> (N = ✕, N-1 = +).</div>
+    <div style="height:300px;margin-bottom:12px"><canvas id="ch_synth"></canvas></div>
     <div style="overflow-x:auto">${synthTableHtml(d.series)}</div></div>`;
   const head = (txt) => `<h3 style="margin:20px 4px 8px;font-family:var(--disp);font-size:15px;border-bottom:2px solid var(--accent-line, var(--br));padding-bottom:6px">${txt}</h3>`;
   // Bloc EStore : perfs onsite (conversion, panier, retours) + familles de produits dans l'année.
   const estoreGrid = gridFor('estore'), acqGrid = gridFor('acq');
-  const estoreBlock = (estoreGrid || famCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}</div>` : '';
-  // Bloc International / Omnicanal : zoom perfs (CA inter, top pays) + Mix Entrepôt vs SFS + familles par pays.
-  const intlBlock = (intlPerfCard || omniCard) ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${intlPerfCard}${omniCard}</div>` : '';
+  const estoreBlock = (estoreGrid || famCard || pageCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}${pageCard}</div>` : '';
+  // Bloc International : zoom perfs (CA + Sessions par pays, top pays N vs N-1).
+  const intlBlock = intlPerfCard ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International')}${intlPerfCard}</div>` : '';
+  // Bloc Omnicanal (à part entière) : Mix Entrepôt vs SFS + familles par zone.
+  const omniBlock = omniCard ? `<div id="tr_omni" style="scroll-margin-top:80px">${head('🔀 Omnicanal — Entrepôt vs Ship-from-store')}${omniCard}</div>` : '';
   // Bloc Acquisition : mix canaux + suivi campagnes (N vs N-1) + trafic/paid + marketplace.
   const acqBlock = (acqGrid || acqMixCard || campCard || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqMixCard}${campCard}${acqGrid}${mktCard}</div>` : '';
   // Bloc CRM & fidélisation : nouveaux vs récurrents (€) + cohortes de réachat + segmentation RFM.
   const crmBlock = (crmFlowCard || cohCard || rfmCard) ? `<div id="tr_crm" style="scroll-margin-top:80px">${head('🔁 CRM & fidélisation')}${crmFlowCard}${cohCard}${rfmCard}</div>` : '';
-  // Ordre : Synthèse → EStore → International → Acquisition → CRM.
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${crmBlock}`;
+  // Ordre : Synthèse → EStore → International → Omnicanal → Acquisition → CRM.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${omniBlock}${acqBlock}${crmBlock}`;
   // Sommaire d'ancres (droite).
   const navItems = [{ id: 'tr_synth', label: '📋 Synthèse KPI' }];
   if (estoreBlock) navItems.push({ id: 'tr_estore', label: '🛍️ EStore' });
   if (intlBlock) navItems.push({ id: 'tr_intl', label: '✈️ International' });
+  if (omniBlock) navItems.push({ id: 'tr_omni', label: '🔀 Omnicanal' });
   if (acqBlock) navItems.push({ id: 'tr_acq', label: '📣 Acquisition' });
   if (crmBlock) navItems.push({ id: 'tr_crm', label: '🔁 CRM & fidélité' });
   buildTrendsNav(navItems);
-  synthPlot((d.series.some(s => s.n.ca != null)) ? 'ca' : ((SYNTH_PLOT.find(m => d.series.some(s => s.n[m.key] != null)) || {}).key || 'ca'));
+  drawSynthCombo();
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
   if (OMNI_MONTHS.length) { drawOmniBar('ch_omni_global', 'global'); drawOmniBar('ch_omni_fr', 'fr'); drawOmniBar('ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter'); }
   if (coh && coh.cohorts && coh.cohorts.length) {
@@ -443,23 +528,13 @@ function render(d) {
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
     });
   }
-  if (it && it.countries && it.countries.length) {
-    const il = it.months.map(monthLabel);
-    const euY = { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } };
-    // Total International : barres N (foncé) vs N-1 (clair).
-    mk('ch_intltotal', {
-      type: 'bar',
-      data: { labels: il, datasets: [
-        { label: 'CA Inter N', data: it.total, backgroundColor: 'rgba(168,133,74,.9)' },
-        { label: 'CA Inter N-1', data: it.totalN1, backgroundColor: 'rgba(168,133,74,.35)' },
-      ] },
-      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: euY } },
-    });
-    // Top pays : multi-lignes CA mensuel N.
-    mk('ch_intlctry', {
+  if (it && it.countries && it.countries.length) { drawIntlTotal(); drawIntlCountries(); }
+  if (pt && pt.pages && pt.pages.length) {
+    const shortPage = p => { let s = (p || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0]; if (s.length > 28) s = s.slice(0, 26) + '…'; return s || '/'; };
+    mk('ch_pagetrend', {
       type: 'line',
-      data: { labels: il, datasets: it.countries.map((c, i) => ({ label: (c.name || '').replace(/\b\w/g, m => m.toUpperCase()), data: c.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
-      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: euY } },
+      data: { labels: pt.months.map(monthLabel), datasets: pt.pages.map((p, i) => ({ label: shortPage(p.name), data: p.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 9 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fInt(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: _euY } },
     });
   }
   if (aq && aq.channels && aq.channels.length) {
@@ -467,6 +542,13 @@ function render(d) {
       type: 'bar',
       data: { labels: aq.months.map(monthLabel), datasets: aq.channels.map(c => ({ label: c.type, data: c.ca, backgroundColor: CHAN_COLOR[c.type] || '#888', stack: 'ca' })) },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+    });
+  }
+  if (ct && ct.curve && ct.curve.campaigns && ct.curve.campaigns.length) {
+    mk('ch_campcurve', {
+      type: 'line',
+      data: { labels: ct.curve.months.map(monthLabel), datasets: ct.curve.campaigns.map((c, i) => ({ label: c.name, data: c.ca, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 9 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: _euY } },
     });
   }
 }
