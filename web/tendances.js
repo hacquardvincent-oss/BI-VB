@@ -22,22 +22,14 @@ const OMNI_STACK_OPTS = { responsive: true, maintainAspectRatio: false, interact
 function drawOmniBar(id, zone) {
   if (!OMNI_MONTHS.length) return;
   const labels = OMNI_MONTHS.map(monthLabel);
-  let datasets;
-  if (zone === 'global') { // Global = répartition Entrepôt/SFS ENTRE FR et Inter (4 segments gris/rouge)
-    const fr = omniVals('fr'), it = omniVals('inter');
-    datasets = [
-      { label: 'Entrepôt FR', data: fr.map(v => Math.round(v.ent)), backgroundColor: 'rgba(78,88,102,.92)', stack: 'o' },
-      { label: 'Entrepôt Inter', data: it.map(v => Math.round(v.ent)), backgroundColor: 'rgba(150,160,172,.85)', stack: 'o' },
-      { label: 'SFS FR', data: fr.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(196,60,52,.92)', stack: 'o' },
-      { label: 'SFS Inter', data: it.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(240,150,142,.9)', stack: 'o' },
-    ];
-  } else {
-    const v = omniVals(zone);
-    datasets = [
-      { label: 'Entrepôt €', data: v.map(x => Math.round(x.ent)), backgroundColor: 'rgba(110,123,139,.85)', stack: 'o' },
-      { label: 'Ship-from-store €', data: v.map(x => Math.round(x.sfs)), backgroundColor: 'rgba(226,87,77,.88)', stack: 'o' },
-    ];
-  }
+  const n = OMNI_MONTHS.map(mo => omniAt(OMNI_DATA, mo, zone)), n1 = OMNI_MONTHS.map(mo => omniAt(OMNI_N1, mo, zone));
+  // 2 bâtons empilés par mois : N (plein, Entrepôt gris + SFS rouge) et N-1 (estompé) côte à côte.
+  const datasets = [
+    { label: 'Entrepôt N', data: n.map(v => Math.round(v.ent)), backgroundColor: 'rgba(110,123,139,.9)', stack: 'N' },
+    { label: 'SFS N', data: n.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(226,87,77,.9)', stack: 'N' },
+    { label: 'Entrepôt N-1', data: n1.map(v => Math.round(v.ent)), backgroundColor: 'rgba(110,123,139,.38)', stack: 'N1' },
+    { label: 'SFS N-1', data: n1.map(v => Math.round(v.sfs)), backgroundColor: 'rgba(226,87,77,.38)', stack: 'N1' },
+  ];
   mk(id, { type: 'bar', data: { labels, datasets }, options: OMNI_STACK_OPTS });
 }
 function omniTableHtml(zone) {
@@ -56,7 +48,22 @@ function omniTableHtml(zone) {
   return `<table style="font-size:12px;width:100%"><thead><tr><th>Mois</th><th style="text-align:right">🩶 Entrepôt N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">🟥 SFS N <span class="note" style="font-size:9px">(Δ)</span></th><th style="text-align:right">% SFS N</th><th style="text-align:right">% SFS N‑1</th></tr></thead><tbody>${rows}</tbody>
     <tfoot><tr style="border-top:2px solid var(--br);font-weight:700"><td>Total</td><td style="text-align:right;white-space:nowrap">${fEur(totN.ent)} ${omniDlt(totN.ent, totN1.ent)}</td><td style="text-align:right;color:var(--r);white-space:nowrap">${fEur(totN.sfs)} ${omniDlt(totN.sfs, totN1.sfs)}</td><td style="text-align:right">${tt ? fPct(totN.sfs / tt) : '—'}</td><td style="text-align:right;color:var(--t3)">${tt1 ? fPct(totN1.sfs / tt1) : '—'}</td></tr></tfoot></table>`;
 }
-window.omniSetCountry = function (c) { OMNI_COUNTRY = c; drawOmniBar('ch_omni_inter', c ? 'country' : 'inter'); const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter'); };
+// Tableau « poids CA par famille » (Entrepôt vs SFS) pour l'International ou un pays précis, sur la période.
+let OMNI_FAM = { inter: {}, byCountry: {} };
+function omniFamTableHtml(country) {
+  const src = country ? (OMNI_FAM.byCountry[country] || {}) : (OMNI_FAM.inter || {});
+  const fams = Object.entries(src).map(([f, v]) => ({ f, ent: v.ent, sfs: v.sfs, tot: v.ent + v.sfs })).filter(x => x.tot > 0).sort((a, b) => b.tot - a.tot);
+  if (!fams.length) return '<div class="note">Pas de vente International pour ce filtre sur la période.</div>';
+  const grand = fams.reduce((a, x) => a + x.tot, 0);
+  const rows = fams.map(x => `<tr><td><b>${esc(x.f)}</b></td><td style="text-align:right;color:var(--t2)">${fEur(x.ent)}</td><td style="text-align:right;color:var(--r)">${fEur(x.sfs)}</td><td style="text-align:right">${fEur(x.tot)}</td><td style="text-align:right"><b>${x.tot ? fPct(x.sfs / x.tot) : '—'}</b></td><td style="text-align:right;color:var(--t3)">${fPct(x.tot / grand)}</td></tr>`).join('');
+  return `<table style="font-size:12px;width:100%"><thead><tr><th>Famille</th><th style="text-align:right">🩶 Entrepôt</th><th style="text-align:right">🟥 SFS</th><th style="text-align:right">CA total</th><th style="text-align:right">% SFS</th><th style="text-align:right">Poids</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+window.omniSetCountry = function (c) {
+  OMNI_COUNTRY = c;
+  drawOmniBar('ch_omni_inter', c ? 'country' : 'inter');
+  const el = document.getElementById('omni_inter_tbl'); if (el) el.innerHTML = omniTableHtml(c ? 'country' : 'inter');
+  const fe = document.getElementById('omni_fam_tbl'); if (fe) fe.innerHTML = omniFamTableHtml(c);
+};
 
 // Formateurs par type de métrique.
 const KIND = {
@@ -148,7 +155,7 @@ function render(d) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
   // ── Mix Omnicanal : Entrepôt (gris) vs Ship-from-store (rouge) en bâtons empilés, par zone ──
-  OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort();
+  OMNI_DATA = d.sfsMix || {}; OMNI_N1 = d.sfsMixN1 || {}; OMNI_MONTHS = Object.keys(OMNI_DATA).sort(); OMNI_FAM = d.sfsFamily || { inter: {}, byCountry: {} };
   let omniCard = '';
   if (OMNI_MONTHS.length) {
     // Pays international présents (pour le filtre du tableau Inter).
@@ -161,9 +168,12 @@ function render(d) {
     const interSelect = `<select id="omni_ctry" class="dt" style="font-size:12px" onchange="omniSetCountry(this.value)">${ctryOpts}</select>`;
     omniCard = `<div class="card"><h3>🔀 Mix Omnicanal — Entrepôt vs Ship‑from‑store dans le temps</h3>
       <div class="note" style="margin:-6px 0 6px">Bâtons empilés par mois : <b style="color:#6E7B8B">Entrepôt</b> (webstore) en gris / <b style="color:var(--r)">Ship‑from‑store</b> (corners, magasins) en rouge. Périmètre EShop, hors marketplace.</div>
-      ${zoneBlock('🌍 Global — réparti FR / International', 'ch_omni_global', 'global')}
+      ${zoneBlock('🌍 Global', 'ch_omni_global', 'global')}
       ${zoneBlock('🇫🇷 France', 'ch_omni_fr', 'fr')}
       ${zoneBlock('✈️ International', 'ch_omni_inter', OMNI_COUNTRY ? 'country' : 'inter', interSelect)}
+      <div style="margin-top:12px"><h3 style="margin:0;font-size:14px">📦 International — poids CA par famille (Entrepôt vs SFS, sur la période)</h3>
+        <div class="note" style="margin:4px 0 6px">Par famille, le CA Entrepôt vs Ship‑from‑store et le poids. Suit le <b>filtre pays</b> de l'International ci‑dessus (sinon tout l'inter).</div>
+        <div id="omni_fam_tbl" style="overflow-x:auto">${omniFamTableHtml(OMNI_COUNTRY)}</div></div>
     </div>`;
   }
   // Ordre : KPI eshop + acquisition (grille) → marketplace → Mix Omnicanal → cohortes.

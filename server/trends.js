@@ -163,8 +163,11 @@ router.get('/', requireAuth, (req, res) => {
         if (sfsAll[prev]) sfsMixN1[mo] = sfsAll[prev];
       });
     } else { sfsMix = sfsAll; }
+    // International : poids CA par famille × pays (Entrepôt vs SFS) sur la période N saisie.
+    let sfsFamily = { inter: {}, byCountry: {} };
+    { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); const rf = require('./refoverrides').fullRefMap(); const pr = (nMonths && nMonths.length) ? calc.filterRows(od.rows, od.map, req.query.from.slice(0, 10), req.query.to.slice(0, 10), false) : od.rows; sfsFamily = calc.sfsFamilyMix(pr, od.map, rf); } }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1,
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -394,6 +394,24 @@ function sfsMixMonthly(rows, map) {
   });
   return by;
 }
+// International seul : poids CA par FAMILLE × PAYS, Entrepôt vs Ship-from-store (sur la période fournie).
+// → { inter: { famille:{ent,sfs} }, byCountry: { pays:{ famille:{ent,sfs} } } }. France exclue.
+function sfsFamilyMix(rows, map, refMap) {
+  const pi = map.prix, pai = map.pays, mi = map.mag, ti = map.type, li = map.lieu;
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  const inter = {}, byCountry = {};
+  (rows || []).forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && /instore/i.test((r[li] || '').toString())) return;
+    const paysN = normCountry(r[pai]); if (paysN === 'france') return;        // International uniquement
+    const p = fN(r[pi]); const ent = (r[mi] || '').trim().toLowerCase() === 'webstore eur';
+    const fam = (ri !== undefined && refMap && refMap[(r[ri] || '').trim()]) || '(non classé)';
+    const addTo = obj => { const f = obj[fam] || (obj[fam] = { ent: 0, sfs: 0 }); if (ent) f.ent += p; else f.sfs += p; };
+    addTo(inter);
+    addTo(byCountry[paysN] || (byCountry[paysN] = {}));
+  });
+  return { inter, byCountry };
+}
 
 // ── Décomposition HEBDOMADAIRE d'une période (page Prévisionnel) ──
 // Périmètre EShop (hors mkt + Outstore). Renvoie le cumul (CA, full/off, top familles/produits)
@@ -2400,7 +2418,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
-  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
