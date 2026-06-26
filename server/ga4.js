@@ -129,9 +129,27 @@ async function post(propertyId, body, tries = 3) {
   throw lastErr;
 }
 
+// Pagine un runReport (offset/limit) jusqu'à récupérer TOUTES les lignes : sans cela, une fenêtre
+// longue × forte cardinalité (date×canal×device×pays) dépasse le plafond par requête et GA4 TRONQUE
+// silencieusement → des mois importés mais absents des analyses. `rowCount` = total réel côté GA4.
+async function postAll(propertyId, body) {
+  const pageSize = body.limit || 100000;
+  let offset = 0, total = Infinity; const rows = [];
+  let guard = 0;
+  while (offset < total && guard++ < 200) {
+    const data = await post(propertyId, Object.assign({}, body, { limit: pageSize, offset }));
+    const got = data.rows || [];
+    for (const r of got) rows.push(r);                      // append (pas de spread : gros volumes)
+    total = Number(data.rowCount != null ? data.rowCount : rows.length);
+    if (!got.length || got.length < pageSize) break;
+    offset += pageSize;
+  }
+  return { rows, rowCount: total };
+}
+
 // ── Rapport principal : date × canal × device × pays ────────────────────────
 async function fetchGA4(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'deviceCategory' }, { name: 'country' }],
     metrics: [
@@ -139,7 +157,7 @@ async function fetchGA4(propertyId, startDate, endDate) {
       { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
       { name: 'engagementRate' }, { name: 'addToCarts' }, { name: 'checkouts' }, { name: 'ecommercePurchases' },
     ],
-    limit: 250000,
+    limit: 100000,
   });
   const rows = (data.rows || []).map(r => {
     const d = r.dimensionValues.map(x => x.value);
@@ -307,7 +325,7 @@ async function fetchCampaignLanding(propertyId, startDate, endDate) {
 // La ventilation date×canal×device×pays surcompte le total (données non seuillées
 // de l'API) ; ce rapport date×pays colle au total de la plateforme GA4.
 async function fetchSessionsDaily(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'date' }, { name: 'country' }],
     metrics: [{ name: 'sessions' }],
@@ -322,7 +340,7 @@ async function fetchSessionsDaily(propertyId, startDate, endDate) {
 // (ce que voit l'exploration GA), contrairement à gasess (date×pays, sous-compte). Sert au KPI
 // sessions global du Bilan ; gasess reste pour les splits FR/Inter et le TT par pays.
 async function fetchSessionsTotal(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'date' }],
     metrics: [{ name: 'sessions' }],
@@ -334,7 +352,7 @@ async function fetchSessionsTotal(propertyId, startDate, endDate) {
 
 // ── Pages par JOUR : date × pagePath (séries longues filtrables par URL, comme GA4) ──
 async function fetchPageDaily(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'date' }, { name: 'pagePath' }],
     metrics: [{ name: 'sessions' }, { name: 'engagedSessions' }, { name: 'addToCarts' }, { name: 'ecommercePurchases' }],
@@ -349,7 +367,7 @@ async function fetchPageDaily(propertyId, startDate, endDate) {
 
 // ── Campagnes par jour : date × campagne (pour le suivi temporel des meilleures campagnes) ──
 async function fetchCampaignsDaily(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'date' }, { name: 'sessionCampaignName' }],
     metrics: [{ name: 'sessions' }, { name: 'totalRevenue' }, { name: 'ecommercePurchases' }],
@@ -366,7 +384,7 @@ async function fetchCampaignsDaily(propertyId, startDate, endDate) {
 // ── Trafic par heure × groupe de canaux : pour estimer l'heure d'envoi email (pic du canal Email) ──
 async function fetchHourlyChannel(propertyId, startDate, endDate) {
   // hour × canal (session-scoped + sessions) → heure de pic d'envoi email. Requête D'ORIGINE qui marche.
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'hour' }, { name: 'sessionDefaultChannelGroup' }],
     metrics: [{ name: 'sessions' }],
@@ -378,7 +396,7 @@ async function fetchHourlyChannel(propertyId, startDate, endDate) {
 // Trafic HORAIRE daté (dateHour) + ajouts panier — SANS canal (évite le conflit de scope
 // session×événement qui faisait échouer la requête) → jeu daté fenêtrable pour le suivi temporel.
 async function fetchHourlyTraffic(propertyId, startDate, endDate) {
-  const data = await post(propertyId, {
+  const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: 'dateHour' }],
     metrics: [{ name: 'sessions' }, { name: 'addToCarts' }],
@@ -390,11 +408,20 @@ async function fetchHourlyTraffic(propertyId, startDate, endDate) {
 
 function toDataset(parsed, startDate, endDate) {
   const map = calc.autoMap(parsed.hdrs, calc.GA_ALIASES);
+  // date_min/max RÉELS depuis les lignes (colonne date) → le récap « importé » reflète la vraie
+  // couverture, pas seulement la fenêtre demandée (sinon une troncature passe inaperçue).
+  let dmin = null, dmax = null; const di = map.date != null ? map.date : 0;
+  for (const r of (parsed.rows || [])) {
+    let v = (r[di] == null ? '' : String(r[di])).trim();
+    if (/^\d{8}$/.test(v)) v = `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}`;
+    else if (/^\d{4}-\d{2}-\d{2}/.test(v)) v = v.slice(0, 10); else continue;
+    if (!dmin || v < dmin) dmin = v; if (!dmax || v > dmax) dmax = v;
+  }
   return {
     hdrs: parsed.hdrs, rows: parsed.rows, map,
     filename: `GA4 API (${startDate} → ${endDate})`,
     row_count: parsed.rows.length,
-    date_min: startDate, date_max: endDate,
+    date_min: dmin || startDate, date_max: dmax || endDate,
     uploaded_by: 'GA4 API', uploaded_at: new Date().toISOString(),
   };
 }
