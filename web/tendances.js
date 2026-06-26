@@ -13,6 +13,24 @@ const monthLabel = mo => { const [y, m] = mo.split('-'); return `${MLABEL[+m - 1
 const _charts = {};
 function mk(id, cfg) { const el = document.getElementById(id); if (!el || !window.Chart) return; try { if (_charts[id]) _charts[id].destroy(); _charts[id] = new Chart(el.getContext('2d'), cfg); } catch (e) { /* graphe non dessiné — les cartes restent visibles */ } }
 
+// ── Mix Entrepôt / Ship-from-store : état + bascule % poids ↔ € montants ──
+let SFS_DATA = {}, SFS_MONTHS = [], SFS_MODE = 'pct';
+const SFS_ZONES = [['global', '🌍 Global', '#6E7B8B'], ['fr', '🇫🇷 France', '#A8854A'], ['inter', '✈️ Inter', '#1B9E6A'], ['uk', '🇬🇧 UK', '#7C4DCB'], ['us', '🇺🇸 US', '#E2574D']];
+function sfsPct(mo, z) { const e = SFS_DATA[mo] && SFS_DATA[mo][z]; if (!e) return null; const t = e.ent + e.sfs; return t ? e.sfs / t : null; }
+function drawSfsChart() {
+  if (!SFS_MONTHS.length) return;
+  const labels = SFS_MONTHS.map(monthLabel);
+  let cfg;
+  if (SFS_MODE === 'eur') { // bâtons empilés Entrepôt + SFS pour le Global (montants €)
+    const val = (mo, k) => { const e = SFS_DATA[mo] && SFS_DATA[mo].global; return e ? Math.round(e[k]) : 0; };
+    cfg = { type: 'bar', data: { labels, datasets: [{ label: 'Entrepôt €', data: SFS_MONTHS.map(mo => val(mo, 'ent')), backgroundColor: 'rgba(110,123,139,.75)', stack: 'g' }, { label: 'Ship-from-store €', data: SFS_MONTHS.map(mo => val(mo, 'sfs')), backgroundColor: 'rgba(226,87,77,.8)', stack: 'g' }] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked: true, ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } } };
+  } else { // courbes % SFS par zone
+    cfg = { type: 'line', data: { labels, datasets: SFS_ZONES.map(([z, lbl, col]) => ({ label: lbl, data: SFS_MONTHS.map(mo => { const p = sfsPct(mo, z); return p != null ? +(p * 100).toFixed(1) : null; }), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 1, borderWidth: 2, spanGaps: true })) }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${c.parsed.y}% SFS` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: '% ship-from-store', font: { size: 9 } } } } } };
+  }
+  mk('ch_sfs', cfg);
+}
+window.setSfsMode = function (m) { SFS_MODE = m; document.querySelectorAll('.sfs-mode').forEach(b => b.classList.toggle('on', b.dataset.m === m)); drawSfsChart(); };
+
 // Formateurs par type de métrique.
 const KIND = {
   pct: { fmt: fPct, y: v => (Math.round(v * 1000) / 10) + '%', agg: 'avg' },
@@ -102,25 +120,23 @@ function render(d) {
   } else if (!d.has.cohorts) {
     cohCard = `<div class="card"><h3>🔁 Cohortes de réachat</h3><div class="note">Nécessite la <b>clé client</b> (hash pseudonymisé) dans l'OMS → lance un <b>import complet WSHOP</b> (bouton à gauche) pour la générer. Aucun email n'est stocké.</div></div>`;
   }
-  // Mix Entrepôt vs Ship-from-store par zone, dans le temps (poids SFS).
-  const SFS_ZONES = [['global', '🌍 Global', '#6E7B8B'], ['fr', '🇫🇷 France', '#A8854A'], ['inter', '✈️ Inter', '#1B9E6A'], ['uk', '🇬🇧 UK', '#7C4DCB'], ['us', '🇺🇸 US', '#E2574D']];
-  const sfs = d.sfsMix || {}, sfsMonths = Object.keys(sfs).sort();
-  const pctSfs = (mo, z) => { const e = sfs[mo] && sfs[mo][z]; if (!e) return null; const t = e.ent + e.sfs; return t ? e.sfs / t : null; };
+  // Mix Entrepôt vs Ship-from-store par zone, dans le temps — vue % poids OU € montants (toggle).
+  SFS_DATA = d.sfsMix || {}; SFS_MONTHS = Object.keys(SFS_DATA).sort();
   let sfsCard = '';
-  if (sfsMonths.length) {
+  if (SFS_MONTHS.length) {
     const head = `<tr><th>Mois</th>${SFS_ZONES.map(([z, lbl]) => `<th style="text-align:right">${lbl}</th>`).join('')}</tr>`;
-    const trows = sfsMonths.map(mo => `<tr><td>${monthLabel(mo)}</td>${SFS_ZONES.map(([z]) => { const p = pctSfs(mo, z); const e = sfs[mo] && sfs[mo][z]; const ttl = e ? `Entrepôt ${fEur(e.ent)} · SFS ${fEur(e.sfs)}` : 'pas de vente'; return `<td style="text-align:right" title="${ttl}">${p != null ? fPct(p) : '—'}</td>`; }).join('')}</tr>`).join('');
-    sfsCard = `<div class="card"><h3>🏭 Mix Entrepôt vs Ship‑from‑store — poids SFS dans le temps</h3>
-      <div class="note" style="margin:-6px 0 10px">Part du CA EShop réalisée en <b>ship‑from‑store</b> (corners/magasins) vs <b>entrepôt</b> (webstore), par zone et par mois → on voit le mix bouger. Survole une cellule pour le détail €.</div>
+    const cell = (mo, z) => { const e = SFS_DATA[mo] && SFS_DATA[mo][z]; const p = sfsPct(mo, z); if (!e) return '<td style="text-align:right">—</td>'; return `<td style="text-align:right;white-space:nowrap" title="Entrepôt ${fEur(e.ent)} · SFS ${fEur(e.sfs)}"><b>${fPct(p)}</b><div class="note" style="margin:0;font-size:10px">${fEur(e.sfs)} SFS</div></td>`; };
+    const trows = SFS_MONTHS.map(mo => `<tr><td>${monthLabel(mo)}</td>${SFS_ZONES.map(([z]) => cell(mo, z)).join('')}</tr>`).join('');
+    sfsCard = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3 style="margin:0">🏭 Mix Entrepôt vs Ship‑from‑store — dans le temps</h3>
+      <div class="toolbar" style="gap:4px"><button class="pb sfs-mode${SFS_MODE === 'pct' ? ' on' : ''}" data-m="pct" onclick="setSfsMode('pct')">% poids</button><button class="pb sfs-mode${SFS_MODE === 'eur' ? ' on' : ''}" data-m="eur" onclick="setSfsMode('eur')">€ montants</button></div></div>
+      <div class="note" style="margin:6px 0 10px">% du CA EShop en <b>ship‑from‑store</b> (corners) vs <b>entrepôt</b> (webstore), par zone et par mois. Vue € = bâtons Entrepôt/SFS empilés (Global). Détail € au survol du tableau.</div>
       <div style="height:240px"><canvas id="ch_sfs"></canvas></div>
       <div style="overflow-x:auto;margin-top:10px"><table style="font-size:12px;width:100%"><thead>${head}</thead><tbody>${trows}</tbody></table></div></div>`;
   }
   // Ordre : KPI eshop + acquisition (grille) → marketplace → mix SFS → cohortes.
   body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div><div class="grid cols2">${cards}</div>${mktCard}${sfsCard}${cohCard}`;
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
-  if (sfsMonths.length) {
-    mk('ch_sfs', { type: 'line', data: { labels: sfsMonths.map(monthLabel), datasets: SFS_ZONES.map(([z, lbl, col]) => ({ label: lbl, data: sfsMonths.map(mo => { const p = pctSfs(mo, z); return p != null ? +(p * 100).toFixed(1) : null; }), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 1, borderWidth: 2, spanGaps: true })) }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${c.parsed.y}% SFS` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v + '%', font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' }, title: { display: true, text: '% ship-from-store', font: { size: 9 } } } } } });
-  }
+  drawSfsChart();
   if (coh && coh.cohorts && coh.cohorts.length) {
     const cl = coh.cohorts.map(c => monthLabel(c.month));
     const ds = (lbl, k, col) => ({ label: lbl, data: coh.cohorts.map(c => c[k]), borderColor: col, backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true });
