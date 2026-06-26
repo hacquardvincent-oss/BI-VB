@@ -92,6 +92,16 @@ function omsMonthlyAll() {
   });
   return mergeFirst(maps);
 }
+// CA EShop par mois ET par famille (oms priorité + saisonoms), dim ∈ {global, fr, inter}.
+function familyMonthlyAll(dim) {
+  const rf = require('./refoverrides').fullRefMap();
+  const maps = [];
+  [['oms', 'N'], ['oms', 'N1'], ['saisonoms', 'N'], ['saisonoms', 'N1']].forEach(([s, p]) => {
+    const d = store.getDataset(s, p); if (!d || !d.rows || !d.map) return;
+    calc.ensureRefExtIdx(d.hdrs, d.map); maps.push(calc.familyMonthlyCA(d.rows, d.map, rf, dim));
+  });
+  return mergeFirst(maps);
+}
 
 router.get('/', requireAuth, (req, res) => {
   try {
@@ -166,8 +176,22 @@ router.get('/', requireAuth, (req, res) => {
     // International : poids CA par famille × pays (Entrepôt vs SFS) sur la période N saisie.
     let sfsFamily = { global: {}, france: {}, inter: {}, byCountry: {} };
     { const od = store.getDataset('oms', 'N') || store.getDataset('oms', 'N1'); if (od && od.rows && od.map) { calc.ensureRefExtIdx(od.hdrs, od.map); const rf = require('./refoverrides').fullRefMap(); const pr = (nMonths && nMonths.length) ? calc.filterRows(od.rows, od.map, req.query.from.slice(0, 10), req.query.to.slice(0, 10), false) : od.rows; sfsFamily = calc.sfsFamilyMix(pr, od.map, rf); } }
+    // Familles de produits dans le temps (CA EShop par mois × famille, top 8) — bloc EStore.
+    let familyTrend = { months: [], families: [] };
+    { const famMonthly = familyMonthlyAll('global');
+      if (Object.keys(famMonthly).length) {
+        const tot = {};
+        series.forEach(s => { const fm = famMonthly[s.month] || {}; Object.entries(fm).forEach(([f, c]) => { tot[f] = (tot[f] || 0) + c; }); });
+        const topFams = Object.entries(tot).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([f]) => f);
+        familyTrend = { months: series.map(s => s.month), families: topFams.map(f => {
+          const values = series.map(s => Math.round((famMonthly[s.month] || {})[f] || 0));
+          const valuesN1 = series.map(s => Math.round((famMonthly[s.n1month] || {})[f] || 0));
+          return { name: f, values, valuesN1, total: values.reduce((a, b) => a + b, 0), totalN1: valuesN1.reduce((a, b) => a + b, 0) };
+        }) };
+      }
+    }
     res.json({
-      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily,
+      url: url || null, series, marketplace, cohorts, sfsMix, sfsMixN1, sfsFamily, familyTrend,
       has: { ga: !!Object.keys(gaAll).length, oms: !!Object.keys(omsAll).length, ads: !!Object.keys(adsAll).length, ret: !!Object.keys(retAll).length, marketplace: !!(marketplace.series && marketplace.series.length), cohorts: !!(cohorts && cohorts.cohorts.length), gapagedaily: !!(store.getDataset('gapagedaily', 'N') || store.getDataset('gapagedaily', 'N1')) },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

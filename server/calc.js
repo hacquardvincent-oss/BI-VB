@@ -594,6 +594,28 @@ function monthlyEShopCA(rows, map) {
   return out;
 }
 
+// CA EShop par mois ET par famille (hors mkt + Outstore) → { 'YYYY-MM': { famille: ca } }.
+// dim ∈ {global, fr, inter} pour cadrer le périmètre pays. Sert au suivi « familles dans le temps ».
+function familyMonthlyCA(rows, map, refMap, dim) {
+  const pi = map.prix, ti = map.type, di = map.date, li = map.lieu, pai = map.pays;
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (di === undefined) return {};
+  const by = {};
+  (rows || []).forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    if (dim === 'fr' || dim === 'inter') { const fr = normCountry(r[pai]) === 'france'; if (dim === 'fr' ? !fr : fr) return; }
+    const d = parseFrD(r[di]); if (!d) return;
+    const key = `${d.y}-${String(d.m).padStart(2, '0')}`;
+    const fam = (ri !== undefined && refMap && refMap[(r[ri] || '').trim()]) || '(non classé)';
+    const e = by[key] || (by[key] = {});
+    e[fam] = (e[fam] || 0) + fN(r[pi]);
+  });
+  const out = {};
+  Object.entries(by).forEach(([k, v]) => { const o = {}; Object.entries(v).forEach(([f, c]) => { o[f] = Math.round(c * 100) / 100; }); out[k] = o; });
+  return out;
+}
+
 // ── CA quotidien d'un mois donné (EShop hors mkt + Outstore) → { jour: {ca, commandes:Set, pieces, caOP} }
 // Brique interne de cumulMTD. Même périmètre que monthlyEShopCA.
 function dailyCAofMonth(rows, map, year, mon) {
@@ -2419,7 +2441,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
-  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,

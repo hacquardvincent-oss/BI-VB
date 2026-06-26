@@ -74,23 +74,23 @@ const KIND = {
 };
 // Métriques affichées (inv = une hausse est défavorable → delta inversé : retour, CPA).
 const METRICS = [
-  { key: 'tt', label: 'Taux de transfo', kind: 'pct', color: '#1B9E6A' },
-  { key: 'addRate', label: 'Taux d\'ajout panier', kind: 'pct', color: '#9B8AA3' },
-  { key: 'cartToPurchase', label: 'Taux panier → achat', kind: 'pct', color: '#1B9E6A' },
-  { key: 'engagementRate', label: 'Taux d\'engagement', kind: 'pct', color: '#A8854A' },
-  { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A' },
-  { key: 'iv', label: 'Indice de vente (pièces/commande)', kind: 'num', color: '#6E7B8B' },
-  { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D', inv: true },
-  { key: 'retMontant', label: 'Retours (€ remboursés)', kind: 'eur', color: '#E2574D', inv: true },
-  { key: 'nbRetours', label: 'Nb de retours', kind: 'int', color: '#E2574D', inv: true },
-  { key: 'stockAlerts', label: 'Alertes stock (demande back-in-stock)', kind: 'int', color: '#A8854A' },
-  { key: 'shareNew', label: 'Part de nouveaux visiteurs', kind: 'pct', color: '#6E7B8B' },
-  { key: 'roas', label: 'ROAS (Ads)', kind: 'x', color: '#1B9E6A' },
-  { key: 'cpa', label: 'CPA — coût d\'acquisition (Ads)', kind: 'eur', color: '#E2574D', inv: true },
-  { key: 'spend', label: 'Dépense Ads', kind: 'eur', color: '#6E7B8B' },
-  { key: 'sessions', label: 'Sessions', kind: 'int', color: '#6E7B8B' },
-  { key: 'newUsers', label: 'Nouveaux utilisateurs (proxy base client)', kind: 'int', color: '#6E7B8B' },
-  { key: 'addToCarts', label: 'Ajouts panier (volume)', kind: 'int', color: '#9B8AA3' },
+  { key: 'tt', label: 'Taux de transfo', kind: 'pct', color: '#1B9E6A', grp: 'estore' },
+  { key: 'cartToPurchase', label: 'Taux panier → achat', kind: 'pct', color: '#1B9E6A', grp: 'estore' },
+  { key: 'addRate', label: 'Taux d\'ajout panier', kind: 'pct', color: '#9B8AA3', grp: 'estore' },
+  { key: 'addToCarts', label: 'Ajouts panier (volume)', kind: 'int', color: '#9B8AA3', grp: 'estore' },
+  { key: 'engagementRate', label: 'Taux d\'engagement', kind: 'pct', color: '#A8854A', grp: 'estore' },
+  { key: 'pm', label: 'Panier moyen', kind: 'eur', color: '#A8854A', grp: 'estore' },
+  { key: 'iv', label: 'Indice de vente (pièces/commande)', kind: 'num', color: '#6E7B8B', grp: 'estore' },
+  { key: 'tauxRetour', label: 'Taux de retour', kind: 'pct', color: '#E2574D', inv: true, grp: 'estore' },
+  { key: 'retMontant', label: 'Retours (€ remboursés)', kind: 'eur', color: '#E2574D', inv: true, grp: 'estore' },
+  { key: 'nbRetours', label: 'Nb de retours', kind: 'int', color: '#E2574D', inv: true, grp: 'estore' },
+  { key: 'stockAlerts', label: 'Alertes stock (demande back-in-stock)', kind: 'int', color: '#A8854A', grp: 'estore' },
+  { key: 'sessions', label: 'Sessions', kind: 'int', color: '#6E7B8B', grp: 'acq' },
+  { key: 'newUsers', label: 'Nouveaux utilisateurs (proxy base client)', kind: 'int', color: '#6E7B8B', grp: 'acq' },
+  { key: 'shareNew', label: 'Part de nouveaux visiteurs', kind: 'pct', color: '#6E7B8B', grp: 'acq' },
+  { key: 'roas', label: 'ROAS (Ads)', kind: 'x', color: '#1B9E6A', grp: 'acq' },
+  { key: 'cpa', label: 'CPA — coût d\'acquisition (Ads)', kind: 'eur', color: '#E2574D', inv: true, grp: 'acq' },
+  { key: 'spend', label: 'Dépense Ads', kind: 'eur', color: '#6E7B8B', grp: 'acq' },
 ];
 
 // ── Synthèse KPI dans le temps : 1 tableau linéaire (mois en lignes, KPI clés en colonnes) ──
@@ -173,7 +173,7 @@ function render(d) {
   const nArr = d.series.map(s => s.n), n1Arr = d.series.map(s => s.n1);
   const agg = (arr, k, mode) => { const v = arr.filter(s => s[k] != null); if (!v.length) return null; const tot = v.reduce((a, s) => a + s[k], 0); return mode === 'avg' ? tot / v.length : tot; };
   const visible = METRICS.filter(m => nArr.some(s => s[m.key] != null));
-  const cards = visible.map(m => {
+  const cardHtml = m => {
     const K = KIND[m.kind] || KIND.int;
     const gN = agg(nArr, m.key, K.agg), gN1 = agg(n1Arr, m.key, K.agg);
     let delta = '<span class="na">—</span>';
@@ -183,7 +183,8 @@ function render(d) {
       <div class="note" style="margin:-6px 0 8px">${K.agg === 'avg' ? 'Moyenne' : 'Cumul'} N : <b>${K.fmt(gN)}</b> · N-1 : ${K.fmt(gN1)} ${delta}</div>
       <div style="height:190px"><canvas id="ch_${m.key}"></canvas></div>
     </div>`;
-  }).join('');
+  };
+  const gridFor = grp => { const list = visible.filter(m => m.grp === grp); return list.length ? `<div class="grid cols2">${list.map(cardHtml).join('')}</div>` : ''; };
   const miss = [];
   if (!d.has.oms) miss.push('OMS (taux de transfo, panier, indice de vente, retour)');
   if (!d.has.ads) miss.push('Google Ads (ROAS, CPA, dépense)');
@@ -193,6 +194,15 @@ function render(d) {
   let mktCard = '';
   if (mkt && mkt.series && mkt.series.length) {
     mktCard = `<div class="card"><h3>🏬 CA par marketplace (mois par mois)</h3><div class="note" style="margin:-6px 0 10px">${mkt.series.map(s => `${esc(s.name)} : <b>${fEur(s.total)}</b>`).join(' · ')}</div><div style="height:250px"><canvas id="ch_mkt"></canvas></div></div>`;
+  }
+  // Familles de produits dans le temps (CA EShop par mois × famille, top 8) — bloc EStore.
+  const ft = d.familyTrend; let famCard = '';
+  if (ft && ft.families && ft.families.length) {
+    const rows = ft.families.map((f, i) => { const dl = (f.totalN1 ? (() => { const p = (f.total - f.totalN1) / f.totalN1 * 100; return `<span class="${p >= 0 ? 'up' : 'dn'}" style="font-size:10px">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`; })() : ''); return `<tr><td><span style="color:${MKT_PALETTE[i % MKT_PALETTE.length]}">●</span> <b>${esc(f.name)}</b></td><td style="text-align:right">${fEur(f.total)} ${dl}</td><td style="text-align:right;color:var(--t3)">${fEur(f.totalN1)}</td></tr>`; }).join('');
+    famCard = `<div class="card"><h3>👜 Familles de produits dans le temps (CA EShop)</h3>
+      <div class="note" style="margin:-6px 0 8px">Top ${ft.families.length} familles sur la période, CA mensuel. Trait plein = N. Périmètre EShop, hors marketplace.</div>
+      <div style="height:260px"><canvas id="ch_famtrend"></canvas></div>
+      <table style="font-size:12px;width:100%;margin-top:10px"><thead><tr><th style="text-align:left">Famille</th><th style="text-align:right">CA N (Δ)</th><th style="text-align:right">CA N-1</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   // Cohortes de réachat (clé client pseudonymisée).
   const coh = d.cohorts; let cohCard = '';
@@ -231,14 +241,22 @@ function render(d) {
   }
   // Synthèse KPI dans le temps (tableau linéaire, en tête).
   const synthCard = `<div class="card" id="tr_synth" style="scroll-margin-top:80px"><h3>📋 Synthèse KPI dans le temps</h3><div class="note" style="margin:-6px 0 8px">Mois par mois : valeur N et écart vs N-1. Pied = cumul (CA, sessions) ou moyenne (taux, indice).</div><div style="overflow-x:auto">${synthTableHtml(d.series)}</div></div>`;
-  // Ordre : Synthèse → KPI eshop + acquisition (grille) → marketplace → Mix Omnicanal → cohortes.
-  const kpiBlock = `<div id="tr_kpis" style="scroll-margin-top:80px"><h3 style="margin:18px 4px 8px;font-family:var(--disp);font-size:14px">📈 Indicateurs eShop & acquisition</h3><div class="grid cols2">${cards}</div></div>`;
+  const head = (txt) => `<h3 style="margin:20px 4px 8px;font-family:var(--disp);font-size:15px;border-bottom:2px solid var(--accent-line, var(--br));padding-bottom:6px">${txt}</h3>`;
+  // Bloc EStore : perfs onsite (conversion, panier, retours) + familles de produits dans l'année.
+  const estoreGrid = gridFor('estore'), acqGrid = gridFor('acq');
+  const estoreBlock = (estoreGrid || famCard) ? `<div id="tr_estore" style="scroll-margin-top:80px">${head('🛍️ EStore — performance onsite & familles')}${estoreGrid}${famCard}</div>` : '';
+  // Bloc International / Omnicanal : Mix Entrepôt vs SFS + zoom familles par pays.
+  const intlBlock = omniCard ? `<div id="tr_intl" style="scroll-margin-top:80px">${head('✈️ International & Omnicanal')}${omniCard}</div>` : '';
+  // Bloc Acquisition : trafic + paid (sessions, nouveaux, ROAS, CPA, dépense) + marketplace.
+  const acqBlock = (acqGrid || mktCard) ? `<div id="tr_acq" style="scroll-margin-top:80px">${head('📣 Acquisition & marketplace')}${acqGrid}${mktCard}</div>` : '';
   const wrapId = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
-  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${kpiBlock}${wrapId('tr_mkt', mktCard)}${wrapId('tr_omni', omniCard)}${wrapId('tr_coh', cohCard)}`;
+  // Ordre : Synthèse → EStore → International → Acquisition → Cohortes.
+  body.innerHTML = `<div class="card"><div class="note">${d.url ? `🔎 Filtré sur l'URL <b>${esc(d.url)}</b> · ` : ''}${d.series.length} mois · trait plein = N, pointillé = N-1${missNote}.</div></div>${synthCard}${estoreBlock}${intlBlock}${acqBlock}${wrapId('tr_coh', cohCard)}`;
   // Sommaire d'ancres (droite).
-  const navItems = [{ id: 'tr_synth', label: '📋 Synthèse KPI' }, { id: 'tr_kpis', label: '📈 Indicateurs' }];
-  if (mktCard) navItems.push({ id: 'tr_mkt', label: '🏬 Marketplace' });
-  if (omniCard) navItems.push({ id: 'tr_omni', label: '🔀 Mix Omnicanal' });
+  const navItems = [{ id: 'tr_synth', label: '📋 Synthèse KPI' }];
+  if (estoreBlock) navItems.push({ id: 'tr_estore', label: '🛍️ EStore' });
+  if (intlBlock) navItems.push({ id: 'tr_intl', label: '✈️ International' });
+  if (acqBlock) navItems.push({ id: 'tr_acq', label: '📣 Acquisition' });
   if (cohCard) navItems.push({ id: 'tr_coh', label: '🔁 Cohortes' });
   buildTrendsNav(navItems);
   visible.forEach(m => lineChart('ch_' + m.key, labels, d.series.map(s => s.n[m.key]), d.series.map(s => s.n1[m.key]), m.color, m.kind));
@@ -256,8 +274,16 @@ function render(d) {
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
     });
   }
+  if (ft && ft.families && ft.families.length) {
+    const fl = ft.months.map(monthLabel);
+    mk('ch_famtrend', {
+      type: 'line',
+      data: { labels: fl, datasets: ft.families.map((f, i) => ({ label: f.name, data: f.values, borderColor: MKT_PALETTE[i % MKT_PALETTE.length], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2, spanGaps: true })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { ticks: { callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v, font: { size: 9 } }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+    });
+  }
 }
-const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B'];
+const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B', '#5B8DB8', '#D08B5B'];
 
 async function run() {
   const url = document.getElementById('urlFilter').value.trim();
