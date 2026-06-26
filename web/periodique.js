@@ -63,18 +63,24 @@ async function run() {
   } catch (e) { document.getElementById('body').innerHTML = `<div class="card"><div class="note">⚠ ${esc(e.message)}</div></div>`; }
 }
 
+// Calendrier « format Reporting » (flatpickr, fr) sur la date d'arrêté. altInput → affichage
+// JJ/MM/AAAA mais la valeur de #asof reste ISO (AAAA-MM-JJ), lue telle quelle par run().
+let FP_ASOF = null;
+function setAsof(iso) { const el = document.getElementById('asof'); if (!el) return; el.value = iso || ''; if (FP_ASOF) FP_ASOF.setDate(iso || null, false); }
+
 (async () => {
   let u; try { const r = await fetch('/auth/me'); if (!r.ok) { location.href = '/login.html'; return; } u = await r.json(); } catch (e) { location.href = '/login.html'; return; }
   document.getElementById('who').textContent = u.username;
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => location.href = '/admin.html'; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
+  if (window.flatpickr) { const L = flatpickr.l10ns && flatpickr.l10ns.fr; FP_ASOF = flatpickr('#asof', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', locale: L }); }
   document.getElementById('run').addEventListener('click', run);
   document.getElementById('today').addEventListener('click', async () => {
-    try { const s = await (await fetch('/api/ingest/status')).json(); const oms = s.filter(x => x.source === 'oms').map(x => x.date_max).filter(Boolean).sort(); if (oms.length) document.getElementById('asof').value = oms[oms.length - 1]; } catch (e) { /* */ }
+    try { const s = await (await fetch('/api/ingest/status')).json(); const oms = s.filter(x => x.source === 'oms').map(x => x.date_max).filter(Boolean).sort(); if (oms.length) setAsof(oms[oms.length - 1]); } catch (e) { /* */ }
     run();
   });
   if (window.initDataBar) initDataBar({ readonly: true });
   // Défaut : dernier jour OMS chargé.
-  try { const s = await (await fetch('/api/ingest/status')).json(); const oms = s.filter(x => x.source === 'oms').map(x => x.date_max).filter(Boolean).sort(); document.getElementById('asof').value = oms.length ? oms[oms.length - 1] : new Date().toISOString().slice(0, 10); } catch (e) { document.getElementById('asof').value = new Date().toISOString().slice(0, 10); }
+  try { const s = await (await fetch('/api/ingest/status')).json(); const oms = s.filter(x => x.source === 'oms').map(x => x.date_max).filter(Boolean).sort(); setAsof(oms.length ? oms[oms.length - 1] : new Date().toISOString().slice(0, 10)); } catch (e) { setAsof(new Date().toISOString().slice(0, 10)); }
   run();
 })();

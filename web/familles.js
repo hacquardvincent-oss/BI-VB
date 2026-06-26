@@ -165,9 +165,11 @@ async function run() {
   if (it && it.countries) sel.innerHTML = `<option value="">Tout l'international (hors France)</option>` + it.countries.map(c => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('');
 }
 
+let _rpFamN = null, _rpFamN1 = null;
 function setYear(y) {
   document.getElementById('nFrom').value = `${y}-01-01`; document.getElementById('nTo').value = `${y}-12-31`;
   document.getElementById('cFrom').value = `${y - 1}-01-01`; document.getElementById('cTo').value = `${y - 1}-12-31`;
+  if (_rpFamN) _rpFamN.sync(); if (_rpFamN1) _rpFamN1.sync();
 }
 
 if (document.getElementById('run') && document.getElementById('nFrom')) (async () => {
@@ -175,6 +177,11 @@ if (document.getElementById('run') && document.getElementById('nFrom')) (async (
   document.getElementById('who').textContent = u.username;
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => location.href = '/admin.html'; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
+  // Calendriers range « format Reporting » (1 widget début→fin) sur N et N-1.
+  if (window.mountRangePicker) {
+    _rpFamN = mountRangePicker({ fromId: 'nFrom', toId: 'nTo', placeholder: 'Période N…' });
+    _rpFamN1 = mountRangePicker({ fromId: 'cFrom', toId: 'cTo', placeholder: 'Période N-1…' });
+  }
   document.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { setYear(+b.dataset.yr); run(); }));
   document.getElementById('cty').addEventListener('change', run);
   document.getElementById('cmp').addEventListener('change', run);

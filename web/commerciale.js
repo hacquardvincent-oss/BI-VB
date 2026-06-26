@@ -598,7 +598,13 @@ async function syncDelta() {
   // (les périodes peuvent être décalées d'une semaine vs N-1). Bouton « ≈ −364 j » pour recaler.
   document.getElementById('dCFrom').value = (saved && saved.cfrom) || shiftDays(from, -364);
   document.getElementById('dCTo').value = (saved && saved.cto) || shiftDays(to, -364);
-  document.getElementById('n1Default').addEventListener('click', syncComparable);
+  // Calendriers range « format Reporting » (1 widget début→fin) sur N et N-1.
+  let _rpN1 = null;
+  if (window.mountRangePicker) {
+    mountRangePicker({ fromId: 'dFrom', toId: 'dTo', placeholder: 'Période de l\'opération…' });
+    _rpN1 = mountRangePicker({ fromId: 'dCFrom', toId: 'dCTo', placeholder: 'Période N-1…' });
+  }
+  document.getElementById('n1Default').addEventListener('click', () => { syncComparable(); if (_rpN1) _rpN1.sync(); });
   let USER_DIM = 'global';
   document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-dim]').forEach(x => x.classList.remove('on'));

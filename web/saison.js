@@ -568,8 +568,14 @@ document.querySelectorAll('[data-dim]').forEach(b => b.addEventListener('click',
   b.classList.add('on'); DIM = b.dataset.dim; loadReport();
 }));
 
+// Calendriers range « format Reporting » (1 widget début→fin) sur les périodes N et N-1.
+let _rpN = null, _rpN1 = null;
+if (window.mountRangePicker) {
+  _rpN = mountRangePicker({ fromId: 'dNfrom', toId: 'dNto', placeholder: 'Période N (E26)…' });
+  _rpN1 = mountRangePicker({ fromId: 'dCfrom', toId: 'dCto', placeholder: 'Période N-1 (E25)…' });
+}
 // N-1 toujours visible et éditable ; bouton « ≈ −364 j » pour recaler sur la saison équivalente.
-{ const e = document.getElementById('n1Default'); if (e) e.addEventListener('click', syncComparable); }
+{ const e = document.getElementById('n1Default'); if (e) e.addEventListener('click', () => { syncComparable(); if (_rpN1) _rpN1.sync(); }); }
 
 document.getElementById('saisonFilter').addEventListener('change', e => { SAISON = e.target.value || ''; loadReport(); });
 
