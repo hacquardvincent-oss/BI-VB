@@ -736,6 +736,26 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       if (rr.length) rN1 = calc.calcReturns(rr, retN.map);
     }
     returns = { n: rN, n1: rN1, tauxRetour: caN.caEShop > 0 ? rN.caRetourne / caN.caEShop : null };
+    // ⭐ DATE DE VALIDATION : si les retours détaillés /returns/get (jeu `retprod`, daté sur la DATE DE
+    // VALIDATION = closedAt) sont chargés et couvrent la période, on les utilise pour CA retourné / pièces /
+    // taux. Le feed `ret` (orderRefund embarqué dans les commandes de la période) SOUS-COMPTE fortement :
+    // il ne voit que les remboursements des commandes PLACÉES dans la période, alors que les retours
+    // arrivent en différé (validés des semaines après la commande). → règle métier demandée : date de validation.
+    { const rp = store.getDataset('retprod', 'N');
+      if (rp && rp.rows && rp.map && rp.map.date !== undefined && rp.map.montant !== undefined) {
+        const money = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : 0; };
+        const qOf = v => parseInt((v == null ? '0' : v).toString().replace(/\s/g, '')) || 0;
+        const rpRows = calc.filterRows(rp.rows, rp.map, from, to, isAll);   // filtré par DATE DE VALIDATION
+        if (rpRows.length) {
+          const caV = rpRows.reduce((s, r) => s + money(r[rp.map.montant]), 0);
+          const qteV = rpRows.reduce((s, r) => s + qOf(r[rp.map.qte]), 0);
+          const byR = {}; rpRows.forEach(r => { const rsn = ((rp.map.raison !== undefined ? r[rp.map.raison] : '') || '(non précisé)').toString().trim() || '(non précisé)'; const e = byR[rsn] || (byR[rsn] = { reason: rsn, montant: 0, count: 0, qte: 0 }); e.montant += money(r[rp.map.montant]); e.qte += qOf(r[rp.map.qte]); e.count += 1; });
+          returns.validBased = true;
+          returns.n = Object.assign({}, rN, { caRetourne: Math.round(caV), qte: qteV, reasons: Object.values(byR).sort((a, b) => b.montant - a.montant) });
+          returns.tauxRetour = caN.caEShop > 0 ? caV / caN.caEShop : null;
+        }
+      }
+    }
     // Analyse des motifs de retour (catégorisation taille/qualité/préférence + sens d'écart taille par famille).
     returns.analysis = calc.calcReturnReasons(retRowsN, retN.map, refMap);
     // ROAS NET (CA net de retours ÷ dépense pub) — intègre les retours, contrairement au ROAS brut.

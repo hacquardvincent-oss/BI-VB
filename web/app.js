@@ -1341,8 +1341,11 @@ function renderReport(rep) {
         <div class="note">Évolution des motifs de retour vs N-1 → repérer une dégradation (taille, qualité, conformité) à corriger côté offre/fiches produit.</div></div>`;
     }
     const caEShopRet = (rep.ca && rep.ca.n) ? rep.ca.n.caEShop : null;
+    const retSrcNote = rep.returns.validBased
+      ? `Σ remboursements <b>datés par DATE DE VALIDATION du retour</b> (source détaillée /returns/get), filtrés sur la période`
+      : `Σ remboursements du feed WSHOP order-embedded — ⚠️ <b style="color:var(--r)">sous-compte</b> : ne voit que les remboursements des commandes <b>placées</b> dans la période (les retours arrivent en différé). Charge les <b>retours détaillés</b> (bouton « 🔔 Stock & alertes stock » du panneau de chargement) pour un taux par <b>date de validation</b>`;
     returnsCard = `<div class="card"><h3>↩️ Retours clients — remboursements après livraison (source WSHOP/retours)</h3><div class="kgrid">${tiles}</div>
-      <div class="note" style="margin-top:6px"><b>Calcul du taux de retour</b> = <b>${fEur(rt.caRetourne)}</b> retournés (Σ remboursements, filtrés par <b>date de retour</b> sur la période) ÷ <b>${caEShopRet != null ? fEur(caEShopRet) : '—'}</b> CA EShop de la période (hors marketplace, Outstore) = <b>${fPct(rep.returns.tauxRetour)}</b>. ⚠️ <b>Taux opérationnel</b> : un retour reçu sur la période concerne souvent une commande plus ancienne → il est plus bas qu'un taux « cohorte » (retours futurs des commandes de la période ÷ CA de la période).</div>
+      <div class="note" style="margin-top:6px"><b>Calcul du taux de retour</b> = <b>${fEur(rt.caRetourne)}</b> retournés (${retSrcNote}) ÷ <b>${caEShopRet != null ? fEur(caEShopRet) : '—'}</b> CA EShop de la période (hors marketplace, Outstore) = <b>${fPct(rep.returns.tauxRetour)}</b>.</div>
       <div style="height:190px;margin-top:10px"><canvas id="retoursChart"></canvas></div>
       ${topProdTable}
       <div class="grid cols2" style="margin-top:10px">
