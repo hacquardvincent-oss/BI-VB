@@ -137,6 +137,13 @@ function loadDemo() {
   } catch (e) { console.error('[demo] chargement KO:', e.message); }
 }
 
+// Filets de sécurité PROCESSUS : sous Node 18+, une promesse rejetée non gérée (ex. polling Y2/SFTP,
+// connecteur externe, requête réseau qui échoue en arrière-plan) TERMINE le process par défaut →
+// l'hébergeur voit le service tomber et marque le déploiement « failed » alors que le boot était sain.
+// On LOG sans tuer le process : un incident isolé en tâche de fond ne doit pas faire tomber le dashboard.
+process.on('unhandledRejection', (reason) => console.error('[bidash] unhandledRejection (ignoré) :', (reason && reason.stack) || (reason && reason.message) || reason));
+process.on('uncaughtException', (err) => console.error('[bidash] uncaughtException (ignoré) :', (err && err.stack) || (err && err.message) || err));
+
 // Démarrage : on OUVRE LE PORT D'ABORD (détection rapide par l'hébergeur), puis on
 // initialise la base + hydratation RAM + fichiers specs en arrière-plan. Évite le
 // « port scan timeout » quand l'hydratation depuis Postgres devient longue.
