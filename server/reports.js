@@ -878,7 +878,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // si l'import déborde la période pour avertir l'UI (ex. GA importé sur 2 ans, période = 1 semaine).
   const _gaWin = ds => (ds && ds.date_min && ds.date_max) ? { from: String(ds.date_min).slice(0, 10), to: String(ds.date_max).slice(0, 10) } : null;
   const gaImportWin = (() => {
-    const c = [psN, clN, landN, campN, pagesN, itemsN, gaSessFull, gaTotFull].map(_gaWin).filter(Boolean);
+    const c = [store.getDataset('gapagesrc', 'N'), store.getDataset('gacampaignland', 'N'), landN, campN, pagesN, itemsN, gaSessFull, gaTotFull].map(_gaWin).filter(Boolean);
     if (!c.length) return null;
     return { from: c.reduce((m, x) => x.from < m ? x.from : m, c[0].from), to: c.reduce((m, x) => x.to > m ? x.to : m, c[0].to) };
   })();
