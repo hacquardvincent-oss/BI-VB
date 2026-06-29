@@ -256,6 +256,35 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
   }));
 }
 
+// ── Versions DATÉES (date × …) : permettent de filtrer par la période d'analyse (≠ fenêtre d'import). ──
+const isoD = v => { const s = (v || '').toString(); return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s; };
+// date × source × landing page (source→page filtrable par période).
+async function fetchPagesBySourceDaily(propertyId, startDate, endDate) {
+  const data = await postAll(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'landingPage' }, { name: 'country' }],
+    metrics: [{ name: 'sessions' }, { name: 'totalRevenue' }, { name: 'ecommercePurchases' }],
+    limit: 100000,
+  });
+  return (data.rows || []).map(r => ({
+    date: isoD(r.dimensionValues[0].value), source: r.dimensionValues[1].value, page: r.dimensionValues[2].value, country: r.dimensionValues[3].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0, revenue: parseFloat(r.metricValues[1].value) || 0, purchases: parseFloat(r.metricValues[2].value) || 0,
+  }));
+}
+// date × campagne × landing page (campagne→landing filtrable par période).
+async function fetchCampaignLandingDaily(propertyId, startDate, endDate) {
+  const data = await postAll(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'sessionCampaignName' }, { name: 'landingPage' }, { name: 'country' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }],
+    limit: 100000,
+  });
+  return (data.rows || []).map(r => ({
+    date: isoD(r.dimensionValues[0].value), campaign: r.dimensionValues[1].value, page: r.dimensionValues[2].value, country: r.dimensionValues[3].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0, purchases: parseFloat(r.metricValues[1].value) || 0,
+  }));
+}
+
 // ── Campagne × famille/catégorie produit (quelles campagnes tirent quelles familles) ──
 async function fetchCampaignCategory(propertyId, startDate, endDate) {
   const data = await post(propertyId, {
@@ -467,6 +496,8 @@ async function refresh(opts = {}) {
     () => safe(`sessions total ${P}`, async () => mSess('gatot', toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
     () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`pagesrc daté ${P}`, async () => store.setDataset('gapagesrcdaily', P, { rows: await fetchPagesBySourceDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`campland daté ${P}`, async () => store.setDataset('gacampaignlanddaily', P, { rows: await fetchCampaignLandingDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`items ${P}`, async () => store.setDataset('gaitems', P, { rows: await fetchItemFunnel(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),

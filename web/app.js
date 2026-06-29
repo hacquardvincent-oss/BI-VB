@@ -1064,9 +1064,10 @@ function coverageBanner(rep) {
 }
 
 // Avertissement : cartes GA agrégées (sans date) reflétant la fenêtre d'import, pas la période.
-function gaStaleWarn(rep) {
+function gaStaleWarn(rep, key) {
   const m = rep && rep.meta;
   if (!m || !m.gaAggStale || !m.gaImportWin) return '';
+  if (key && m.gaDated && m.gaDated[key]) return '';   // carte filtrée par période via jeu daté → OK
   const f = iso => iso ? iso.split('-').reverse().join('/') : '';
   return `<div class="note" style="color:var(--r);font-weight:600;margin:-4px 0 8px">⚠ Agrégé par GA4 sur la <b>fenêtre d'import</b> (${f(m.gaImportWin.from)} → ${f(m.gaImportWin.to)}), <b>pas</b> sur la période sélectionnée. Réimporte GA4 sur la période pour un résultat exact.</div>`;
 }
@@ -1588,7 +1589,7 @@ function renderReport(rep) {
   // Top pages par source — sessions + revenu (N vs N-1) + meilleures combinaisons N-1 perdues
   const psRows = (rep.topPagesBySource || []).map(p => `<tr><td>${esc(p.source)}</td><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.sessions)}</td><td>${delta(p.sessions, p.sessionsN1)}</td><td>${fEur(p.revenue)}</td><td>${delta(p.revenue, p.revenueN1)}</td></tr>`).join('');
   const psLost = (rep.lostPagesBySource || []).map(p => `<tr><td>${esc(p.source)}</td><td title="${esc(p.page)}">${esc(p.page)}</td><td>${fInt(p.sessionsN1)}</td><td>${fEur(p.revenueN1)}</td><td>${fInt(p.sessionsN)}</td></tr>`).join('');
-  const pagesrcCard = psRows ? `<div class="card"><h3>Top combinaisons source → page — N vs N-1</h3>${gaStaleWarn(rep)}
+  const pagesrcCard = psRows ? `<div class="card"><h3>Top combinaisons source → page — N vs N-1</h3>${gaStaleWarn(rep, 'pagesrc')}
       <table><thead><tr><th>Source</th><th>Page (landing)</th><th>Sessions N</th><th>Δ</th><th>Revenu N</th><th>Δ</th></tr></thead><tbody>${psRows}</tbody></table>
       ${psLost ? `<h3 style="margin-top:14px">📉 Meilleures combinaisons N-1 qu'on n'a plus</h3><table><thead><tr><th>Source</th><th>Page</th><th>Sess. N-1</th><th>Revenu N-1</th><th>Sess. N</th></tr></thead><tbody>${psLost}</tbody></table>` : ''}
       <div class="note">Sessions et revenu par combinaison source/landing. Le 2ᵉ tableau = duos qui marchaient l'an dernier et qu'on a perdus (canal coupé, page dépubliée, campagne arrêtée).</div></div>` : '';
@@ -1628,7 +1629,7 @@ function renderReport(rep) {
         <td style="color:${st[1]};font-weight:600;font-size:11px;white-space:nowrap">${st[0]}</td>
       </tr>`;
     }).join('');
-    return `<div class="card"><h3>🔀 Campagne × Landing — performance & actions</h3>${gaStaleWarn(rep)}
+    return `<div class="card"><h3>🔀 Campagne × Landing — performance & actions</h3>${gaStaleWarn(rep, 'campland')}
       ${recos ? `<div class="note" style="font-weight:700;color:var(--t2);margin:0 0 2px">🎯 Actions prioritaires</div><ul style="margin:0 0 12px;padding-left:2px;list-style:none">${recos}</ul>` : ''}
       <div class="note" style="font-weight:700;color:var(--t2);margin:0">Combinaisons campagne → landing — conv. moyenne site : <b>${fPct(cl.siteConv)}</b></div>
       <table style="margin-top:4px"><thead><tr><th>Campagne</th><th>Landing</th><th style="text-align:right">Sessions (Δ)</th><th style="text-align:right">Part camp.</th><th style="text-align:right">Conv. (vs moy.)</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>

@@ -518,24 +518,43 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       }).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
     }
   }
-  // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
-  const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
-  const campaignLanding = (clN && clN.rows)
-    ? calc.campaignLandingAnalysis((clN.rows || []).filter(keepGeoRow), (clN1 && clN1.rows || []).filter(keepGeoRow))
-    : null;
+  // Helper : filtre des lignes objets par date ∈ [a,b] (les jeux DATÉS portent x.date ISO).
+  const inDate = (x, a, b) => isAll || !x || !x.date || (x.date >= a && x.date <= b);
+  // Cohérence campagne → page d'atterrissage — version DATÉE (filtrable par période) sinon agrégat.
+  let campaignLanding = null, camplandDated = false;
+  { const clDN = store.getDataset('gacampaignlanddaily', 'N'), clDN1 = store.getDataset('gacampaignlanddaily', 'N1');
+    if (clDN && clDN.rows && clDN.rows.length) {
+      camplandDated = true;
+      const rN = clDN.rows.filter(x => inDate(x, from, to) && keepGeoRow(x));
+      const src1 = (clDN1 && clDN1.rows && clDN1.rows.length) ? clDN1.rows : clDN.rows;
+      const rN1 = noN1 ? [] : src1.filter(x => inDate(x, cf, ct) && keepGeoRow(x));
+      campaignLanding = calc.campaignLandingAnalysis(rN, rN1);
+    } else {
+      const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
+      campaignLanding = (clN && clN.rows) ? calc.campaignLandingAnalysis((clN.rows || []).filter(keepGeoRow), (clN1 && clN1.rows || []).filter(keepGeoRow)) : null;
+    }
+  }
 
-  // Top pages par source (N vs N-1) — sessions + revenu, agrégées par (source,page) après filtre pays
-  const psN = store.getDataset('gapagesrc', 'N'), psN1 = store.getDataset('gapagesrc', 'N1');
-  let topPagesBySource = null, lostPagesBySource = null;
-  if (psN && psN.rows) {
-    const aggPS = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.source + '¦' + x.page; const e = m[k] || (m[k] = { source: x.source, page: x.page, sessions: 0, revenue: 0, views: 0 }); e.sessions += (x.sessions || x.views || 0); e.revenue += x.revenue || 0; e.views += x.views || 0; }); return m; };
-    const aN = aggPS(psN.rows), aN1 = aggPS(psN1 && psN1.rows);
-    topPagesBySource = Object.values(aN).sort((a, b) => b.sessions - a.sessions).slice(0, 20)
-      .map(x => { const p = aN1[x.source + '¦' + x.page] || {}; return { source: x.source, page: x.page, sessions: x.sessions, revenue: x.revenue, sessionsN1: p.sessions || 0, revenueN1: p.revenue || 0 }; });
-    // Meilleures combinaisons source/page N-1 qu'on n'a plus
-    lostPagesBySource = Object.entries(aN1).filter(([k, v]) => v.sessions >= 50 && (!aN[k] || aN[k].sessions < v.sessions * 0.25))
-      .map(([, v]) => ({ source: v.source, page: v.page, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[v.source + '¦' + v.page] || {}).sessions || 0 }))
-      .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
+  // Top pages par source (N vs N-1) — version DATÉE (filtrable par période) sinon agrégat.
+  let topPagesBySource = null, lostPagesBySource = null, pagesrcDated = false;
+  { const aggPS = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.source + '¦' + x.page; const e = m[k] || (m[k] = { source: x.source, page: x.page, sessions: 0, revenue: 0, views: 0 }); e.sessions += (x.sessions || x.views || 0); e.revenue += x.revenue || 0; e.views += x.views || 0; }); return m; };
+    const psDN = store.getDataset('gapagesrcdaily', 'N'), psDN1 = store.getDataset('gapagesrcdaily', 'N1');
+    const aggN = store.getDataset('gapagesrc', 'N'), aggN1 = store.getDataset('gapagesrc', 'N1');
+    let rowsN = null, rowsN1 = null;
+    if (psDN && psDN.rows && psDN.rows.length) {
+      pagesrcDated = true;
+      rowsN = psDN.rows.filter(x => inDate(x, from, to));
+      const src1 = (psDN1 && psDN1.rows && psDN1.rows.length) ? psDN1.rows : psDN.rows;
+      rowsN1 = noN1 ? [] : src1.filter(x => inDate(x, cf, ct));
+    } else if (aggN && aggN.rows) { rowsN = aggN.rows; rowsN1 = aggN1 && aggN1.rows; }
+    if (rowsN) {
+      const aN = aggPS(rowsN), aN1 = aggPS(rowsN1);
+      topPagesBySource = Object.values(aN).sort((a, b) => b.sessions - a.sessions).slice(0, 20)
+        .map(x => { const p = aN1[x.source + '¦' + x.page] || {}; return { source: x.source, page: x.page, sessions: x.sessions, revenue: x.revenue, sessionsN1: p.sessions || 0, revenueN1: p.revenue || 0 }; });
+      lostPagesBySource = Object.entries(aN1).filter(([k, v]) => v.sessions >= 50 && (!aN[k] || aN[k].sessions < v.sessions * 0.25))
+        .map(([, v]) => ({ source: v.source, page: v.page, sessionsN1: v.sessions, revenueN1: v.revenue, sessionsN: (aN[v.source + '¦' + v.page] || {}).sessions || 0 }))
+        .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
+    }
   }
   const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
   // Sessions « propres » par jour (date×pays) → TT/jour fiable (sinon repli ventilation).
@@ -864,12 +883,14 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     return { from: c.reduce((m, x) => x.from < m ? x.from : m, c[0].from), to: c.reduce((m, x) => x.to > m ? x.to : m, c[0].to) };
   })();
   const gaAggStale = !!(!isAll && gaImportWin && from && to && (gaImportWin.from < isoShiftDays(from, -2) || gaImportWin.to > isoShiftDays(to, 2)));
+  // Cartes désormais filtrées par période grâce aux jeux datés → pas d'avertissement « fenêtre d'import ».
+  const gaDated = { pagesrc: pagesrcDated, campland: camplandDated };
 
   return {
     empty: false,
     meta: {
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable, hourMax: tMax,
-      gaAggStale, gaImportWin,
+      gaAggStale, gaImportWin, gaDated,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       // Pourquoi pas de N-1 ? Pour lever l'ambiguïté côté UI (comparaison coupée vs aucune vente N-1 en base).
       n1Reason: kpiEShopN1 ? '' : (noN1 ? 'compare-off' : (isAll ? 'tout' : 'no-oms-n1')),
