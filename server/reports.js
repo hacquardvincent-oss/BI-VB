@@ -854,10 +854,22 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   try { objMonth = require('./objectives').getMonthObjectiveCA(cumulMonthKey); } catch (_) { /* objectifs indispo */ }
   const cumul = calc.cumulMTD(omsN.rows, omsN.map, omsN1 ? omsN1.rows : null, omsN1 ? omsN1.map : null, { asOf: to, objMonth });
 
+  // Cartes GA AGRÉGÉES (sans colonne date : source→page, landing, pages, campagnes, campagne→landing,
+  // funnel produit) = elles reflètent la FENÊTRE D'IMPORT GA4, pas la période sélectionnée. On détecte
+  // si l'import déborde la période pour avertir l'UI (ex. GA importé sur 2 ans, période = 1 semaine).
+  const _gaWin = ds => (ds && ds.date_min && ds.date_max) ? { from: String(ds.date_min).slice(0, 10), to: String(ds.date_max).slice(0, 10) } : null;
+  const gaImportWin = (() => {
+    const c = [psN, clN, landN, campN, pagesN, itemsN, gaSessFull, gaTotFull].map(_gaWin).filter(Boolean);
+    if (!c.length) return null;
+    return { from: c.reduce((m, x) => x.from < m ? x.from : m, c[0].from), to: c.reduce((m, x) => x.to > m ? x.to : m, c[0].to) };
+  })();
+  const gaAggStale = !!(!isAll && gaImportWin && from && to && (gaImportWin.from < isoShiftDays(from, -2) || gaImportWin.to > isoShiftDays(to, 2)));
+
   return {
     empty: false,
     meta: {
       preset: preset || 'all', from, to, isAll, cf, ct, dim, gaDimUnavailable, hourMax: tMax,
+      gaAggStale, gaImportWin,
       omsFile: omsN.filename, omsFreshness: omsN.uploadedAt,
       // Pourquoi pas de N-1 ? Pour lever l'ambiguïté côté UI (comparaison coupée vs aucune vente N-1 en base).
       n1Reason: kpiEShopN1 ? '' : (noN1 ? 'compare-off' : (isAll ? 'tout' : 'no-oms-n1')),

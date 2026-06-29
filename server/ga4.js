@@ -465,13 +465,13 @@ async function refresh(opts = {}) {
   const tasksFor = (P, s, e) => [
     () => safe(`sessions ${P}`, async () => mSess('gasess', toDataset(await fetchSessionsDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`sessions total ${P}`, async () => mSess('gatot', toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
-    () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`items ${P}`, async () => store.setDataset('gaitems', P, { rows: await fetchItemFunnel(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`campnr ${P}`, async () => store.setDataset('gacampnr', P, { rows: await fetchCampaignsNewReturning(propertyId, s, e), uploaded_at: ts() })),
-    () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), uploaded_at: ts() })),
+    () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`items ${P}`, async () => store.setDataset('gaitems', P, { rows: await fetchItemFunnel(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`campnr ${P}`, async () => store.setDataset('gacampnr', P, { rows: await fetchCampaignsNewReturning(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`emailhour ${P}`, async () => store.setDataset('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e))),
@@ -481,7 +481,7 @@ async function refresh(opts = {}) {
   const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
   mDay('ga', 'N', toDataset(dataN, nStart, nEnd), nStart, nEnd);
   const nTasks = tasksFor('N', nStart, nEnd);
-  nTasks.push(() => safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), uploaded_at: ts() }))); // N seul
+  nTasks.push(() => safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), date_min: nStart, date_max: nEnd, uploaded_at: ts() }))); // N seul
   // Concurrence BORNÉE à 3 (au lieu de 5) : réduit le pic mémoire de l'import (instance contrainte).
   await runPool(nTasks, 3);
   let n1Count = null;
