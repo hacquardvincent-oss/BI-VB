@@ -100,7 +100,7 @@ function topListQte(byProd, n = 10) {
     .map(([des, v]) => ({ des, ca: v.ca, qte: v.qte }));
 }
 
-async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax }) {
+async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax, tlFrom }) {
   // hourMax="HH:MM" → CUMUL À L'HEURE : tronque N ET N-1 aux ventes ≤ cette heure (comparaison
   // honnête quand on analyse AUJOURD'HUI : N partiel vs N-1 cumulé jusqu'à la même heure). Sinon
   // (jour terminé) full day. Validé "HH:MM" zéro-padné.
@@ -582,7 +582,8 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
   const timeline = (() => {
     if (!tlEnd || !/^\d{4}-\d{2}-\d{2}$/.test(tlEnd)) return null;
-    const tlStart = isoShiftDays(tlEnd, -27);
+    // Fenêtre par défaut = 28 j glissants ; override `tlFrom` (ex. page Cumuls → mois en cours).
+    const tlStart = (tlFrom && /^\d{4}-\d{2}-\d{2}$/.test(tlFrom) && tlFrom <= tlEnd) ? tlFrom : isoShiftDays(tlEnd, -27);
     const tlRows = calc.filterOutstore(calc.filterDim(calc.filterRows(omsN.rows, omsN.map, tlStart, tlEnd, false), omsN.map, dim), omsN.map);
     const serie = calc.dailySeries(tlRows, omsN.map, gaNf, sessByDayN);
     if (!serie || !serie.length) return null;
@@ -947,9 +948,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax } = req.query;
+    const { preset, from, to, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax, tlfrom } = req.query;
     const isAll = req.query.isAll === '1';
-    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax });
+    const report = await buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, consentN, consentN1, cosTarget, compare, hourMax, tlFrom: tlfrom });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });

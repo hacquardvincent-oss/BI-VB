@@ -40,7 +40,7 @@ const MODULES = {
     icon: '🌅', label: 'Matin (soft)', preset: 'yesterday',
     intro: 'Lecture rapide du matin : ce qui s\'est passé hier + où en est le mois (cumul & atterrissage projeté).',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'cumul', 'timeline', 'produits'],
+    layout: ['kpi', 'cumul', 'produits'],
   },
   hebdo: {
     icon: '📅', label: 'Hebdo & cumul mois', preset: 'week',
@@ -82,13 +82,13 @@ const MODULES = {
     icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
     intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'timeline', 'daily', 'dailyads','channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'zonecompare', 'pays', 'ttpays', 'fampays'],
+    layout: ['kpi', 'ca', 'daily', 'dailyads','channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'zonecompare', 'pays', 'ttpays', 'fampays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'timeline', 'daily', 'dailyads','channels', 'produits'],
+    layout: ['kpi', 'funnel', 'gafunnel', 'daily', 'dailyads','channels', 'produits'],
   },
   produit: {
     icon: '🧶', label: 'Produit', preset: 'all',
@@ -118,7 +118,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -165,8 +165,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
 // Sert à la pop-in de sélection (liste compacte par catégorie + format) et à la page Création.
@@ -191,7 +191,7 @@ function entryKey(k) { return typeof k === 'string' ? k : (k.ref ? 'r:' + k.ref 
 
 // Modèles de vues prêts à l'emploi (point de départ en 1 clic dans la pop-in).
 const VIEW_TEMPLATES = {
-  matin: { label: '🌅 Matin e-commerce', cards: ['kpi', 'cumul', 'timeline', 'produits'] },
+  matin: { label: '🌅 Matin e-commerce', cards: ['kpi', 'cumul', 'produits'] },
   direction: { label: '🏛️ Direction', cards: ['kpi', 'cumul', 'variance', 'famille', 'marketplace'] },
   acquisition: { label: '📡 Acquisition', cards: ['ga', 'channels', 'canaltype', 'ads', 'campaigns'] },
   appro: { label: '📦 Appro & Stock', cards: ['stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'famille', 'produits', 'returnprod'] },
