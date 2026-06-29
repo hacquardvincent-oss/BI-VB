@@ -571,6 +571,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const campN = curves(gaCampDailyN, 0), campN1 = curves(gaCampDailyN1, -364);
     return (campN.length || campN1.length) ? { campN, campN1 } : null;
   })();
+  // Synthèse campagnes sur la période : début/fin/sessions/CA (carte acquisition Prévisionnel/Reporting).
+  const campaignSummary = (daily && daily.length)
+    ? calc.campaignPeriodSummary(gaCampDailyN, daily[0].date, daily[daily.length - 1].date, 8)
+    : null;
   // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
   // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
   const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
@@ -914,6 +918,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     dailyN1,
     dailyMarkers,
     dailyCampaigns,
+    campaignSummary,
     timeline, timeline2,
     stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel,
     hourly,

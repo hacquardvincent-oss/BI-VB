@@ -135,16 +135,60 @@ function render(a) {
   if (!a.has.metaAds) missing.push('Meta Ads');
   const miss = missing.length ? `<div class="card"><div class="note">ℹ️ Non disponible pour cette période (donnée non importée) : ${missing.map(esc).join(' · ')}. Charge-les via le panneau de gauche. L'OMS (CA, full/off, semaines, familles, produits) reste l'ossature.</div></div>` : '';
 
+  // Camembert : poids du CA par famille (rend la lecture plus graphique).
+  const famPieCard = (famSrc && famSrc.length) ? `<div class="card"><h3>🥧 Poids du CA par famille (cumul période)</h3><div style="height:280px"><canvas id="prevFamPie"></canvas></div></div>` : '';
   // Suivis temporels jour-par-jour (période saisie) : CA + trafic + croix CRM, et CA + campagnes Ads.
   const tlCards = `
     <div class="card"><h3>📈 Suivi temporel de la période — CA, trafic & envois CRM</h3>
       <div style="height:300px"><canvas id="prevTlChart"></canvas></div>
-      <div class="note" style="margin-top:4px">Barres = CA/jour · courbes = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), TT % (<b style="color:#1B9E6A">vert</b>) · croix <b style="color:#E2233A">rouges</b> = jours d'envoi email (✕ = période saisie, + = l'année d'avant). <b>Trait plein</b> = période saisie · pointillé = l'année précédente.</div></div>
+      <div class="note" id="prevTlNote" data-base="Barres = CA/jour · courbes = Sessions (rouge), Ajout panier % (violet), TT % (vert) · croix rouges = jours d'envoi email (✕ = période saisie, + = l'année d'avant). Trait plein = période saisie · pointillé = l'année précédente." style="margin-top:4px">Barres = CA/jour · courbes = trafic · croix rouges = envois email.</div></div>
     <div class="card"><h3>🎯 Suivi temporel de la période — CA & campagnes d'acquisition</h3>
       <div style="height:300px"><canvas id="prevTl2Chart"></canvas></div>
-      <div class="note" id="prevAdsNote" style="margin-top:4px">Barres = CA/jour · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = période saisie, pointillé = l'année d'avant). Relie les pics de CA aux campagnes.</div></div>`;
-  body.innerHTML = synth + weekCard + topCard + crmCard + waCard + cpCard + stCard + crmInsCard + pagesCard + card6 + adsCard + tlCards + miss;
+      <div id="prevCampTbl"></div>
+      <div class="note" style="margin-top:4px">Barres = CA/jour · courbes = sessions des 3 meilleures campagnes (plein = période saisie, pointillé = année d'avant). Table = début/fin et CA généré par campagne.</div></div>`;
+  // Blocs ancrés (sommaire à droite). Ordre orienté lecture : synthèse → temporel → familles → acquisition → stock → pages.
+  const blk = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
+  body.innerHTML =
+    blk('pv_synth', synth)
+    + blk('pv_temporel', tlCards)
+    + blk('pv_familles', topCard + famPieCard + weekCard)
+    + blk('pv_acq', crmCard + waCard + cpCard + adsCard + card6)
+    + blk('pv_stock', stCard)
+    + blk('pv_pages', crmInsCard + pagesCard)
+    + miss;
+  const navItems = [
+    ['pv_synth', '🔮 Synthèse 360', synth], ['pv_temporel', '📈 Suivi temporel', tlCards],
+    ['pv_familles', '🧶 Familles & produits', topCard], ['pv_acq', '📣 Acquisition & CRM', crmCard + waCard + adsCard],
+    ['pv_stock', '🔔 Stock', stCard], ['pv_pages', '📄 Pages & canaux', crmInsCard + pagesCard],
+  ].filter(x => x[2]);
+  buildPrevNav(navItems);
+  renderFamPie(famSrc, wk.total);
   loadPrevTimelines(document.getElementById('from').value, document.getElementById('to').value);
+}
+
+// Camembert CA par famille (top 8 + Autres).
+const PIE_COL = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B', '#5B8DB8', '#D08B5B', '#B0B5BD'];
+function renderFamPie(famSrc, total) {
+  const el = document.getElementById('prevFamPie'); if (!el || typeof Chart === 'undefined' || !famSrc || !famSrc.length) return;
+  if (_pcharts.famPie) _pcharts.famPie.destroy();
+  const sorted = famSrc.slice().sort((a, b) => b.ca - a.ca); const top = sorted.slice(0, 8);
+  const rest = sorted.slice(8).reduce((s, f) => s + (f.ca || 0), 0);
+  const labels = top.map(f => f.fam).concat(rest > 0 ? ['Autres'] : []);
+  const data = top.map(f => Math.round(f.ca)).concat(rest > 0 ? [Math.round(rest)] : []);
+  _pcharts.famPie = new Chart(el.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PIE_COL[i % PIE_COL.length]), borderColor: '#fff', borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => { const t = data.reduce((s, v) => s + v, 0); return ` ${c.label} : ${fEur(c.parsed)} (${t ? Math.round(c.parsed / t * 100) : 0}%)`; } } } } },
+  });
+}
+// Sommaire d'ancres à droite (réutilise le style #reportNav).
+function buildPrevNav(items) {
+  const list = document.getElementById('prevNavList'), nav = document.getElementById('reportNav');
+  if (!list || !nav) return;
+  if (!items.length) { nav.classList.remove('open'); list.innerHTML = ''; return; }
+  list.innerHTML = items.map(it => `<a href="#${it[0]}" data-tgt="${it[0]}">${esc(it[1])}</a>`).join('');
+  nav.classList.add('open');
+  list.querySelectorAll('a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const el = document.getElementById(a.dataset.tgt); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 }
 
 // ── Suivis temporels jour-par-jour : récupère le report de la période saisie et dessine 2 graphes ──
@@ -170,14 +214,22 @@ function renderPrevTimelines(rep) {
     { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
   ];
   const scales = { x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(20,22,28,.06)' } }, y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, ySess: { position: 'right', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } }, yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true } };
-  // Graphe 1 : CA + Sessions/Ajout panier/TT + croix CRM.
-  const ds1 = bars.concat([line('Sessions N', sessN, '#E2574D', 'ySess'), line('Sessions N-1', sessN1, '#E2574D', 'ySess', true), line('Ajout panier % N', addN, '#7C4DCB', 'yPct'), line('Ajout panier % N-1', addN1, '#7C4DCB', 'yPct', true), line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true)]);
-  const M = rep.dailyMarkers;
+  // Graphe 1 : CA + Sessions/Ajout panier/TT + croix CRM. On NE trace une courbe que si elle a des
+  // données (évite la « ligne plate » trompeuse quand GA4 n'est pas chargé sur la période).
+  const hasSess = sessN.some(v => v), hasAdd = addN.some(v => v != null), hasTt = ttN.some(v => v != null);
+  const ds1 = bars.slice();
+  if (hasSess) ds1.push(line('Sessions N', sessN, '#E2574D', 'ySess'), line('Sessions N-1', sessN1, '#E2574D', 'ySess', true));
+  if (hasAdd) ds1.push(line('Ajout panier % N', addN, '#7C4DCB', 'yPct'), line('Ajout panier % N-1', addN1, '#7C4DCB', 'yPct', true));
+  if (hasTt) ds1.push(line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true));
+  const M = rep.dailyMarkers; let nCrm = 0;
   if (M && M.days && M.days.length === PREV_LABELS.length) {
-    const cross = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: PREV_LABELS.map((_, i) => (M.days[i] && pick(M.days[i]) >= thr && caArr[i] != null) ? caArr[i] : null), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color });
+    const cross = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: PREV_LABELS.map((_, i) => { const ok = M.days[i] && pick(M.days[i]) >= thr && caArr[i] != null; if (ok) nCrm++; return ok ? caArr[i] : null; }), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color });
     ds1.push(cross('✉️ CRM N', x => x.crm, M.crmThr, caN, 'crossRot', '#E2233A'), cross('✉️ CRM N-1', x => x.crmN1, M.crmThr, caN1, 'cross', 'rgba(226,35,58,.5)'));
   }
   pmk('prevTlChart', ds1, scales);
+  const tlNote = document.getElementById('prevTlNote');
+  if (tlNote && (!hasSess || nCrm === 0)) tlNote.innerHTML = '⚠ <b style="color:var(--r)">GA4 partiel sur cette période</b> : ' + (!hasSess ? 'sessions/TT/ajout panier absents' : '') + (!hasSess && nCrm === 0 ? ' · ' : '') + (nCrm === 0 ? 'aucun jour d\'envoi email détecté (canal Email GA4)' : '') + ' → importe GA4 sur la période. ' + tlNote.dataset.base;
+  else if (tlNote) tlNote.innerHTML = tlNote.dataset.base;
   // Graphe 2 : CA + courbes de sessions des meilleures campagnes d'acquisition.
   const ds2 = bars.slice();
   const dc = rep.dailyCampaigns, COL = ['#6E7B8B', '#1B9E6A', '#9B8AA3'];
@@ -186,8 +238,14 @@ function renderPrevTimelines(rep) {
     (dc.campN1 || []).forEach((c, i) => ds2.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'ySess', data: c.data, borderColor: COL[i % 3], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
   }
   pmk('prevTl2Chart', ds2, scales);
-  const note = document.getElementById('prevAdsNote');
-  if (note && !dc) note.innerHTML = '⚠ Aucune campagne d\'acquisition (GA4 campagnes/jour) sur la période → importe GA4 (page Données). ' + note.innerHTML;
+  // Détail campagnes : début / fin / sessions / CA généré.
+  const cs = rep.campaignSummary, ct = document.getElementById('prevCampTbl');
+  if (ct) {
+    if (cs && cs.length) {
+      const rows = cs.map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign.slice(0, 30))}</td><td style="white-space:nowrap">${frd(c.first)} → ${frd(c.last)}</td><td style="text-align:right">${fInt(c.sessions)}</td><td style="text-align:right">${fEur(c.ca)}</td><td style="text-align:right">${c.conv != null ? fPct(c.conv) : '—'}</td></tr>`).join('');
+      ct.innerHTML = `<table style="font-size:12px;margin-top:10px"><thead><tr><th>Campagne</th><th>Début → Fin</th><th style="text-align:right">Sessions</th><th style="text-align:right">CA généré</th><th style="text-align:right">Conv.</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } else ct.innerHTML = '<div class="note">⚠ Aucune campagne d\'acquisition (GA4 campagnes/jour) sur la période → importe GA4 (page Données).</div>';
+  }
 }
 async function loadPrevTimelines(from, to) {
   if (!from || !to) return;

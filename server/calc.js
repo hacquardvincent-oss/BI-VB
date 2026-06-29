@@ -1483,6 +1483,28 @@ function gaDailyMetrics(ga) {
 
 // Suivi temporel des meilleures campagnes : à partir du jeu date×campagne (gacampdaily),
 // retient les top N campagnes (par sessions sur la période) et renvoie leur série quotidienne.
+// Synthèse par campagne sur une période (gacampdaily date×campagne) : date de début / fin (1ʳᵉ et
+// dernière vue), sessions cumulées, CA (revenu GA), conversions. Direct/Organic/Referral exclus.
+function campaignPeriodSummary(ds, fromISO, toISO, topN = 8) {
+  if (!ds || !ds.rows || !ds.hdrs) return null;
+  const H = ds.hdrs.map(h => norm(h));
+  const di = H.indexOf('date'), ci = H.findIndex(h => h === 'campagne' || h === 'campaign'), si = H.indexOf('sessions');
+  const ri = H.findIndex(h => /revenu|revenue/.test(h)), pi = H.findIndex(h => /achat|purchase/.test(h));
+  if (di < 0 || ci < 0 || si < 0) return null;
+  const toIso = raw => /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : (/^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null);
+  const skip = c => /not set|^\(.*\)$|^direct$|organic|referral/i.test(c);
+  const money = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : 0; };
+  const by = {};
+  ds.rows.forEach(r => {
+    const iso = toIso((r[di] || '').toString().trim()); if (!iso || iso < fromISO || iso > toISO) return;
+    const camp = (r[ci] || '').toString().trim(); if (!camp || skip(camp)) return;
+    const e = by[camp] || (by[camp] = { campaign: camp, sessions: 0, ca: 0, purchases: 0, first: null, last: null });
+    e.sessions += parseInt(r[si]) || 0; if (ri >= 0) e.ca += money(r[ri]); if (pi >= 0) e.purchases += parseInt(r[pi]) || 0;
+    if (!e.first || iso < e.first) e.first = iso; if (!e.last || iso > e.last) e.last = iso;
+  });
+  return Object.values(by).filter(x => x.sessions > 0).sort((a, b) => b.ca - a.ca || b.sessions - a.sessions).slice(0, topN)
+    .map(x => ({ ...x, ca: Math.round(x.ca), conv: x.sessions ? x.purchases / x.sessions : null }));
+}
 function campaignDailySeries(ds, fromISO, toISO, isAll, topN = 3) {
   if (!ds || !ds.rows || !ds.hdrs) return null;
   const di = ds.hdrs.findIndex(h => norm(h) === 'date');
@@ -2644,7 +2666,7 @@ module.exports = {
   filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, campaignLandingAnalysis, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, crmNewVsReturning, crmRFM, calcStock, calcPiecesByFamChannel, topRecentStockAlerts, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
-  channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
+  channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, campaignPeriodSummary, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
   buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
