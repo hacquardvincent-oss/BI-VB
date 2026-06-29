@@ -463,6 +463,16 @@ async function refreshStockAlerts(opts = {}, cb = {}) {
       subsN.concat(subsN1).forEach(s => { const d = (s.subscriptionDate || '').toString().slice(0, 10); if (d) byDay[d] = (byDay[d] || 0) + 1; });
       const drows = Object.keys(byDay).sort().map(d => [d, String(byDay[d])]);
       if (drows.length) store.setDataset('bisdaily', 'N', { hdrs: ['Date', 'Demandes'], rows: drows, map: { date: 0, qte: 1 }, date_min: drows[0][0], date_max: drows[drows.length - 1][0], row_count: drows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
+      // Série DATÉE par PRODUIT (date × produit × demandes) → jeu `bisprod` = top alertes des 2 dernières semaines.
+      const byDP = {};
+      subsN.forEach(s => {
+        const it = s.item || {};
+        const name = [(it.title || '').toString().trim(), (it.color || '').toString().trim()].filter(Boolean).join(' - ') || (it.ean || '').toString();
+        const d = (s.subscriptionDate || '').toString().slice(0, 10); if (!name || !d) return;
+        const k = d + '|' + name; const e = byDP[k] || (byDP[k] = { date: d, name, count: 0 }); e.count += 1;
+      });
+      const dprows = Object.values(byDP).sort((a, b) => (a.date < b.date ? -1 : 1)).map(v => [v.date, v.name, String(v.count)]);
+      if (dprows.length) store.setDataset('bisprod', 'N', { hdrs: ['Date', 'Produit', 'Demandes'], rows: dprows, map: { date: 0, name: 1, qte: 2 }, date_min: dprows[0][0], date_max: dprows[dprows.length - 1][0], row_count: dprows.length, uploaded_by: 'WSHOP API', uploaded_at: new Date().toISOString() });
     } catch (e) { /* best-effort */ }
     if (doReturns) try {
       if (cb.phase) cb.phase('Retours produits…');

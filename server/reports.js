@@ -631,6 +631,11 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // Stock (inventaire WSHOP) : couverture & répartition par famille — slot standard `stock` (repli saisonstock).
   const stockDs = store.getDataset('stock', 'N') || store.getDataset('saisonstock', 'N');
   const stockInv = (stockDs && stockDs.rows && stockDs.rows.length) ? calc.calcStock(stockDs.rows, stockDs.map, refMap, rowsN, omsN.map) : null;
+  // Top 20 produits par alertes back-in-stock sur les 2 dernières semaines (jeu daté `bisprod`).
+  const bisprodDs = store.getDataset('bisprod', 'N');
+  const stockAlertsTop = (bisprodDs && bisprodDs.rows && bisprodDs.rows.length) ? calc.topRecentStockAlerts(bisprodDs.rows, bisprodDs.map, 14, 20) : null;
+  // Pièces vendues par famille × canal (Entrepôt vs Magasins/SFS), périmètre EShop.
+  const piecesByFamChannel = calc.calcPiecesByFamChannel(rowsN, omsN.map, refMap);
 
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
@@ -897,7 +902,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     daily,
     dailyN1,
     timeline, timeline2,
-    stockAlerts, stockInv,
+    stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel,
     hourly,
     gaFunnel,
     ttPays,

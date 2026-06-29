@@ -538,6 +538,45 @@ function calcStock(stockRows, stockMap, refMap, omsRows, omsMap) {
   };
 }
 
+// Pièces VENDUES par famille × canal de fulfillment : Entrepôt (NOM MAGASIN = 'webstore eur')
+// vs Magasins (ship-from-store). Périmètre EShop (hors mkt + Outstore). → tableau récap stock.
+function calcPiecesByFamChannel(rows, map, refMap) {
+  const ti = map.type, li = map.lieu, mi = map.mag, qi = map.qte;
+  const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
+  if (qi === undefined || mi === undefined) return null;
+  const by = {};
+  (rows || []).forEach(r => {
+    if (ti !== undefined && isMkt((r[ti] || '').trim())) return;
+    if (li !== undefined && isInstore(r[li])) return;
+    const ent = (r[mi] || '').trim().toLowerCase() === 'webstore eur';
+    const fam = (ri !== undefined && refMap && refMap[(r[ri] || '').trim()]) || '(non classé)';
+    const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1;
+    const e = by[fam] || (by[fam] = { fam, ent: 0, mag: 0 });
+    if (ent) e.ent += q; else e.mag += q;
+  });
+  const familles = Object.values(by).map(x => ({ ...x, total: x.ent + x.mag })).filter(x => x.total > 0).sort((a, b) => b.total - a.total);
+  const total = familles.reduce((a, x) => ({ ent: a.ent + x.ent, mag: a.mag + x.mag, total: a.total + x.total }), { ent: 0, mag: 0, total: 0 });
+  return { familles, total };
+}
+
+// Top produits par alertes back-in-stock sur les `days` derniers jours (relatif à la dernière date
+// du jeu `bisprod` date×produit). → carte « Top alertes stock 2 semaines ». Fallback géré côté front.
+function topRecentStockAlerts(rows, map, days = 14, topN = 20) {
+  const di = map.date, ni = map.name !== undefined ? map.name : 1, qi = map.qte;
+  if (di === undefined || !rows || !rows.length) return null;
+  const day10 = v => (v == null ? '' : String(v)).slice(0, 10);
+  let max = null;
+  rows.forEach(r => { const v = day10(r[di]); if (/^\d{4}-\d{2}-\d{2}/.test(v) && (!max || v > max)) max = v; });
+  if (!max) return null;
+  const [y, m, d] = max.split('-').map(Number);
+  const cutMs = Date.UTC(y, m - 1, d) - (days - 1) * 86400000;
+  const cut = new Date(cutMs).toISOString().slice(0, 10);
+  const by = {};
+  rows.forEach(r => { const v = day10(r[di]); if (v < cut || v > max) return; const name = (r[ni] || '').toString().trim(); if (!name) return; const q = parseInt((r[qi] || '1').toString().replace(/\s/g, '')) || 1; by[name] = (by[name] || 0) + q; });
+  const items = Object.entries(by).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, topN);
+  return { from: cut, to: max, days, items, total: Object.values(by).reduce((a, b) => a + b, 0) };
+}
+
 // ── Cohortes de RÉACHAT (page Tendances) — clé client PSEUDONYMISÉE (hash, jamais l'email) ──
 // Cohorte = mois de la 1ʳᵉ commande du client ; réachat = 1ʳᵉ commande suivante dans 30/60/90 j.
 // Périmètre EShop (hors mkt + Outstore). Nécessite la colonne `Client` (import complet WSHOP).
@@ -2544,7 +2583,7 @@ module.exports = {
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
   filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
-  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, crmNewVsReturning, crmRFM, calcStock, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
+  monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, crmNewVsReturning, crmRFM, calcStock, calcPiecesByFamChannel, topRecentStockAlerts, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
