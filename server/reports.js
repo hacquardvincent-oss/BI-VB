@@ -561,6 +561,22 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const sessByDayN1 = calc.getGADaily(sessSrcN1) || undefined;
   const daily = calc.dailySeries(rowsN, omsN.map, gaNf, sessByDayN);
   const dailyN1 = (rowsN1 && rowsN1.length) ? calc.dailySeries(rowsN1, mapN1, gaN1f, sessByDayN1) : null;
+  // Marqueurs jour-par-jour pour le suivi temporel : campagnes CRM (pic du canal Email GA) et Ads
+  // (pic de dépense Google/Meta) → croix N (✕) / N-1 (+) sur la période. Choix métier : CRM = Email, Ads = dépense.
+  const dailyMarkers = (() => {
+    if (!daily || !daily.length) return null;
+    const isoOfRaw = raw => { const s = (raw || '').toString().trim(); if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`; if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10); const o = calc.parseFrD(s); return o ? `${o.y}-${String(o.m).padStart(2, '0')}-${String(o.d).padStart(2, '0')}` : null; };
+    const emailVol = (gaf) => { const by = {}; if (gaf && gaf.rows && gaf.hdrs) { const gm = gaf.map && Object.keys(gaf.map).length ? gaf.map : calc.autoMap(gaf.hdrs, calc.GA_ALIASES); const di = gaf.hdrs.findIndex(h => { const n = calc.norm(h); return n === 'date' || n === 'jour' || n === 'day'; }); const ci = gm.canal, si = gm.sessions; if (di >= 0 && ci !== undefined && si !== undefined) gaf.rows.forEach(r => { if (!/e-?mail|mailing|newsletter|crm/i.test((r[ci] || '').toString())) return; const iso = isoOfRaw(r[di]); if (iso) by[iso] = (by[iso] || 0) + (parseInt(r[si]) || 0); }); } return by; };
+    const money = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(/[^\d.,-]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+    const adsVol = (slot) => { const d = store.getDataset('ads', slot) || store.getDataset('metaads', slot); const by = {}; if (d && d.rows && d.map && d.map.date !== undefined && d.map.cost !== undefined) d.rows.forEach(r => { const iso = isoOfRaw(r[d.map.date]); if (iso) by[iso] = (by[iso] || 0) + money(r[d.map.cost]); }); return by; };
+    const medThr = (by, mult, floor) => { const v = Object.values(by).filter(x => x > 0).sort((a, b) => a - b); const med = v.length ? v[Math.floor(v.length / 2)] : 0; return Math.max(med * mult, floor); };
+    const crmN = emailVol(gaNf), crmN1 = emailVol(gaN1f), adsN = adsVol('N'), adsN1 = adsVol('N1');
+    const shift = iso => isoShiftDays(iso, -364);
+    return {
+      crmThr: medThr(crmN, 1.2, 5), adsThr: medThr(adsN, 1.2, 1),
+      days: daily.map(d => ({ date: d.date, crm: crmN[d.date] || 0, crmN1: crmN1[shift(d.date)] || 0, ads: adsN[d.date] || 0, adsN1: adsN1[shift(d.date)] || 0 })),
+    };
+  })();
   // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
   // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
   const tlEnd = (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) ? to : omsN.dateMax;
@@ -901,6 +917,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     device,
     daily,
     dailyN1,
+    dailyMarkers,
     timeline, timeline2,
     stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel,
     hourly,

@@ -46,7 +46,7 @@ const MODULES = {
     icon: '📅', label: 'Hebdo & cumul mois', preset: 'week',
     intro: 'Bilan de la semaine écoulée (lun→dim) + cumul du mois en cours vs objectif et atterrissage projeté, avec familles, produits et suivi temporel.',
     files: { required: ['oms'], optional: ['ga', 'ret'] },
-    layout: ['kpi', 'cumul', 'famille', 'produits', 'daily', 'channels', 'annulations', 'retours'],
+    layout: ['kpi', 'cumul', 'famille', 'produits', 'daily', 'dailyads','channels', 'annulations', 'retours'],
   },
   estore: {
     icon: '📊', label: 'Suivi e-store & trafic', preset: 'month',
@@ -82,13 +82,13 @@ const MODULES = {
     icon: '🌍', label: 'International', preset: 'all', dim: 'inter',
     intro: 'Prisme export (hors France) vs N-1 : Sessions/commandes/TT/CA, canaux, campagnes, landing & pays.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'ca', 'timeline', 'daily', 'channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'zonecompare', 'pays', 'ttpays', 'fampays'],
+    layout: ['kpi', 'ca', 'timeline', 'daily', 'dailyads','channels', 'campaigns', 'gafunnel', 'device', 'landing', 'pages', 'lostpages', 'zonecompare', 'pays', 'ttpays', 'fampays'],
   },
   quotidien: {
     icon: '☀️', label: 'Quotidien', preset: 'today',
     intro: 'Comprendre la veille : ce qui s’est passé hier.',
     files: { required: ['oms'], optional: ['ga'] },
-    layout: ['kpi', 'funnel', 'gafunnel', 'timeline', 'daily', 'channels', 'produits'],
+    layout: ['kpi', 'funnel', 'gafunnel', 'timeline', 'daily', 'dailyads','channels', 'produits'],
   },
   produit: {
     icon: '🧶', label: 'Produit', preset: 'all',
@@ -118,7 +118,7 @@ const MODULES = {
     icon: '🔬', label: 'Full', preset: 'all',
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
-    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+    layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'timeline', 'timeline2', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
 };
 
@@ -132,7 +132,7 @@ const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', '
 const THEME_OF = {
   kpi: 'P', actionplan: 'PA', cumul: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
-  daily: 'T', timeline: 'T', timeline2: 'T',
+  daily: 'T', dailyads: 'T', timeline: 'T', timeline2: 'T',
   famille: 'ES', produits: 'ES',
   annulations: 'AN', retours: 'AN', returnreasons: 'AN', returngeo: 'AN', returnprod: 'AN',
   stockalerts: 'SK', stockalertstop: 'SK', piecesfamchannel: 'SK', stockcouv: 'SK',
@@ -155,7 +155,7 @@ function sectionize(layout) {
 // ── Éditeur de vue & layouts personnalisés (persistés en localStorage par navigateur) ──
 const CARD_LABELS = {
   kpi: 'Pilotage 360 — Tops', actionplan: 'Plan d\'action', cumul: 'Cumul mensuel & atterrissage', variance: 'Décomposition du CA', perimsynth: 'Synthèse par périmètre', timeline: 'Récap — 4 semaines', timeline2: 'Suivi temporel — CA & campagnes',
-  daily: 'Suivi temporel (période)', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
+  daily: 'Suivi temporel — CRM', dailyads: 'Suivi temporel — Ads', famille: 'CA par famille', produits: 'Top produits', pages: 'Top pages vues',
   landing: 'Pages d\'atterrissage', lostpages: 'Pages disparues / nouvelles', itemfunnel: 'Funnel produit', gafunnel: 'Funnel e-commerce',
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockalertstop: 'Top alertes 2 sem.', piecesfamchannel: 'Pièces Entrepôt/Magasins', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
@@ -165,8 +165,8 @@ const CARD_LABELS = {
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
-const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'timeline', 'timeline2', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'timeline', 'timeline2', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
 // Sert à la pop-in de sélection (liste compacte par catégorie + format) et à la page Création.
@@ -1181,13 +1181,19 @@ function renderReport(rep) {
   // le module 📅 Périodique (pas de doublon ici).
   const hasHour = rep.hourly && rep.hourly.n && rep.hourly.n.length;
   const dailyCard = (rep.daily && rep.daily.length)
-    ? `<div class="card"><h3>Suivi temporel (période) — N vs N-1</h3>
+    ? `<div class="card"><h3>Suivi temporel (période) — impact CRM</h3>
        <div class="toolbar" style="margin-bottom:8px"><span class="note" style="margin:0">Granularité</span>
          ${hasHour ? '<button class="pb gran" data-gran="hour">Heure</button>' : ''}
          <button class="pb gran" data-gran="day">Jour</button>
          <a class="pb" href="/periodique.html" title="Cumuls hebdo / mensuels / saison → module Périodique">📅 Cumuls (Périodique) →</a></div>
        <div style="height:320px"><canvas id="dailyChart"></canvas></div>
-       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes superposées = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), Taux de transfo % (<b style="color:#1B9E6A">vert</b>) — N plein / N‑1 pointillé.</div></div>`
+       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), TT % (<b style="color:#1B9E6A">vert</b>) — N plein / N‑1 pointillé · <b style="color:#7A4FAE">campagnes CRM</b> (✕ = N, + = N‑1, pic du canal Email GA) → impact des envois sur CA / ajout panier / TT au fil de la semaine.</div></div>`
+    : '';
+  // Duplicata du suivi temporel, marqueurs ADS (dépense Google/Meta) au lieu du CRM.
+  const dailyAdsCard = (rep.daily && rep.daily.length)
+    ? `<div class="card"><h3>Suivi temporel (période) — impact Ads</h3>
+       <div style="height:320px"><canvas id="dailyAdsChart"></canvas></div>
+       <div class="note" style="margin-top:4px">Même suivi (CA / Sessions / Ajout panier % / TT %, N plein / N‑1 pointillé) avec les <b style="color:#1B9E6A">campagnes d'acquisition</b> (✕ = N, + = N‑1, pic de dépense Google/Meta Ads) → impact des pushs payants. Granularité « Jour » pilotée par la carte CRM ci‑dessus.</div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -2108,7 +2114,7 @@ function renderReport(rep) {
   const C = {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
-    kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
+    kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, dailyads: dailyAdsCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard, mpfamilles: mpFamCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, stockalertstop: stockAlertsTopCard, piecesfamchannel: piecesFamChannelCard, stockcouv: stockCouvCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -3151,12 +3157,24 @@ function renderDailyChart(rep) {
     const cap = document.querySelector('#dailyChart')?.closest('.card')?.querySelector('.note');
     if (cap) cap.innerHTML = '⚠ <b style="color:var(--r)">Trafic horaire à recharger</b> : recharge GA4 (page Données) pour des sessions N‑1 distinctes + les courbes d\'ajout panier. ' + cap.innerHTML;
   }
-  mk('dailyChart', ds, {
+  // Croix campagnes (granularité JOUR uniquement) : CRM = pic du canal Email, Ads = pic de dépense.
+  // ✕ = N (crossRot), + = N-1 (cross), positionnées au CA du jour → impact sur le CA au fil de la semaine.
+  let crmCross = [], adsCross = [];
+  const M = rep.dailyMarkers;
+  if (gran === 'day' && M && M.days && M.days.length === labels.length) {
+    const days = M.days;
+    const crossDs = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: labels.map((_, i) => (days[i] && pick(days[i]) >= thr && caArr[i] != null) ? caArr[i] : null), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color, backgroundColor: color });
+    crmCross = [crossDs('✉️ CRM N', d => d.crm, M.crmThr, caN, 'crossRot', '#7A4FAE'), crossDs('✉️ CRM N-1', d => d.crmN1, M.crmThr, caN1, 'cross', 'rgba(122,79,174,.5)')];
+    adsCross = [crossDs('📣 Ads N', d => d.ads, M.adsThr, caN, 'crossRot', '#1B9E6A'), crossDs('📣 Ads N-1', d => d.adsN1, M.adsThr, caN1, 'cross', 'rgba(27,158,106,.5)')];
+  }
+  const dailyScales = {
     x: xax,
     y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } },
     ySess: { position: 'right', ticks: { color: '#E2574D', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
     yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true },
-  });
+  };
+  mk('dailyChart', ds.concat(crmCross), dailyScales);          // vue CRM
+  mk('dailyAdsChart', ds.concat(adsCross), dailyScales);       // vue Ads (duplicata)
 }
 
 // GA4 API
