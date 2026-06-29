@@ -14,8 +14,12 @@ if (enabled) {
   // require paresseux : le paquet 'pg' n'est sollicité que si une base est configurée
   const { Pool } = require('pg');
   const noSsl = /sslmode=disable/.test(process.env.DATABASE_URL);
+  // On gère le TLS via l'option `ssl` ci-dessous → on retire le token `sslmode` de l'URL pour éviter
+  // l'avertissement de dépréciation pg-connection-string (sslmode=require/prefer traités comme verify-full).
+  let connStr = process.env.DATABASE_URL;
+  try { const u = new URL(connStr); u.searchParams.delete('sslmode'); connStr = u.toString(); } catch (e) { /* URL non standard → on garde telle quelle */ }
   pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: connStr,
     ssl: noSsl ? false : { rejectUnauthorized: false }, // Neon impose TLS ; local : sslmode=disable
     max: 5,
   });
