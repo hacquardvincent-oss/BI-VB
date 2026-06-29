@@ -135,7 +135,63 @@ function render(a) {
   if (!a.has.metaAds) missing.push('Meta Ads');
   const miss = missing.length ? `<div class="card"><div class="note">ℹ️ Non disponible pour cette période (donnée non importée) : ${missing.map(esc).join(' · ')}. Charge-les via le panneau de gauche. L'OMS (CA, full/off, semaines, familles, produits) reste l'ossature.</div></div>` : '';
 
-  body.innerHTML = synth + weekCard + topCard + crmCard + waCard + cpCard + stCard + crmInsCard + pagesCard + card6 + adsCard + miss;
+  // Suivis temporels jour-par-jour (période saisie) : CA + trafic + croix CRM, et CA + campagnes Ads.
+  const tlCards = `
+    <div class="card"><h3>📈 Suivi temporel de la période — CA, trafic & envois CRM</h3>
+      <div style="height:300px"><canvas id="prevTlChart"></canvas></div>
+      <div class="note" style="margin-top:4px">Barres = CA/jour · courbes = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), TT % (<b style="color:#1B9E6A">vert</b>) · croix <b style="color:#E2233A">rouges</b> = jours d'envoi email (✕ = période saisie, + = l'année d'avant). <b>Trait plein</b> = période saisie · pointillé = l'année précédente.</div></div>
+    <div class="card"><h3>🎯 Suivi temporel de la période — CA & campagnes d'acquisition</h3>
+      <div style="height:300px"><canvas id="prevTl2Chart"></canvas></div>
+      <div class="note" id="prevAdsNote" style="margin-top:4px">Barres = CA/jour · courbes = sessions des 3 meilleures campagnes d'acquisition (trait plein = période saisie, pointillé = l'année d'avant). Relie les pics de CA aux campagnes.</div></div>`;
+  body.innerHTML = synth + weekCard + topCard + crmCard + waCard + cpCard + stCard + crmInsCard + pagesCard + card6 + adsCard + tlCards + miss;
+  loadPrevTimelines(document.getElementById('from').value, document.getElementById('to').value);
+}
+
+// ── Suivis temporels jour-par-jour : récupère le report de la période saisie et dessine 2 graphes ──
+const _pcharts = {};
+let PREV_LABELS = [];
+function pmk(id, datasets, scales) {
+  const el = document.getElementById(id); if (!el || typeof Chart === 'undefined') return;
+  if (_pcharts[id]) _pcharts[id].destroy();
+  _pcharts[id] = new Chart(el.getContext('2d'), { data: { labels: PREV_LABELS, datasets }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { color: '#9CA1AB', font: { size: 9 }, boxWidth: 10 } }, tooltip: { callbacks: { label: c => { const v = c.raw; if (v == null) return ' ' + c.dataset.label + ': —'; return ' ' + c.dataset.label + ': ' + (/%/.test(c.dataset.label) ? v + '%' : (typeof v === 'number' ? v.toLocaleString('fr-FR') : v)); } } } }, scales } });
+}
+function renderPrevTimelines(rep) {
+  if (!rep || !rep.daily || !rep.daily.length) return;
+  const d = rep.daily, d1 = rep.dailyN1 || [];
+  PREV_LABELS = d.map(x => (x.date || '').slice(5));
+  const caN = d.map(x => Math.round(x.ca)), caN1 = d.map((x, i) => d1[i] ? Math.round(d1[i].ca) : null);
+  const sessN = d.map(x => x.sessions), sessN1 = d.map((x, i) => d1[i] ? d1[i].sessions : null);
+  const ttN = d.map(x => x.tt != null ? +(x.tt * 100).toFixed(2) : null), ttN1 = d.map((x, i) => (d1[i] && d1[i].tt != null) ? +(d1[i].tt * 100).toFixed(2) : null);
+  const addN = d.map(x => x.addRate != null ? +(x.addRate * 100).toFixed(2) : null), addN1 = d.map((x, i) => (d1[i] && d1[i].addRate != null) ? +(d1[i].addRate * 100).toFixed(2) : null);
+  const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
+  const line = (label, data, color, axis, n1) => ({ type: 'line', label, yAxisID: axis, data, borderColor: color, backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: n1 ? 1.5 : 2, borderDash: n1 ? [5, 4] : [], spanGaps: true });
+  const bars = [
+    { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
+    { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
+  ];
+  const scales = { x: { ticks: { color: '#AEB3BC', font: { size: 9 }, maxTicksLimit: 16 }, grid: { color: 'rgba(20,22,28,.06)' } }, y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } }, ySess: { position: 'right', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } }, yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true } };
+  // Graphe 1 : CA + Sessions/Ajout panier/TT + croix CRM.
+  const ds1 = bars.concat([line('Sessions N', sessN, '#E2574D', 'ySess'), line('Sessions N-1', sessN1, '#E2574D', 'ySess', true), line('Ajout panier % N', addN, '#7C4DCB', 'yPct'), line('Ajout panier % N-1', addN1, '#7C4DCB', 'yPct', true), line('TT % N', ttN, '#1B9E6A', 'yPct'), line('TT % N-1', ttN1, '#1B9E6A', 'yPct', true)]);
+  const M = rep.dailyMarkers;
+  if (M && M.days && M.days.length === PREV_LABELS.length) {
+    const cross = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: PREV_LABELS.map((_, i) => (M.days[i] && pick(M.days[i]) >= thr && caArr[i] != null) ? caArr[i] : null), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color });
+    ds1.push(cross('✉️ CRM N', x => x.crm, M.crmThr, caN, 'crossRot', '#E2233A'), cross('✉️ CRM N-1', x => x.crmN1, M.crmThr, caN1, 'cross', 'rgba(226,35,58,.5)'));
+  }
+  pmk('prevTlChart', ds1, scales);
+  // Graphe 2 : CA + courbes de sessions des meilleures campagnes d'acquisition.
+  const ds2 = bars.slice();
+  const dc = rep.dailyCampaigns, COL = ['#6E7B8B', '#1B9E6A', '#9B8AA3'];
+  if (dc) {
+    (dc.campN || []).forEach((c, i) => ds2.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'ySess', data: c.data, borderColor: COL[i % 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
+    (dc.campN1 || []).forEach((c, i) => ds2.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'ySess', data: c.data, borderColor: COL[i % 3], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
+  }
+  pmk('prevTl2Chart', ds2, scales);
+  const note = document.getElementById('prevAdsNote');
+  if (note && !dc) note.innerHTML = '⚠ Aucune campagne d\'acquisition (GA4 campagnes/jour) sur la période → importe GA4 (page Données). ' + note.innerHTML;
+}
+async function loadPrevTimelines(from, to) {
+  if (!from || !to) return;
+  try { const r = await fetch(`/api/report?from=${from}&to=${to}`); const rep = await r.json(); if (r.ok) renderPrevTimelines(rep); } catch (e) { /* best-effort */ }
 }
 
 function eqNote() {
