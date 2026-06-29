@@ -21,6 +21,10 @@ function render(a) {
   const body = document.getElementById('body');
   if (a.empty) { body.innerHTML = `<div class="card"><div class="note">${esc(a.message || 'Aucune donnée sur cette période.')} ← utilise le panneau « Chargement des données » à gauche.</div></div>`; return; }
   const w = a.window || {}, wk = a.weekly || {};
+  const famSrc = wk.topFamilles || a.topFamilles || [];
+  // Point 4 · badges N/N-1 (lecture homogène : réf. N-1 = historique, cible N = à préparer).
+  const REFN = '<span style="font-size:10px;font-weight:600;color:var(--b);background:rgba(110,123,139,.12);padding:1px 7px;border-radius:10px;margin-left:6px">réf. N-1</span>';
+  const CIBN = '<span style="font-size:10px;font-weight:600;color:var(--a);background:var(--accent-soft,rgba(168,133,74,.14));padding:1px 7px;border-radius:10px;margin-left:4px">cible N</span>';
 
   // ── 1 · Synthèse 360 de la période ──
   const tiles = `<div class="kgrid">
@@ -36,9 +40,19 @@ function render(a) {
     ? `<div class="note" style="margin:10px 0 4px"><b>✅ À ne pas oublier pour performer sur la période N</b></div><ul style="margin:0 0 8px 16px;padding:0;font-size:12.5px;line-height:1.7">${a.playbook.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : '';
   const synth = `<div class="card">
-    <h3>🔮 Synthèse 360 — préparer ${frd(w.futureFrom)} → ${frd(w.futureTo)} (période N)</h3>
-    <div class="note">Lu sur l'historique N-1 <b>${frd(w.refFrom)} → ${frd(w.refTo)}</b> (décalage 52 semaines, alignement jour de semaine).</div>
+    <h3>🔮 Synthèse 360 — préparer ${frd(w.futureFrom)} → ${frd(w.futureTo)} (période N) ${REFN}${CIBN}</h3>
+    <div class="note">Lu sur l'historique N-1 <b>${frd(w.refFrom)} → ${frd(w.refTo)}</b> (décalage 52 semaines, alignement jour de semaine). <b>réf. N-1</b> = ce qui s'est passé l'an dernier · <b>cible N</b> = la période à préparer (~52 sem. plus tard).</div>
     ${tiles}${opNote}${playbook}</div>`;
+
+  // ── Point 3 · Bandeau « À préparer en priorité » (synthèse décisionnelle, en tête) ──
+  const shift364 = iso => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + 364); return ymd(d); };
+  const acts = [];
+  if (wk.operation) acts.push(`🏷️ <b>Planifier l'opération</b> ${frd(shift364(wk.operation.from))} → ${frd(shift364(wk.operation.to))} (l'an dernier : démarque dominante sur ${wk.operation.days} j).`);
+  if ((a.peakDays || []).length) acts.push(`📈 <b>Préparer les jours pics</b> : ${a.peakDays.slice(0, 3).map(p => frd(p.date)).join(' · ')} (CA N-1 élevé → stock, staffing, push média).`);
+  if ((a.stock || []).length) { const s0 = a.stock[0]; acts.push(`🔔 <b>Sécuriser le réassort</b> : ${esc(s0.name)} (${fInt(s0.count)} demandes)${a.stock.length > 1 ? ` + ${a.stock.length - 1} autres modèles` : ''}.`); }
+  if (famSrc.length && wk.total) { const f0 = famSrc[0]; acts.push(`🧶 <b>Mettre en avant</b> ${esc(f0.fam)} (${fPct(f0.ca / wk.total)} du CA N-1) en vitrine / merch.`); }
+  if (a.crm && a.crm.emailPeakHour != null) acts.push(`📧 <b>Caler les envois email</b> vers ${a.crm.emailPeakHour}h (heure de pic N-1).`);
+  const actionBanner = acts.length ? `<div class="card" style="border-left:3px solid var(--a)"><h3>🎯 À préparer en priorité pour la période N</h3><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.75">${acts.slice(0, 5).map(x => `<li>${x}</li>`).join('')}</ul></div>` : '';
 
   // ── 2 · Détail par semaine (CA + full/off + dates + top familles/produits) ──
   const wkRows = (wk.weeks || []).map(s => {
@@ -53,11 +67,12 @@ function render(a) {
       <td style="font-size:11px">${prod || '—'}</td>
     </tr>`;
   }).join('');
-  const weekCard = wkRows ? `<div class="card"><h3>📅 Détail par semaine (CA · full/off · top familles & produits)</h3>
-    <table style="font-size:12px"><thead><tr><th>Semaine</th><th style="text-align:right">CA</th><th style="text-align:right">Full</th><th style="text-align:right">Off (démarque)</th><th>Top familles</th><th>Top produits</th></tr></thead><tbody>${wkRows}</tbody></table></div>` : '';
+  const weekCard = wkRows ? `<div class="card"><h3>📊 CA par semaine — Full vs Démarque ${REFN}</h3>
+    <div style="height:240px"><canvas id="prevWeekBars"></canvas></div>
+    <details style="margin-top:8px"><summary class="note" style="cursor:pointer;font-weight:600">▸ Détail par semaine (CA · full/off · top familles & produits)</summary>
+    <table style="font-size:12px;margin-top:6px"><thead><tr><th>Semaine</th><th style="text-align:right">CA</th><th style="text-align:right">Full</th><th style="text-align:right">Off (démarque)</th><th>Top familles</th><th>Top produits</th></tr></thead><tbody>${wkRows}</tbody></table></details></div>` : '';
 
   // ── 3 · Top familles & 4 · Top produits (cumul période) ──
-  const famSrc = wk.topFamilles || a.topFamilles || [];
   const famRows = famSrc.map(f => `<tr><td>${esc(f.fam)}</td><td style="text-align:right">${fEur(f.ca)}</td><td style="text-align:right">${wk.total ? fPct(f.ca / wk.total) : '—'}</td></tr>`).join('');
   const famCard = famRows ? `<div><h3>🧶 Top familles (cumul période)</h3><table style="font-size:12px"><thead><tr><th>Famille</th><th style="text-align:right">CA N-1</th><th style="text-align:right">Poids</th></tr></thead><tbody>${famRows}</tbody></table></div>` : '';
   const prodSrc = wk.topProduits || a.topProduits || [];
@@ -69,12 +84,14 @@ function render(a) {
   const wcRows = (a.weeklyChannels || []).map(x => `<tr><td>${frd(x.from)}</td><td style="text-align:right">${fInt(x.crm.sessions)}</td><td style="text-align:right">${fEur(x.crm.ca)}</td><td style="text-align:right">${fInt(x.acq.sessions)}</td><td style="text-align:right">${fEur(x.acq.ca)}</td><td style="text-align:right">${fInt(x.seo.sessions)}</td></tr>`).join('');
   const wcTable = wcRows ? `<table style="font-size:12px"><thead><tr><th>Semaine (lundi)</th><th style="text-align:right">📧 CRM sess.</th><th style="text-align:right">CRM CA</th><th style="text-align:right">📣 Acq. sess.</th><th style="text-align:right">Acq. CA</th><th style="text-align:right">SEO sess.</th></tr></thead><tbody>${wcRows}</tbody></table>` : '';
   const wcampRows = (a.weeklyCampaigns || []).map(x => `<tr><td>${frd(x.from)}</td><td style="font-size:11px">${(x.top || []).map(c => `${esc((c.campaign || '').slice(0, 28))} <span class="note" style="font-weight:400">(${fEur(c.ca)})</span>`).join('<br>') || '—'}</td></tr>`).join('');
-  const wcampTable = wcampRows ? `<table style="font-size:12px;margin-top:10px"><thead><tr><th>Semaine</th><th>Top campagnes UTM</th></tr></thead><tbody>${wcampRows}</tbody></table>` : '';
-  const crmCard = (wcTable || wcampTable) ? `<div class="card"><h3>📡 CRM & acquisition par semaine</h3>${wcTable}${wcampTable}</div>` : '';
+  const wcampTable = wcampRows ? `<details style="margin-top:10px"><summary class="note" style="cursor:pointer;font-weight:600">▸ Top campagnes UTM par semaine</summary><table style="font-size:12px;margin-top:6px"><thead><tr><th>Semaine</th><th>Top campagnes UTM</th></tr></thead><tbody>${wcampRows}</tbody></table></details>` : '';
+  const crmCard = (wcTable || wcampTable) ? `<div class="card"><h3>📡 CRM & acquisition par semaine ${REFN}</h3>${wcTable}${wcampTable}</div>` : '';
+  // Point 2 · donut mix par type de canal (CA).
+  const chanPieCard = (a.channels && a.channels.length) ? `<div class="card"><h3>🍩 Mix d'acquisition par type de canal (CA) ${REFN}</h3><div style="height:240px"><canvas id="prevChanPie"></canvas></div></div>` : '';
 
   // ── AXE 3 · Calendrier média hebdo (Google Ads) ──
   const waRows = ((a.weekAds && a.weekAds.weeks) || []).filter(w => w.cost > 0).map(w => `<tr><td>${frd(w.from)}</td><td style="text-align:right">${fEur(w.cost)}</td><td style="text-align:right">${fEur(w.convValue)}</td><td style="text-align:right">${f2(w.roas)}×</td><td style="text-align:right">${fEur(w.cpa)}</td></tr>`).join('');
-  const waCard = waRows ? `<div class="card"><h3>🟢 Calendrier média par semaine (Google Ads)</h3>${a.weekAds.fatigue ? '<div class="note">⚠️ ROAS en baisse sur les dernières semaines → fatigue créative probable, prévoir un renouvellement.</div>' : ''}<table style="font-size:12px"><thead><tr><th>Semaine (lundi)</th><th style="text-align:right">Dépense</th><th style="text-align:right">Valeur conv.</th><th style="text-align:right">ROAS</th><th style="text-align:right">CPA</th></tr></thead><tbody>${waRows}</tbody></table></div>` : '';
+  const waCard = waRows ? `<div class="card"><h3>🟢 Calendrier média par semaine (Google Ads) ${REFN}</h3>${a.weekAds.fatigue ? '<div class="note">⚠️ ROAS en baisse sur les dernières semaines → fatigue créative probable, prévoir un renouvellement.</div>' : ''}<div style="height:170px"><canvas id="prevRoasLine"></canvas></div><details style="margin-top:8px"><summary class="note" style="cursor:pointer;font-weight:600">▸ Détail hebdo (dépense · valeur conv. · ROAS · CPA)</summary><table style="font-size:12px;margin-top:6px"><thead><tr><th>Semaine (lundi)</th><th style="text-align:right">Dépense</th><th style="text-align:right">Valeur conv.</th><th style="text-align:right">ROAS</th><th style="text-align:right">CPA</th></tr></thead><tbody>${waRows}</tbody></table></details></div>` : '';
 
   // ── AXE 2 · Campagnes → produits (familles portées) + campagne → landing → achats ──
   const cpRows = (a.campProd || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc((c.campaign || '').slice(0, 28))}</td><td>${esc(c.category)}</td><td style="text-align:right">${fEur(c.revenue)}</td><td style="text-align:right">${fInt(c.qty)}</td></tr>`).join('');
@@ -100,7 +117,7 @@ function render(a) {
     if (a.pages.landing) pgBlocks += `<div><h3>📄 Top landing pages (CA)</h3><table style="font-size:12px"><thead><tr><th>Page</th><th style="text-align:right">Sess.</th><th style="text-align:right">CA</th><th style="text-align:right">Conv.</th></tr></thead><tbody>${a.pages.landing.map(p => `<tr><td title="${esc(p.page)}">${esc((p.page || '').slice(0, 30))}</td><td style="text-align:right">${fInt(p.sessions)}</td><td style="text-align:right">${fEur(p.revenue)}</td><td style="text-align:right">${fPct(p.convRate)}</td></tr>`).join('')}</tbody></table></div>`;
     if (a.pages.pages) pgBlocks += `<div><h3>👁️ Top pages vues</h3><table style="font-size:12px"><thead><tr><th>Page</th><th style="text-align:right">Vues</th></tr></thead><tbody>${a.pages.pages.map(p => `<tr><td title="${esc(p.page)}">${esc((p.page || '').slice(0, 38))}</td><td style="text-align:right">${fInt(p.views)}</td></tr>`).join('')}</tbody></table></div>`;
   }
-  const pagesCard = pgBlocks ? `<div class="card"><div class="grid cols2">${pgBlocks}</div></div>` : '';
+  const pagesCard = pgBlocks ? `<div class="card"><h3>📄 Pages — landing & top vues ${REFN}</h3><details><summary class="note" style="cursor:pointer;font-weight:600">▸ Voir le détail</summary><div class="grid cols2" style="margin-top:6px">${pgBlocks}</div></details></div>` : '';
 
   // ── 6 · Canaux cumul + Jours pics + Ads ──
   const chRows = (a.channels || []).slice(0, 10).map(c => {
@@ -148,11 +165,11 @@ function render(a) {
       <div class="note" style="margin-top:4px">Barres = CA/jour · courbes = sessions des 3 meilleures campagnes (plein = période saisie, pointillé = année d'avant). Table = début/fin et CA généré par campagne.</div></div>`;
   // Blocs ancrés (sommaire à droite). Ordre orienté lecture : synthèse → temporel → familles → acquisition → stock → pages.
   const blk = (id, html) => html ? `<div id="${id}" style="scroll-margin-top:80px">${html}</div>` : '';
-  body.innerHTML =
-    blk('pv_synth', synth)
+  body.innerHTML = actionBanner
+    + blk('pv_synth', synth)
     + blk('pv_temporel', tlCards)
     + blk('pv_familles', topCard + famPieCard + weekCard)
-    + blk('pv_acq', crmCard + waCard + cpCard + adsCard + card6)
+    + blk('pv_acq', chanPieCard + crmCard + waCard + cpCard + adsCard + card6)
     + blk('pv_stock', stCard)
     + blk('pv_pages', crmInsCard + pagesCard)
     + miss;
@@ -163,7 +180,50 @@ function render(a) {
   ].filter(x => x[2]);
   buildPrevNav(navItems);
   renderFamPie(famSrc, wk.total);
+  renderWeekBars(wk.weeks);
+  renderChanPie(a.channels);
+  renderRoasLine(a.weekAds);
   loadPrevTimelines(document.getElementById('from').value, document.getElementById('to').value);
+}
+
+// Point 2 · barres empilées CA Full vs Démarque par semaine.
+function renderWeekBars(weeks) {
+  const el = document.getElementById('prevWeekBars'); if (!el || typeof Chart === 'undefined' || !weeks || !weeks.length) return;
+  if (_pcharts.weekBars) _pcharts.weekBars.destroy();
+  const labels = weeks.map(w => w.week || frd(w.from));
+  _pcharts.weekBars = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Full price', data: weeks.map(w => Math.round(w.caFP || 0)), backgroundColor: 'rgba(168,133,74,.85)', stack: 'ca' },
+      { label: 'Démarque (off)', data: weeks.map(w => Math.round(w.caOP || 0)), backgroundColor: 'rgba(226,87,77,.8)', stack: 'ca' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => ` ${c.dataset.label} : ${fEur(c.parsed.y)}` } } }, scales: { x: { stacked: true, ticks: { color: '#AEB3BC', font: { size: 9 } }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#A8854A', font: { size: 9 }, callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+  });
+}
+// Point 2 · donut CA par TYPE de canal (Paid / CRM / SEO / Direct / Social / Referral).
+function chanType(c) { const s = (c || '').toLowerCase(); if (/paid|display|shopping|cross-network|video|sea|cpc/.test(s)) return 'Paid'; if (/e-?mail|sms|crm|newsletter|mailing/.test(s)) return 'CRM'; if (/social/.test(s)) return 'Social'; if (s === 'direct' || s === '(direct)') return 'Direct'; if (/organic|search|seo/.test(s)) return 'SEO'; if (/referr|affil/.test(s)) return 'Referral'; return 'Autre'; }
+const CHAN_PIE = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
+function renderChanPie(channels) {
+  const el = document.getElementById('prevChanPie'); if (!el || typeof Chart === 'undefined' || !channels || !channels.length) return;
+  if (_pcharts.chanPie) _pcharts.chanPie.destroy();
+  const by = {}; channels.forEach(c => { const t = chanType(c.canal); by[t] = (by[t] || 0) + (c.ca || 0); });
+  const entries = Object.entries(by).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  _pcharts.chanPie = new Chart(el.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => Math.round(e[1])), backgroundColor: entries.map(e => CHAN_PIE[e[0]] || '#B0B5BD'), borderColor: '#fff', borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => { const t = entries.reduce((s, e) => s + e[1], 0); return ` ${c.label} : ${fEur(c.parsed)} (${t ? Math.round(c.parsed / t * 100) : 0}%)`; } } } } },
+  });
+}
+// Point 2 · mini-courbe ROAS par semaine.
+function renderRoasLine(weekAds) {
+  const el = document.getElementById('prevRoasLine'); if (!el || typeof Chart === 'undefined' || !weekAds || !weekAds.weeks) return;
+  const weeks = weekAds.weeks.filter(w => w.cost > 0); if (!weeks.length) return;
+  if (_pcharts.roasLine) _pcharts.roasLine.destroy();
+  _pcharts.roasLine = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: { labels: weeks.map(w => frd(w.from)), datasets: [{ label: 'ROAS', data: weeks.map(w => Math.round((w.roas || 0) * 100) / 100), borderColor: '#1B9E6A', backgroundColor: 'rgba(27,158,106,.08)', fill: true, tension: .3, pointRadius: 2, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ROAS : ${c.parsed.y}×` } } }, scales: { x: { ticks: { color: '#AEB3BC', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#1B9E6A', font: { size: 9 }, callback: v => v + '×' }, grid: { color: 'rgba(20,22,28,.06)' } } } },
+  });
 }
 
 // Camembert CA par famille (top 8 + Autres).
