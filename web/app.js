@@ -1602,8 +1602,31 @@ function renderReport(rep) {
       ${newRows ? `<h3 style="margin-top:14px">📈 Nouvelles (fortes cette année, absentes N-1)</h3><table><thead><tr><th>Page</th><th>Vues N</th><th>Vues N-1</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
       <div class="note">« Disparues » = audience perdue (page dépubliée, perte SEO, merch retiré) → vérifier redirections/réassort. « Nouvelles » = ce qui porte le trafic cette année.</div></div>` : '';
   // Cohérence campagne → page d'atterrissage (N vs N-1)
-  const clRows = (rep.campaignLanding || []).map(c => `<tr><td title="${esc(c.campaign)}">${esc(c.campaign)}</td><td title="${esc(c.landing)}">${esc(c.landing)}</td><td>${fInt(c.sessions)}</td><td>${c.sessionsN1 ? delta(c.sessions, c.sessionsN1) : '—'}</td><td>${c.share != null ? fPct(c.share) : '—'}</td><td class="${c.conv != null && c.conv < 0.005 ? 'dn' : ''}">${c.conv != null ? fPct(c.conv) : '—'}</td><td>${c.convN1 != null ? fPct(c.convN1) : '—'}</td></tr>`).join('');
-  const campaignLandingCard = clRows ? `<div class="card"><h3>Cohérence campagne → landing (N vs N-1)</h3><table><thead><tr><th>Campagne</th><th>Landing principale</th><th>Sess. N</th><th>Δ</th><th>% trafic</th><th>Conv. N</th><th>Conv. N-1</th></tr></thead><tbody>${clRows}</tbody></table><div class="note">Vérifie la combinaison campagne / redirection / landing / merch : une campagne qui pousse vers une landing à faible conversion (rouge) = mauvais atterrissage. Conv. N-1 = la même campagne convertissait-elle mieux l'an dernier ?</div></div>` : '';
+  const campaignLandingCard = (() => {
+    const cl = rep.campaignLanding;
+    if (!cl || !cl.combos || !cl.combos.length) return '';
+    const STA = { win: ['🟢 À amplifier', 'var(--g)'], weak: ['🔴 Atterrissage faible', 'var(--r)'], mismatch: ['🟠 Redirection ?', 'var(--a)'], ok: ['—', 'var(--t3)'] };
+    const recoColor = { win: 'var(--g)', weak: 'var(--r)', mismatch: 'var(--a)', scattered: 'var(--a)' };
+    const recoIcon = { win: '🟢', weak: '🔴', mismatch: '🟠', scattered: '🔀' };
+    const recos = (cl.recos || []).map(r => `<li style="margin:4px 0"><b style="color:${recoColor[r.type] || 'var(--t2)'}">${recoIcon[r.type] || '•'}</b> ${esc(r.msg)}</li>`).join('');
+    const rows = cl.combos.map(c => {
+      const st = STA[c.status] || STA.ok;
+      const ratio = c.ratio != null ? `<span class="${c.ratio >= 1 ? 'up' : 'dn'}" style="font-size:10px">${Math.round(c.ratio * 100)}% moy.</span>` : '';
+      return `<tr>
+        <td title="${esc(c.campaign)}">${esc(c.campaign.slice(0, 30))}</td>
+        <td title="${esc(c.page)}">${esc(c.page)}</td>
+        <td style="text-align:right;white-space:nowrap">${fInt(c.sessions)} ${c.sessionsN1 ? delta(c.sessions, c.sessionsN1) : ''}</td>
+        <td style="text-align:right">${c.share != null ? fPct(c.share) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">${fPct(c.conv)} ${ratio}</td>
+        <td style="color:${st[1]};font-weight:600;font-size:11px;white-space:nowrap">${st[0]}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="card"><h3>🔀 Campagne × Landing — performance & actions</h3>
+      ${recos ? `<div class="note" style="font-weight:700;color:var(--t2);margin:0 0 2px">🎯 Actions prioritaires</div><ul style="margin:0 0 12px;padding-left:2px;list-style:none">${recos}</ul>` : ''}
+      <div class="note" style="font-weight:700;color:var(--t2);margin:0">Combinaisons campagne → landing — conv. moyenne site : <b>${fPct(cl.siteConv)}</b></div>
+      <table style="margin-top:4px"><thead><tr><th>Campagne</th><th>Landing</th><th style="text-align:right">Sessions (Δ)</th><th style="text-align:right">Part camp.</th><th style="text-align:right">Conv. (vs moy.)</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="note">🟢 conv ≥ 140% de la moyenne site → <b>amplifier le budget</b> · 🔴 ≤ 50% → <b>mauvais atterrissage</b> (revoir la landing) · 🟠 le thème de la campagne n'apparaît pas dans l'URL → <b>vérifier la redirection</b> (ex. campagne sacs → page sacs). « Part camp. » = part du trafic de la campagne sur cette page (faible = trafic dispersé).</div></div>`;
+  })();
 
   const dimLabel = dimLabelOf(rep.meta && rep.meta.dim);
   // ── Pilotage 360 : sous-blocs (détail MP, Top 5 pays inter/canaux/pages, familles, produits) ──
@@ -2838,9 +2861,9 @@ function ana(key, rep) {
       return `${l.length} page(s) performante(s) l'an dernier ont quasi disparu (${fInt(tot)} vues perdues), à commencer par « ${l[0].page} » → vérifier dépublication/redirection/SEO ou réassort du merch associé.`;
     }
     if (key === 'campaignland') {
-      const cl = rep.campaignLanding; if (!cl || !cl.length) return '';
-      const bad = cl.filter(x => x.sessions >= 50 && x.conv != null && x.conv < 0.005).sort((a, b) => b.sessions - a.sessions)[0];
-      return bad ? `⚠ « ${bad.campaign} » envoie ${fInt(bad.sessions)} sessions vers « ${bad.landing} » qui ne convertit pas (${fPct(bad.conv)}) → mauvaise combinaison campagne/landing/merch à corriger.` : 'Cohérence campagne→landing globalement correcte.';
+      const cl = rep.campaignLanding; if (!cl || !cl.combos || !cl.combos.length) return '';
+      const r = (cl.recos || [])[0];
+      return r ? `⚠ ${r.msg}` : 'Combinaisons campagne→landing globalement cohérentes (pas d\'atterrissage faible majeur).';
     }
     if (key === 'saisoncompare') {
       const sc = rep.seasonCompare; if (!sc) return '';

@@ -520,27 +520,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   }
   // Cohérence campagne → page d'atterrissage (landing principale + conversion), filtre pays — N vs N-1
   const clN = store.getDataset('gacampaignland', 'N'), clN1 = store.getDataset('gacampaignland', 'N1');
-  let campaignLanding = null;
-  if (clN && clN.rows) {
-    const topLandByCampaign = rows => {
-      const byCL = {};
-      (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const k = x.campaign + '¦' + x.page; const e = byCL[k] || (byCL[k] = { campaign: x.campaign, page: x.page, sessions: 0, purchases: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; });
-      const byC = {};
-      Object.values(byCL).forEach(x => { (byC[x.campaign] = byC[x.campaign] || []).push(x); });
-      const res = {};
-      Object.entries(byC).forEach(([campaign, arr]) => { arr.sort((a, b) => b.sessions - a.sessions); const top = arr[0], tot = arr.reduce((s, a) => s + a.sessions, 0); res[campaign] = { landing: top.page, sessions: top.sessions, purchases: top.purchases, share: tot > 0 ? top.sessions / tot : null }; });
-      return res;
-    };
-    const cN = topLandByCampaign(clN.rows), cN1 = topLandByCampaign(clN1 && clN1.rows);
-    campaignLanding = Object.entries(cN).map(([campaign, v]) => {
-      const p = cN1[campaign] || {};
-      return {
-        campaign, landing: v.landing, sessions: v.sessions, purchases: v.purchases, share: v.share,
-        conv: v.sessions > 0 ? v.purchases / v.sessions : null,
-        sessionsN1: p.sessions || 0, convN1: p.sessions > 0 ? p.purchases / p.sessions : null,
-      };
-    }).filter(x => x.sessions >= 20).sort((a, b) => b.sessions - a.sessions).slice(0, 20);
-  }
+  const campaignLanding = (clN && clN.rows)
+    ? calc.campaignLandingAnalysis((clN.rows || []).filter(keepGeoRow), (clN1 && clN1.rows || []).filter(keepGeoRow))
+    : null;
 
   // Top pages par source (N vs N-1) — sessions + revenu, agrégées par (source,page) après filtre pays
   const psN = store.getDataset('gapagesrc', 'N'), psN1 = store.getDataset('gapagesrc', 'N1');

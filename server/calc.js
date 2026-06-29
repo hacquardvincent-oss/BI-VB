@@ -396,6 +396,65 @@ function sfsMixMonthly(rows, map) {
 }
 // International seul : poids CA par FAMILLE × PAYS, Entrepôt vs Ship-from-store (sur la période fournie).
 // → { inter: { famille:{ent,sfs} }, byCountry: { pays:{ famille:{ent,sfs} } } }. France exclue.
+// ── Analyse Campagne × Landing : meilleures combinaisons, atterrissages ratés, cohérence, actions ──
+// rows = [{campaign, page, sessions, purchases}] (déjà filtrés pays). Détecte : bons combos (à amplifier),
+// mauvais atterrissages (conv faible), trafic dispersé (1 campagne → trop de pages), redirection
+// incohérente (le thème de la campagne ne se retrouve pas dans l'URL de landing).
+const CL_STOP = new Set(['fr', 'en', 'eu', 'inter', 'ecom', 'ecommerce', 'meta', 'google', 'bing', 'snap', 'tiktok', 'ads', 'ad', 'brand', 'branding', 'marque', 'vb', 'vanessa', 'bruno', 'prospecting', 'prospection', 'retargeting', 'remarketing', 'acquisition', 'acq', 'crm', 'nl', 'newsletter', 'as', 'bof', 'mof', 'tof', 'daily', 'campagne', 'campaign', 'www', 'com', 'html', 'index', 'home', 'col', 'collection', 'new', 'pmax', 'search', 'shopping', 'display', 'social', 'paid', 'cpc', 'utm']);
+function clTokens(s) { return [...new Set((s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).map(t => t.replace(/s$/, '')).filter(t => t.length >= 3 && !CL_STOP.has(t)))]; }
+function cleanLanding(p) { let s = (p || '').toString().split('?')[0].split('#')[0].replace(/^https?:\/\/[^/]+/i, ''); if (!s) s = '/'; return s.length > 60 ? s.slice(0, 58) + '…' : s; }
+function campaignLandingAnalysis(rowsN, rowsN1) {
+  if (!rowsN || !rowsN.length) return null;
+  const skip = c => /^\(.*\)$|not set|^direct$|organic|referral/i.test((c || '').toString());
+  const agg = rows => {
+    const combo = {}, camp = {}; let totS = 0, totP = 0;
+    (rows || []).forEach(x => {
+      const c = (x.campaign || '').trim(); if (!c || skip(c)) return;
+      const page = cleanLanding(x.page); const s = +x.sessions || 0, p = +x.purchases || 0;
+      const ck = c + '¦' + page; const e = combo[ck] || (combo[ck] = { campaign: c, page, sessions: 0, purchases: 0 }); e.sessions += s; e.purchases += p;
+      const cc = camp[c] || (camp[c] = { campaign: c, sessions: 0, purchases: 0, pages: {} }); cc.sessions += s; cc.purchases += p; cc.pages[page] = (cc.pages[page] || 0) + s;
+      totS += s; totP += p;
+    });
+    return { combo, camp, siteConv: totS > 0 ? totP / totS : 0, totS };
+  };
+  const N = agg(rowsN), N1 = agg(rowsN1);
+  const siteConv = N.siteConv;
+  const minSess = Math.max(20, Math.round(N.totS * 0.005));   // combos significatifs uniquement
+  const n1Combo = N1.combo;
+  // Combos campagne × landing (significatifs), enrichis.
+  const combos = Object.values(N.combo).filter(x => x.sessions >= minSess).map(x => {
+    const conv = x.sessions > 0 ? x.purchases / x.sessions : 0;
+    const camp = N.camp[x.campaign]; const share = camp && camp.sessions > 0 ? x.sessions / camp.sessions : null;
+    const o = n1Combo[x.campaign + '¦' + x.page];
+    const convN1 = o && o.sessions > 0 ? o.purchases / o.sessions : null;
+    const ratio = siteConv > 0 ? conv / siteConv : null;             // conv vs moyenne site
+    const cTok = clTokens(x.campaign), pTok = clTokens(x.page);
+    const match = x.page === '/' ? null : cTok.length === 0 ? null : cTok.some(t => pTok.includes(t));
+    let status = 'ok';
+    if (ratio != null && ratio >= 1.4) status = 'win';
+    else if (ratio != null && ratio <= 0.5) status = 'weak';
+    else if (match === false && (ratio == null || ratio < 1)) status = 'mismatch';
+    return { campaign: x.campaign, page: x.page, sessions: x.sessions, purchases: x.purchases, conv, convN1, sessionsN1: o ? o.sessions : 0, share, ratio, match, status };
+  }).sort((a, b) => b.sessions - a.sessions);
+  // Synthèse par campagne (concentration / dispersion).
+  const perCampaign = Object.values(N.camp).filter(c => c.sessions >= minSess).map(c => {
+    const pages = Object.entries(c.pages).sort((a, b) => b[1] - a[1]);
+    const top = pages[0]; const topShare = c.sessions > 0 ? top[1] / c.sessions : null;
+    return { campaign: c.campaign, sessions: c.sessions, conv: c.sessions > 0 ? c.purchases / c.sessions : 0, nbPages: pages.length, topLanding: top[0], topShare };
+  }).sort((a, b) => b.sessions - a.sessions);
+  // Recommandations d'action (triées par volume de sessions concerné).
+  const recos = [];
+  combos.forEach(x => {
+    if (x.status === 'weak') recos.push({ type: 'weak', campaign: x.campaign, page: x.page, sessions: x.sessions, conv: x.conv, msg: `Mauvais atterrissage : « ${x.campaign} » → ${x.page} convertit à ${(x.conv * 100).toFixed(1)}% (${Math.round((x.ratio) * 100)}% de la moyenne). Revoir la landing (offre/merch) ou la page ciblée.` });
+    else if (x.status === 'mismatch') recos.push({ type: 'mismatch', campaign: x.campaign, page: x.page, sessions: x.sessions, conv: x.conv, msg: `Redirection à vérifier : le thème de « ${x.campaign} » ne se retrouve pas dans l'URL ${x.page}. Pointe-t-elle vers la bonne page (ex. campagne sacs → page sacs) ?` });
+    else if (x.status === 'win') recos.push({ type: 'win', campaign: x.campaign, page: x.page, sessions: x.sessions, conv: x.conv, msg: `À amplifier : « ${x.campaign} » → ${x.page} convertit à ${(x.conv * 100).toFixed(1)}% (${Math.round(x.ratio * 100)}% de la moyenne). Bon combo → pousser le budget.` });
+  });
+  perCampaign.forEach(c => { if (c.nbPages >= 4 && c.topShare != null && c.topShare < 0.5) recos.push({ type: 'scattered', campaign: c.campaign, sessions: c.sessions, msg: `Trafic dispersé : « ${c.campaign} » éclate son trafic sur ${c.nbPages} pages (top page = ${Math.round(c.topShare * 100)}% seulement). Consolider la redirection vers la landing la plus convertissante.` }); });
+  const order = { weak: 0, mismatch: 1, scattered: 2, win: 3 };
+  recos.sort((a, b) => (order[a.type] - order[b.type]) || (b.sessions - a.sessions));
+  return { siteConv, minSess, combos: combos.slice(0, 25), perCampaign: perCampaign.slice(0, 20), recos: recos.slice(0, 12) };
+}
+
 function sfsFamilyMix(rows, map, refMap) {
   const pi = map.prix, pai = map.pays, mi = map.mag, ti = map.type, li = map.lieu;
   const ri = map.ref_ext !== undefined ? map.ref_ext : map._refExt;
@@ -2582,7 +2641,7 @@ module.exports = {
   autoMap, ensureRefExtIdx, isExcl, isMkt, filterDim, filterGADim, filterOutstore, calcAds,
   buildSeasonMap, calcBySeason, calcCancellations, calcReturns, calcReturnReasons, topReturnedProducts,
   calcReturnGeo, returnProductsDetail, returnReasonAgg,
-  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
+  filterRows, filterTimeMax, calcOMS, sfsMixMonthly, sfsFamilyMix, campaignLandingAnalysis, familyMonthlyCA, countryMonthlyCA, calcZoneFullOff, calcKPIEShop, calcMarketplace, calcMarketplaceCancelRefund, calcCancellationsDetail,
   monthlyEShopCA, dailyEShopCA, weeklyHistory, marketplaceMonthly, cohortRetention, crmNewVsReturning, crmRFM, calcStock, calcPiecesByFamChannel, topRecentStockAlerts, kpiBundle, deriveWindows, cumulMTD, buildAnticipation, calcRegroupByMonth, varianceDecomp, propZTest, dataQuality,
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,

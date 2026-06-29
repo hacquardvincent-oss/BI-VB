@@ -331,10 +331,11 @@ function secSuiviTemporel(doc, rep) {
   barChart(doc, tl.map(d => ({ label: (d.date || '').slice(5), value: Math.round(d.ca || 0), valueLabel: fEur(d.ca) + (d.email ? '  ✉' : '') })), COL.accent);
 }
 function secAnalysesCroisees(doc, rep) {
-  const cl = rep.campaignLanding; if (!cl || !cl.length) return;
+  const cl = rep.campaignLanding; if (!cl || !cl.combos || !cl.combos.length) return;
   section(doc, 'Analyses croisées — campagne × page d’atterrissage');
-  table(doc, [{ label: 'Campagne', w: 180 }, { label: 'Page', w: 200 }, { label: 'Sessions', w: W - 380, align: 'right' }],
-    cl.slice(0, 10).map(x => [cut(x.campaign, 30), cut(x.landing, 36), { text: fInt(x.sessions), align: 'right' }]));
+  const STA = { win: 'A amplifier', weak: 'Atterrissage faible', mismatch: 'Redirection ?', ok: '' };
+  table(doc, [{ label: 'Campagne', w: 150 }, { label: 'Page', w: 170 }, { label: 'Sess.', w: 60, align: 'right' }, { label: 'Conv.', w: 55, align: 'right' }, { label: 'Statut', w: W - 435 }],
+    cl.combos.slice(0, 12).map(x => [cut(x.campaign, 26), cut(x.page, 30), { text: fInt(x.sessions), align: 'right' }, { text: (x.conv * 100).toFixed(1) + '%', align: 'right' }, STA[x.status] || '']));
 }
 
 function secPlanAction(doc, rep) {
