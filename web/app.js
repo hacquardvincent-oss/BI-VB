@@ -1268,7 +1268,9 @@ function renderReport(rep) {
       ['Pièces annulées', fInt(cx.qteAnnulee), cx.qteAnnulee, cx1.qteAnnulee],
       ['Commandes impactées', fInt(cx.commandesImpactees), cx.commandesImpactees, cx1.commandesImpactees],
       ['Commandes (total)', fInt(cx.commandes), cx.commandes, cx1.commandes],
-      ['Taux d\'annulation (commande)', fPct(cx.tauxCommande), cx.tauxCommande, cx1.tauxCommande],
+      ['Taux annul. (commande)', fPct(cx.tauxCommande), cx.tauxCommande, cx1.tauxCommande],
+      ['Taux annul. (pièces)', fPct(cx.tauxPieces), cx.tauxPieces, cx1.tauxPieces],
+      ['Taux annul. (CA)', fPct(cx.tauxCA), cx.tauxCA, cx1.tauxCA],
       ['CA non livré', fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime), cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime, cx1.caNonLivre != null ? cx1.caNonLivre : cx1.caAnnuleEstime],
     ].map(([l, disp, n, n1]) => `<div class="kc"><div class="l">${l}</div><div class="v">${disp} ${(n != null && n1 != null) ? deltaInv(n, n1) : ''}</div></div>`).join('');
     // Détail : entrepôt vs magasin + top magasins qui annulent + top produits annulés
@@ -1292,7 +1294,7 @@ function renderReport(rep) {
         <div class="grid cols2">${d.byCanal.map(c => `<div style="margin-bottom:6px"><div class="note" style="margin:0 0 3px"><b>${esc(c.canal)}</b> — ${fInt(c.qte)} pièces · ${fEur(c.ca)}</div><table style="font-size:11px"><tbody>${c.top.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td style="text-align:right">${fInt(p.qte)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>` : '';
       detailHtml = split + incHtml + byStatut + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>` + byCanal;
     }
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes annulées (source OMS / WSHOP)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Annulations</b> = commandes au statut <b>Annulée</b> (Cancelled : stock, interne…). <b>Taux d'annulation</b> = commandes annulées ÷ total commandes. Les <b>expéditions incomplètes</b> (ShippedIncomplete) sont comptées <b>à part</b> (la commande a été expédiée, juste partiellement) et n'entrent pas dans le taux. ⚠️ Couleur inversée : une <b>hausse</b> est <b>rouge</b>. ℹ️ Le statut WSHOP est <b>live</b> : il peut différer légèrement d'un export OMS figé (annulations survenues depuis). À ne pas confondre avec les retours clients ci-après.</div></div>`;
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes annulées (source OMS / WSHOP)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>3 lectures du taux</b> (même période, hors marketplace) : <b>commande</b> = commandes annulées ÷ commandes (c'est celui du scorecard, choix métier) · <b>pièces</b> = ${fInt(cx.qteAnnulee)} pièces non livrées ÷ pièces commandées · <b>CA</b> = ${fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime)} non livré ÷ CA EShop. Si tu comptes en <b>pièces</b> (ton TCD), regarde la tuile « Taux annul. (pièces) ». <b>Annulations</b> = statut <b>Annulée</b> (Cancelled). Les <b>expéditions incomplètes</b> (ShippedIncomplete) sont comptées <b>à part</b> et n'entrent pas dans le taux. ⚠️ Couleur inversée. ℹ️ Statut WSHOP <b>live</b> ≠ export OMS figé. À ne pas confondre avec les retours.</div></div>`;
   }
 
   // Retours
