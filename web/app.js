@@ -1187,13 +1187,13 @@ function renderReport(rep) {
          <button class="pb gran" data-gran="day">Jour</button>
          <a class="pb" href="/periodique.html" title="Cumuls hebdo / mensuels / saison → module Périodique">📅 Cumuls (Périodique) →</a></div>
        <div style="height:320px"><canvas id="dailyChart"></canvas></div>
-       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), TT % (<b style="color:#1B9E6A">vert</b>) — N plein / N‑1 pointillé · <b style="color:#7A4FAE">campagnes CRM</b> (✕ = N, + = N‑1, pic du canal Email GA) → impact des envois sur CA / ajout panier / TT au fil de la semaine.</div></div>`
+       <div class="note" style="margin-top:4px">Barres = CA (N foncé / N‑1 clair) · lignes = Sessions (<b style="color:#E2574D">rouge</b>), Ajout panier % (<b style="color:#7C4DCB">violet</b>), TT % (<b style="color:#1B9E6A">vert</b>) — N plein / N‑1 pointillé · <b style="color:#E2233A">campagnes CRM</b> (✕ = N, + = N‑1, en rouge, pic du canal Email GA) → impact des envois sur CA / ajout panier / TT au fil de la semaine.</div></div>`
     : '';
   // Duplicata du suivi temporel, marqueurs ADS (dépense Google/Meta) au lieu du CRM.
   const dailyAdsCard = (rep.daily && rep.daily.length)
     ? `<div class="card"><h3>Suivi temporel (période) — impact Ads</h3>
        <div style="height:320px"><canvas id="dailyAdsChart"></canvas></div>
-       <div class="note" style="margin-top:4px">Même suivi (CA / Sessions / Ajout panier % / TT %, N plein / N‑1 pointillé) avec les <b style="color:#1B9E6A">campagnes d'acquisition</b> (✕ = N, + = N‑1, pic de dépense Google/Meta Ads) → impact des pushs payants. Granularité « Jour » pilotée par la carte CRM ci‑dessus.</div></div>`
+       <div class="note" id="dailyAdsNote" style="margin-top:4px">Même suivi (CA / Sessions / Ajout panier % / TT %, N plein / N‑1 pointillé) avec les <b style="color:#1B9E6A">campagnes d'acquisition</b> (✕ = N, + = N‑1, en vert, jours de dépense Google/Meta Ads) → impact des pushs payants. Granularité « Jour » pilotée par la carte CRM ci‑dessus.</div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -2114,7 +2114,7 @@ function renderReport(rep) {
   const C = {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
-    kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, dailyads: dailyAdsCard, timeline: timelineCard, timeline2: timeline2Card, ca: caCard,
+    kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, dailyads: dailyAdsCard, timeline: '', timeline2: '', ca: caCard,
     channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard, mpfamilles: mpFamCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, stockalertstop: stockAlertsTopCard, piecesfamchannel: piecesFamChannelCard, stockcouv: stockCouvCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
@@ -3164,7 +3164,7 @@ function renderDailyChart(rep) {
   if (gran === 'day' && M && M.days && M.days.length === labels.length) {
     const days = M.days;
     const crossDs = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: labels.map((_, i) => (days[i] && pick(days[i]) >= thr && caArr[i] != null) ? caArr[i] : null), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color, backgroundColor: color });
-    crmCross = [crossDs('✉️ CRM N', d => d.crm, M.crmThr, caN, 'crossRot', '#7A4FAE'), crossDs('✉️ CRM N-1', d => d.crmN1, M.crmThr, caN1, 'cross', 'rgba(122,79,174,.5)')];
+    crmCross = [crossDs('✉️ CRM N', d => d.crm, M.crmThr, caN, 'crossRot', '#E2233A'), crossDs('✉️ CRM N-1', d => d.crmN1, M.crmThr, caN1, 'cross', 'rgba(226,35,58,.5)')];
     adsCross = [crossDs('📣 Ads N', d => d.ads, M.adsThr, caN, 'crossRot', '#1B9E6A'), crossDs('📣 Ads N-1', d => d.adsN1, M.adsThr, caN1, 'cross', 'rgba(27,158,106,.5)')];
   }
   const dailyScales = {
@@ -3175,6 +3175,9 @@ function renderDailyChart(rep) {
   };
   mk('dailyChart', ds.concat(crmCross), dailyScales);          // vue CRM
   mk('dailyAdsChart', ds.concat(adsCross), dailyScales);       // vue Ads (duplicata)
+  // Indice si la dépense Ads n'est pas chargée (sinon pas de croix Ads).
+  const adsNote = document.getElementById('dailyAdsNote');
+  if (adsNote && M && M.hasAds === false) adsNote.innerHTML = '⚠ <b style="color:var(--r)">Aucune dépense Google/Meta Ads chargée</b> sur la période → pas de croix Ads. Importe Google Ads / Meta (page Données) pour les afficher. ' + adsNote.innerHTML;
 }
 
 // GA4 API

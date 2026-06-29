@@ -573,7 +573,10 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     const crmN = emailVol(gaNf), crmN1 = emailVol(gaN1f), adsN = adsVol('N'), adsN1 = adsVol('N1');
     const shift = iso => isoShiftDays(iso, -364);
     return {
-      crmThr: medThr(crmN, 1.2, 5), adsThr: medThr(adsN, 1.2, 1),
+      // CRM = pic du canal Email (envois sporadiques) ; Ads = tout jour avec dépense (spend continu →
+      // un seuil « pic » masquerait des jours uniformes). hasAds : la dépense Ads est-elle chargée ?
+      crmThr: medThr(crmN, 1.2, 5), adsThr: 0.5,
+      hasAds: Object.keys(adsN).length > 0 || Object.keys(adsN1).length > 0,
       days: daily.map(d => ({ date: d.date, crm: crmN[d.date] || 0, crmN1: crmN1[shift(d.date)] || 0, ads: adsN[d.date] || 0, adsN1: adsN1[shift(d.date)] || 0 })),
     };
   })();
