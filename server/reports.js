@@ -577,8 +577,17 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       // un seuil « pic » masquerait des jours uniformes). hasAds : la dépense Ads est-elle chargée ?
       crmThr: medThr(crmN, 1.2, 5), adsThr: 0.5,
       hasAds: Object.keys(adsN).length > 0 || Object.keys(adsN1).length > 0,
-      days: daily.map(d => ({ date: d.date, crm: crmN[d.date] || 0, crmN1: crmN1[shift(d.date)] || 0, ads: adsN[d.date] || 0, adsN1: adsN1[shift(d.date)] || 0 })),
+      days: daily.map(d => ({ date: d.date, crm: crmN[d.date] || 0, crmN1: crmN1[shift(d.date)] || 0 })),
     };
+  })();
+  // Courbes de sessions des meilleures campagnes d'acquisition sur la PÉRIODE (carte « impact Ads »).
+  // Mêmes dates que `daily` ; top 3 campagnes (gacampdaily), N et N-1 (décalage −364 j).
+  const dailyCampaigns = (() => {
+    if (!daily || !daily.length) return null;
+    const days = daily.map(d => d.date), d0 = days[0], dN = days[days.length - 1];
+    const curves = (ds, sh) => { const tops = calc.campaignDailySeries(ds, isoShiftDays(d0, sh), isoShiftDays(dN, sh), false, 3); if (!tops || !tops.length) return []; return tops.map(t => ({ campaign: t.campaign, total: t.total, data: days.map(dd => { const v = t.byDay[isoShiftDays(dd, sh)]; return v != null ? v : null; }) })); };
+    const campN = curves(gaCampDailyN, 0), campN1 = curves(gaCampDailyN1, -364);
+    return (campN.length || campN1.length) ? { campN, campN1 } : null;
   })();
   // Timeline (28 derniers jours, indépendante de la période) : CA/jour + TT + ajouts panier
   // + jours d'envoi email (pic du canal Email GA4). Garantit un suivi lisible même en daily.
@@ -922,6 +931,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     daily,
     dailyN1,
     dailyMarkers,
+    dailyCampaigns,
     timeline, timeline2,
     stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel,
     hourly,

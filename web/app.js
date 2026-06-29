@@ -1193,7 +1193,7 @@ function renderReport(rep) {
   const dailyAdsCard = (rep.daily && rep.daily.length)
     ? `<div class="card"><h3>Suivi temporel (période) — impact Ads</h3>
        <div style="height:320px"><canvas id="dailyAdsChart"></canvas></div>
-       <div class="note" id="dailyAdsNote" style="margin-top:4px">Même suivi (CA / Sessions / Ajout panier % / TT %, N plein / N‑1 pointillé) avec les <b style="color:#1B9E6A">campagnes d'acquisition</b> (✕ = N, + = N‑1, en vert, jours de dépense Google/Meta Ads) → impact des pushs payants. Granularité « Jour » pilotée par la carte CRM ci‑dessus.</div></div>`
+       <div class="note" id="dailyAdsNote" data-base="Barres = CA (N foncé / N‑1 clair) · courbes = sessions des 3 meilleures <b style='color:#6E7B8B'>campagnes d'acquisition</b> (N plein / N‑1 pointillé) → relie les pics de CA aux campagnes payantes. Granularité « Jour » (pilotée par la carte CRM)." style="margin-top:4px">Barres = CA · courbes = sessions des meilleures campagnes d'acquisition (N plein / N‑1 pointillé).</div></div>`
     : '';
 
   // Efficacité par canal (N vs N-1 + totaux)
@@ -3157,27 +3157,39 @@ function renderDailyChart(rep) {
     const cap = document.querySelector('#dailyChart')?.closest('.card')?.querySelector('.note');
     if (cap) cap.innerHTML = '⚠ <b style="color:var(--r)">Trafic horaire à recharger</b> : recharge GA4 (page Données) pour des sessions N‑1 distinctes + les courbes d\'ajout panier. ' + cap.innerHTML;
   }
-  // Croix campagnes (granularité JOUR uniquement) : CRM = pic du canal Email, Ads = pic de dépense.
-  // ✕ = N (crossRot), + = N-1 (cross), positionnées au CA du jour → impact sur le CA au fil de la semaine.
-  let crmCross = [], adsCross = [];
+  // CRM = croix « jour d'envoi » (pic du canal Email), granularité JOUR. ✕ = N, + = N-1, au CA du jour.
+  let crmCross = [];
   const M = rep.dailyMarkers;
   if (gran === 'day' && M && M.days && M.days.length === labels.length) {
     const days = M.days;
     const crossDs = (label, pick, thr, caArr, style, color) => ({ type: 'line', label, yAxisID: 'y', data: labels.map((_, i) => (days[i] && pick(days[i]) >= thr && caArr[i] != null) ? caArr[i] : null), showLine: false, pointStyle: style, pointRadius: 8, pointBorderColor: color, pointBorderWidth: 2, borderColor: color, backgroundColor: color });
     crmCross = [crossDs('✉️ CRM N', d => d.crm, M.crmThr, caN, 'crossRot', '#E2233A'), crossDs('✉️ CRM N-1', d => d.crmN1, M.crmThr, caN1, 'cross', 'rgba(226,35,58,.5)')];
-    adsCross = [crossDs('📣 Ads N', d => d.ads, M.adsThr, caN, 'crossRot', '#1B9E6A'), crossDs('📣 Ads N-1', d => d.adsN1, M.adsThr, caN1, 'cross', 'rgba(27,158,106,.5)')];
   }
   const dailyScales = {
     x: xax,
     y: { position: 'left', ticks: { color: '#A8854A', font: { size: 9 }, callback: kfmt }, grid: { color: 'rgba(20,22,28,.06)' } },
-    ySess: { position: 'right', ticks: { color: '#E2574D', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
+    ySess: { position: 'right', ticks: { color: '#6E7B8B', font: { size: 9 }, callback: kfmt }, grid: { drawOnChartArea: false } },
     yPct: { display: false, grid: { drawOnChartArea: false }, beginAtZero: true },
   };
-  mk('dailyChart', ds.concat(crmCross), dailyScales);          // vue CRM
-  mk('dailyAdsChart', ds.concat(adsCross), dailyScales);       // vue Ads (duplicata)
-  // Indice si la dépense Ads n'est pas chargée (sinon pas de croix Ads).
+  mk('dailyChart', ds.concat(crmCross), dailyScales);          // vue CRM (croix envois)
+  // Vue Ads : CA en bâtons + COURBES de sessions des meilleures campagnes d'acquisition (N plein / N-1 pointillé).
+  const adsDs = [
+    { type: 'bar', label: 'CA N', yAxisID: 'y', data: caN, backgroundColor: 'rgba(168,133,74,.6)', borderColor: '#A8854A', borderWidth: 1 },
+    { type: 'bar', label: 'CA N-1', yAxisID: 'y', data: caN1, backgroundColor: 'rgba(168,133,74,.22)', borderColor: 'rgba(168,133,74,.55)', borderWidth: 1 },
+  ];
+  const dc = rep.dailyCampaigns;
+  const CAMP_C = ['#6E7B8B', '#1B9E6A', '#9B8AA3'];
+  if (gran === 'day' && dc) {
+    (dc.campN || []).forEach((c, i) => adsDs.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N)', yAxisID: 'ySess', data: c.data, borderColor: CAMP_C[i % CAMP_C.length], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true }));
+    (dc.campN1 || []).forEach((c, i) => adsDs.push({ type: 'line', label: c.campaign.slice(0, 22) + ' (N-1)', yAxisID: 'ySess', data: c.data, borderColor: CAMP_C[i % CAMP_C.length], borderDash: [4, 3], backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 1.5, spanGaps: true }));
+  }
+  mk('dailyAdsChart', adsDs, dailyScales);                     // vue Ads (courbes campagnes)
   const adsNote = document.getElementById('dailyAdsNote');
-  if (adsNote && M && M.hasAds === false) adsNote.innerHTML = '⚠ <b style="color:var(--r)">Aucune dépense Google/Meta Ads chargée</b> sur la période → pas de croix Ads. Importe Google Ads / Meta (page Données) pour les afficher. ' + adsNote.innerHTML;
+  if (adsNote) {
+    if (gran !== 'day') adsNote.innerHTML = 'ℹ️ Passe en granularité <b>Jour</b> (carte CRM ci‑dessus) pour les courbes de campagnes. ' + adsNote.dataset.base;
+    else if (!dc) adsNote.innerHTML = '⚠ <b style="color:var(--r)">Aucune campagne d\'acquisition (GA4 campagnes/jour) chargée</b> → importe GA4 (page Données) pour afficher les courbes. ' + adsNote.dataset.base;
+    else adsNote.innerHTML = adsNote.dataset.base;
+  }
 }
 
 // GA4 API
