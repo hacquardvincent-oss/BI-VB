@@ -284,6 +284,19 @@ async function fetchCampaignLandingDaily(propertyId, startDate, endDate) {
     sessions: parseFloat(r.metricValues[0].value) || 0, purchases: parseFloat(r.metricValues[1].value) || 0,
   }));
 }
+// date × landing page (top landing pages filtrable par période).
+async function fetchLandingDaily(propertyId, startDate, endDate) {
+  const data = await postAll(propertyId, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'date' }, { name: 'landingPage' }, { name: 'country' }],
+    metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }],
+    limit: 100000,
+  });
+  return (data.rows || []).map(r => ({
+    date: isoD(r.dimensionValues[0].value), page: r.dimensionValues[1].value, country: r.dimensionValues[2].value,
+    sessions: parseFloat(r.metricValues[0].value) || 0, purchases: parseFloat(r.metricValues[1].value) || 0, revenue: parseFloat(r.metricValues[2].value) || 0,
+  }));
+}
 
 // ── Campagne × famille/catégorie produit (quelles campagnes tirent quelles familles) ──
 async function fetchCampaignCategory(propertyId, startDate, endDate) {
@@ -498,6 +511,7 @@ async function refresh(opts = {}) {
     () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`pagesrc daté ${P}`, async () => store.setDataset('gapagesrcdaily', P, { rows: await fetchPagesBySourceDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campland daté ${P}`, async () => store.setDataset('gacampaignlanddaily', P, { rows: await fetchCampaignLandingDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`landing daté ${P}`, async () => store.setDataset('galandingdaily', P, { rows: await fetchLandingDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`items ${P}`, async () => store.setDataset('gaitems', P, { rows: await fetchItemFunnel(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),

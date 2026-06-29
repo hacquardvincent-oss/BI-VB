@@ -358,19 +358,22 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   const keepGeoRow = x => (!x || x.country === undefined) ? true : (dim === 'global' ? true : (dim === 'fr' ? isFR(x.country) : !isFR(x.country)));
 
   // Landing pages × conversion (N vs N-1), agrégées par page après filtre pays
+  // Filtre des lignes objets datées par date ∈ [a,b] (jeux GA datés portant x.date ISO).
+  const inDate = (x, a, b) => isAll || !x || !x.date || (x.date >= a && x.date <= b);
   const landN = store.getDataset('galanding', 'N'), landN1 = store.getDataset('galanding', 'N1');
-  let landingPages = null;
-  if (landN && landN.rows) {
-    const aggLand = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const e = m[x.page] || (m[x.page] = { sessions: 0, purchases: 0, revenue: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; e.revenue += x.revenue || 0; }); return m; };
-    const aN = aggLand(landN.rows), aN1 = aggLand(landN1 && landN1.rows);
-    landingPages = Object.entries(aN).map(([page, v]) => ({ page, ...v })).sort((a, b) => b.sessions - a.sessions).slice(0, 15).map(x => {
-      const prev = aN1[x.page];
-      return {
-        page: x.page, sessions: x.sessions, purchases: x.purchases, revenue: x.revenue,
-        convRate: x.sessions > 0 ? x.purchases / x.sessions : null,
-        convRateN1: (prev && prev.sessions > 0) ? prev.purchases / prev.sessions : null,
-      };
-    });
+  let landingPages = null, landingDated = false;
+  { const aggLand = rows => { const m = {}; (rows || []).forEach(x => { if (!keepGeoRow(x)) return; const e = m[x.page] || (m[x.page] = { sessions: 0, purchases: 0, revenue: 0 }); e.sessions += x.sessions; e.purchases += x.purchases; e.revenue += x.revenue || 0; }); return m; };
+    const ldN = store.getDataset('galandingdaily', 'N'), ldN1 = store.getDataset('galandingdaily', 'N1');
+    let rN = null, rN1 = null;
+    if (ldN && ldN.rows && ldN.rows.length) { landingDated = true; rN = ldN.rows.filter(x => inDate(x, from, to)); const src1 = (ldN1 && ldN1.rows && ldN1.rows.length) ? ldN1.rows : ldN.rows; rN1 = noN1 ? [] : src1.filter(x => inDate(x, cf, ct)); }
+    else if (landN && landN.rows) { rN = landN.rows; rN1 = landN1 && landN1.rows; }
+    if (rN) {
+      const aN = aggLand(rN), aN1 = aggLand(rN1);
+      landingPages = Object.entries(aN).map(([page, v]) => ({ page, ...v })).sort((a, b) => b.sessions - a.sessions).slice(0, 15).map(x => {
+        const prev = aN1[x.page];
+        return { page: x.page, sessions: x.sessions, purchases: x.purchases, revenue: x.revenue, convRate: x.sessions > 0 ? x.purchases / x.sessions : null, convRateN1: (prev && prev.sessions > 0) ? prev.purchases / prev.sessions : null };
+      });
+    }
   }
   // Funnel produit : vues → panier → achat (N) — non filtré par pays (dimension item)
   const itemsN = store.getDataset('gaitems', 'N');
@@ -398,9 +401,30 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     if (ds.rows) { const m = {}; ds.rows.forEach(x => { if (!keepGeoRow(x)) return; m[x.page] = (m[x.page] || 0) + x.views; }); return m; }
     return ds.byPage || {};
   };
+  // Top pages : version DATÉE (gapagedaily, date×page) filtrée par période, sinon agrégat (gapages).
+  let pagesDated = false;
+  const pgDailyByPage = (ds, a, b) => {
+    if (!ds || !ds.rows || !ds.hdrs) return null;
+    const H = ds.hdrs.map(h => calc.norm(h));
+    const di = H.indexOf('date'), pi = H.findIndex(h => /page|chemin|path|landing/.test(h)), si = H.indexOf('sessions');
+    if (di < 0 || pi < 0 || si < 0) return null;
+    const m = {};
+    ds.rows.forEach(r => { const raw = (r[di] || '').toString(); const iso = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw.slice(0, 10); if (!isAll && (!iso || iso < a || iso > b)) return; const p = (r[pi] || '').toString(); m[p] = (m[p] || 0) + (parseInt(r[si]) || 0); });
+    return m;
+  };
   let topPages = null, lostPages = null, newPages = null;
-  if (pagesN && (pagesN.rows || pagesN.byPage)) {
-    const bN = pagesByPage(pagesN), bN1 = pagesByPage(pagesN1);
+  const pgDN = store.getDataset('gapagedaily', 'N'), pgDN1 = store.getDataset('gapagedaily', 'N1');
+  const pgDailyN = pgDailyByPage(pgDN, from, to);
+  let bN = null, bN1 = null;
+  if (pgDailyN) {
+    pagesDated = true;
+    bN = pgDailyN;
+    const src1 = (pgDN1 && pgDN1.rows && pgDN1.rows.length) ? pgDN1 : pgDN;
+    bN1 = noN1 ? {} : (pgDailyByPage(src1, cf, ct) || {});
+  } else if (pagesN && (pagesN.rows || pagesN.byPage)) {
+    bN = pagesByPage(pagesN); bN1 = pagesByPage(pagesN1);
+  }
+  if (bN) {
     const keys = new Set([...Object.keys(bN), ...Object.keys(bN1)]);
     topPages = [...keys].map(p => ({ page: p, viewsN: bN[p] || 0, viewsN1: bN1[p] || 0 }))
       .sort((a, b) => b.viewsN - a.viewsN).slice(0, 15);
@@ -518,8 +542,6 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
       }).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
     }
   }
-  // Helper : filtre des lignes objets par date ∈ [a,b] (les jeux DATÉS portent x.date ISO).
-  const inDate = (x, a, b) => isAll || !x || !x.date || (x.date >= a && x.date <= b);
   // Cohérence campagne → page d'atterrissage — version DATÉE (filtrable par période) sinon agrégat.
   let campaignLanding = null, camplandDated = false;
   { const clDN = store.getDataset('gacampaignlanddaily', 'N'), clDN1 = store.getDataset('gacampaignlanddaily', 'N1');
@@ -884,7 +906,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   })();
   const gaAggStale = !!(!isAll && gaImportWin && from && to && (gaImportWin.from < isoShiftDays(from, -2) || gaImportWin.to > isoShiftDays(to, 2)));
   // Cartes désormais filtrées par période grâce aux jeux datés → pas d'avertissement « fenêtre d'import ».
-  const gaDated = { pagesrc: pagesrcDated, campland: camplandDated };
+  const gaDated = { pagesrc: pagesrcDated, campland: camplandDated, landing: landingDated, pages: pagesDated };
 
   return {
     empty: false,
