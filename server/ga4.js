@@ -536,18 +536,23 @@ async function refresh(opts = {}) {
     () => safe(`trafic horaire ${P}`, async () => mSess('gahourly', toDataset(await fetchHourlyTraffic(propertyId, s, e), s, e), s, e)),
   ];
 
-  const dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
+  // Concurrence des fetchers secondaires : SÉRIEL (1) sur instance contrainte → minimise le pic
+  // mémoire de l'import (sinon le process est tué par l'hébergeur en cours de route → réponse 502
+  // et tables secondaires vides). On libère aussi le transient brut du jeu `ga` après fusion.
+  const POOL = Math.max(1, parseInt(process.env.GA4_IMPORT_CONCURRENCY || '1', 10));
+  let dataN = await fetchGA4(propertyId, nStart, nEnd); // essentiel
+  const rowsN = dataN.rows.length;
   mDay('ga', 'N', toDataset(dataN, nStart, nEnd), nStart, nEnd);
+  dataN = null;                                         // libère la réponse brute avant les secondaires
   const nTasks = tasksFor('N', nStart, nEnd);
   nTasks.push(() => safe('campcat N', async () => store.setDataset('gacampcat', 'N', { rows: await fetchCampaignCategory(propertyId, nStart, nEnd), date_min: nStart, date_max: nEnd, uploaded_at: ts() }))); // N seul
-  // Concurrence BORNÉE à 3 (au lieu de 5) : réduit le pic mémoire de l'import (instance contrainte).
-  await runPool(nTasks, 3);
+  await runPool(nTasks, POOL);
   let n1Count = null;
   if (n1) {
-    await safe('GA N-1', async () => { const dataN1 = await fetchGA4(propertyId, n1.start, n1.end); mDay('ga', 'N1', toDataset(dataN1, n1.start, n1.end), n1.start, n1.end); n1Count = dataN1.rows.length; });
-    await runPool(tasksFor('N1', n1.start, n1.end), 3);
+    await safe('GA N-1', async () => { let dataN1 = await fetchGA4(propertyId, n1.start, n1.end); n1Count = dataN1.rows.length; mDay('ga', 'N1', toDataset(dataN1, n1.start, n1.end), n1.start, n1.end); dataN1 = null; });
+    await runPool(tasksFor('N1', n1.start, n1.end), POOL);
   }
-  return { period: { start: nStart, end: nEnd }, rowsN: dataN.rows.length, rowsN1: n1Count, warnings };
+  return { period: { start: nStart, end: nEnd }, rowsN, rowsN1: n1Count, warnings };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
