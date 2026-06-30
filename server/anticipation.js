@@ -24,6 +24,15 @@ function isoDate(v) {
   return '';
 }
 function anyDataset(source) { return store.getDataset(source, 'N') || store.getDataset(source, 'N1'); }
+// Un jeu chevauche-t-il la fenêtre [from,to] ? (évite de scanner un slot N/N1 hors période →
+// sur une instance à mémoire serrée, scanner inutilement ga-N1 (≈ 120 k l.) peut suffire à faire
+// dépasser le plafond RAM. Si les bornes sont inconnues/illisibles → on scanne par sécurité.)
+function overlapsWindow(d, from, to) {
+  if (!d || !d.rows || !d.rows.length) return false;
+  const lo = isoDate(d.date_min), hi = isoDate(d.date_max);
+  if (lo && hi) return !(hi < from || lo > to);
+  return true;
+}
 // Index de la colonne date d'un jeu : map.date sinon en-tête « date/jour » sinon col 0 (jeux GA toDataset).
 function dateIdxOf(d) {
   if (d.map && d.map.date != null) return d.map.date;
@@ -37,7 +46,8 @@ function rowsInPeriod(source, from, to) {
   for (const p of ['N', 'N1']) {
     const d = store.getDataset(source, p);
     if (!d || !d.rows || !d.rows.length) continue;
-    map = map || d.map || {}; hdrs = hdrs || d.hdrs;
+    map = map || d.map || {}; hdrs = hdrs || d.hdrs;   // schéma N/N1 identique → on garde la 1ʳᵉ map vue
+    if (!overlapsWindow(d, from, to)) continue;
     const idx = dateIdxOf(d);
     d.rows.forEach(r => { const iso = isoDate(r[idx]); if (iso && iso >= from && iso <= to) rows.push(r); });
   }
@@ -70,7 +80,7 @@ function weeklyChannels(from, to) {
 // Top campagnes UTM par SEMAINE depuis gacampdaily (date×campagne).
 function weeklyCampaigns(from, to) {
   const rows = [];
-  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
+  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows && overlapsWindow(d, from, to)) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
   if (!rows.length) return null;
   const by = {};
   rows.forEach(r => { const iso = isoDate(r[0]); const wk = mondayISO(iso); const c = (r[1] || '(direct/none)').toString(); if (/^\(?(direct|none|\(none\)|organic|referral|\(not set\)|\(direct\))/i.test(c)) return; const e = by[wk] || (by[wk] = {}); const x = e[c] || (e[c] = { sessions: 0, ca: 0 }); x.sessions += numUS(r[2]); x.ca += numUS(r[3]); });
@@ -132,7 +142,7 @@ function crmInsights(from, to) {
   if (eph) out.emailPeakHour = eph.peakHour;
   // Top campagnes CRM (gacampdaily, noms email/crm/newsletter) sur la période
   const rows = [];
-  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
+  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows && overlapsWindow(d, from, to)) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
   if (rows.length) {
     const by = {};
     rows.forEach(r => { const c = (r[1] || '').toString(); if (!/e-?mail|crm|newsletter|mailing|splio/i.test(c)) return; const e = by[c] || (by[c] = { campaign: c, sessions: 0, ca: 0 }); e.sessions += numUS(r[2]); e.ca += numUS(r[3]); });
@@ -179,7 +189,7 @@ function channelsAgg(from, to) {
 // Top campagnes UTM depuis gacampdaily (date×campagne ; en-têtes fixes Date/Campagne/Sessions/Revenu/Achats).
 function topCampaigns(from, to) {
   const rows = [];
-  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
+  for (const p of ['N', 'N1']) { const d = store.getDataset('gacampdaily', p); if (d && d.rows && overlapsWindow(d, from, to)) d.rows.forEach(r => { const iso = isoDate(r[0]); if (iso && iso >= from && iso <= to) rows.push(r); }); }
   if (!rows.length) return null;
   const by = {};
   rows.forEach(r => { const c = (r[1] || '(direct/none)').toString(); const e = by[c] || (by[c] = { campaign: c, sessions: 0, ca: 0, achats: 0 }); e.sessions += numUS(r[2]); e.ca += numUS(r[3]); e.achats += numUS(r[4]); });

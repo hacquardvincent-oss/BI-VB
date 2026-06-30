@@ -325,12 +325,25 @@ async function run() {
   const body = document.getElementById('body');
   if (!from || !to) { body.innerHTML = '<div class="card"><div class="note">⚠️ Renseigne une période N-1 (début et fin).</div></div>'; return; }
   body.innerHTML = '<div class="card"><div class="note">Analyse…</div></div>';
-  try {
+  // Lecture robuste : une réponse vide / 5xx (instance en cours de redémarrage côté hébergeur)
+  // déclenche 1 nouvelle tentative après une courte pause avant d'afficher l'erreur.
+  const attempt = async () => {
     const r = await fetch(`/api/anticipation?from=${from}&to=${to}`);
-    const a = await r.json();
-    if (!r.ok) { body.innerHTML = `<div class="card"><div class="note">⚠️ ${esc(a.error || 'Erreur')}</div></div>`; return; }
-    render(a);
-  } catch (e) { body.innerHTML = `<div class="card"><div class="note">⚠️ ${esc(e.message)}</div></div>`; }
+    const txt = await r.text();
+    if (!txt) throw new Error(r.ok ? 'empty' : ('HTTP ' + r.status));
+    let a; try { a = JSON.parse(txt); } catch (e) { throw new Error('badjson'); }
+    return { r, a };
+  };
+  try {
+    let res;
+    try { res = await attempt(); }
+    catch (e1) { await new Promise(s => setTimeout(s, 1800)); res = await attempt(); }   // 1 retry
+    if (!res.r.ok) { body.innerHTML = `<div class="card"><div class="note">⚠️ ${esc(res.a.error || 'Erreur')}</div></div>`; return; }
+    render(res.a);
+  } catch (e) {
+    body.innerHTML = `<div class="card"><div class="note">⚠️ Le prévisionnel n'a pas pu se charger (réponse incomplète du serveur). Réessaie dans quelques secondes, ou réduis la période. <button class="btn blue" id="prevRetry">↻ Réessayer</button></div></div>`;
+    const rb = document.getElementById('prevRetry'); if (rb) rb.addEventListener('click', run);
+  }
 }
 
 
@@ -342,7 +355,18 @@ async function run() {
   if (u.role === 'admin') { const ab = document.getElementById('adminBtn'); if (ab) { ab.classList.remove('hidden'); ab.onclick = () => { location.href = '/admin.html'; }; } }
   document.getElementById('logout').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/login.html'; });
 
-  // Préremplit avec l'équivalent N-1 des 6 prochaines semaines (à partir d'aujourd'hui).
+  // Préremplit par défaut avec le MOIS À VENIR en N-1 : ex. le 30/06/2026 → juillet 2025
+  // (mois calendaire suivant, projeté un an plus tôt) → l'utilisateur prépare le mois prochain.
+  const fillNextMonth = () => {
+    const t = new Date();
+    let m = t.getMonth() + 1, y = t.getFullYear();      // mois suivant (0-11)
+    if (m > 11) { m = 0; y += 1; }                       // décembre → janvier de l'année suivante
+    const y1 = y - 1;                                    // équivalent N-1
+    document.getElementById('from').value = ymd(new Date(y1, m, 1));
+    document.getElementById('to').value = ymd(new Date(y1, m + 1, 0));  // dernier jour du mois
+    eqNote();
+  };
+  // Bouton « 6 prochaines semaines » : équivalent N-1 des 6 semaines à venir (à partir d'aujourd'hui).
   const fill6 = () => {
     const today = new Date();
     const from = new Date(today); from.setDate(from.getDate() + 1 - 364);
@@ -351,7 +375,7 @@ async function run() {
     document.getElementById('to').value = ymd(to);
     eqNote();
   };
-  fill6();
+  fillNextMonth();
   document.getElementById('shiftNext6').addEventListener('click', fill6);
   document.getElementById('run').addEventListener('click', run);
   ['from', 'to'].forEach(id => document.getElementById(id).addEventListener('change', eqNote));
