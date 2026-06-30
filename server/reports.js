@@ -578,7 +578,9 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
         .sort((a, b) => b.sessionsN1 - a.sessionsN1).slice(0, 12);
     }
   }
-  const device = { n: gaNf ? calc.calcByDevice(gaNf) : null, n1: gaN1f ? calc.calcByDevice(gaN1f) : null };
+  // Ventilation par appareil retirée : le jeu `ga` n'a plus la dimension deviceCategory (allègement
+  // mémoire). rep.device reste null → la carte/donut « par device » s'auto-masquent (donnée absente).
+  const device = { n: null, n1: null };
   // Sessions « propres » par jour (date×pays) → TT/jour fiable (sinon repli ventilation).
   const sessByDayN = calc.getGADaily(sessSrcN) || undefined;
   const sessByDayN1 = calc.getGADaily(sessSrcN1) || undefined;

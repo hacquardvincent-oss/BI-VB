@@ -42,7 +42,10 @@ function isConfigured() {
 const shiftYear = (iso, d) => { if (!iso) return ''; const p = iso.split('-'); return `${+p[0] + d}-${p[1]}-${p[2]}`; };
 
 // En-têtes du dataset produit (alignés sur GA_ALIASES + colonnes Date, Device, Pays)
-const HDRS = ['Date', 'Groupe de canaux', 'Device', 'Pays', 'Sessions', 'Utilisateurs actifs',
+// ⚠️ ALLÉGÉ : plus de dimension `deviceCategory` (× ~3 sur le volume → ~123 K ramené à ~40 K
+// lignes). On ne ventile plus les sessions par appareil (donut « par device » retiré). Tout le
+// reste (pays / canal / CA / FR-Inter / funnel / courbes) ne dépend pas de cette dimension.
+const HDRS = ['Date', 'Groupe de canaux', 'Pays', 'Sessions', 'Utilisateurs actifs',
   'Nouveaux utilisateurs', 'Événements clés', 'Revenu total',
   'Sessions avec engagement', 'Taux d\'engagement', 'Ajouts panier', 'Checkouts', 'Achats e-commerce'];
 
@@ -147,11 +150,11 @@ async function postAll(propertyId, body) {
   return { rows, rowCount: total };
 }
 
-// ── Rapport principal : date × canal × device × pays ────────────────────────
+// ── Rapport principal : date × canal × pays (device retiré pour alléger le volume) ──
 async function fetchGA4(propertyId, startDate, endDate) {
   const data = await postAll(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'deviceCategory' }, { name: 'country' }],
+    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'country' }],
     metrics: [
       { name: 'sessions' }, { name: 'activeUsers' }, { name: 'newUsers' },
       { name: 'keyEvents' }, { name: 'totalRevenue' }, { name: 'engagedSessions' },
@@ -162,7 +165,7 @@ async function fetchGA4(propertyId, startDate, endDate) {
   const rows = (data.rows || []).map(r => {
     const d = r.dimensionValues.map(x => x.value);
     const m = r.metricValues.map(x => x.value);
-    return [d[0], d[1], d[2], d[3], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]];
+    return [d[0], d[1], d[2], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]];
   });
   return { hdrs: HDRS.slice(), rows };
 }
