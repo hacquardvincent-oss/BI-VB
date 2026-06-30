@@ -44,10 +44,23 @@ function unpackFromDb(raw) {
 async function hydrate() {
   if (!db.enabled) { _hydrated = true; _resolveReady(); return 0; }
   let n = 0;
+  // GARDE-FOU MÉMOIRE : les jeux GA4 DATÉS (date×source×page…) peuvent peser des centaines de Mo et
+  // faire dépasser la limite RAM de l'instance (OOM → redémarrage en boucle). On purge à l'hydratation
+  // ceux qui sont anormalement gros → libère RAM ET disque. Les versions ALLÉGÉES (sans pays, fenêtre
+  // bornée) repassent sous le seuil et sont conservées.
+  const HEAVY_DATED = new Set(['gapagesrcdaily', 'galandingdaily', 'gacampaignlanddaily']);
+  const MAX_DATED = 12 * 1024 * 1024;   // 12 Mo compressé / jeu daté
   try {
-    const { rows: keys } = await db.query('SELECT source, period FROM datasets');
+    let keys;
+    try { keys = (await db.query('SELECT source, period, pg_column_size(data) AS sz FROM datasets')).rows; }
+    catch (e) { keys = (await db.query('SELECT source, period FROM datasets')).rows; }
     for (const k of keys) {
       try {
+        if (HEAVY_DATED.has(k.source) && k.sz != null && Number(k.sz) > MAX_DATED) {
+          console.warn(`[store] purge jeu daté volumineux ${k.source}-${k.period} (${Math.round(Number(k.sz) / 1e6)} Mo compressés) → anti-OOM`);
+          db.query('DELETE FROM datasets WHERE source = $1 AND period = $2', [k.source, k.period]).catch(() => {});
+          continue;
+        }
         const { rows } = await db.query('SELECT data FROM datasets WHERE source = $1 AND period = $2', [k.source, k.period]);
         if (rows.length) { STORE.set(`${k.source}-${k.period}`, unpackFromDb(rows[0].data)); n++; }
       } catch (e) { console.error(`[store] hydrate ${k.source}-${k.period} KO:`, e.message); }

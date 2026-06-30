@@ -258,42 +258,48 @@ async function fetchPagesBySource(propertyId, startDate, endDate) {
 
 // ── Versions DATÉES (date × …) : permettent de filtrer par la période d'analyse (≠ fenêtre d'import). ──
 const isoD = v => { const s = (v || '').toString(); return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s; };
+// ⚠️ ALLÉGÉ (anti-OOM) : PAS de dimension `country` (≈ ÷50 en volume) → ces cartes sont GLOBALES
+// (le split FR/Inter n'est pas filtrable sur les jeux datés). Une seule requête plafonnée (top par
+// sessions) au lieu de la pagination intégrale. Fenêtre bornée côté refresh (≈120 j).
 // date × source × landing page (source→page filtrable par période).
 async function fetchPagesBySourceDaily(propertyId, startDate, endDate) {
-  const data = await postAll(propertyId, {
+  const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'landingPage' }, { name: 'country' }],
+    dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }, { name: 'landingPage' }],
     metrics: [{ name: 'sessions' }, { name: 'totalRevenue' }, { name: 'ecommercePurchases' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
     limit: 100000,
   });
   return (data.rows || []).map(r => ({
-    date: isoD(r.dimensionValues[0].value), source: r.dimensionValues[1].value, page: r.dimensionValues[2].value, country: r.dimensionValues[3].value,
+    date: isoD(r.dimensionValues[0].value), source: r.dimensionValues[1].value, page: r.dimensionValues[2].value,
     sessions: parseFloat(r.metricValues[0].value) || 0, revenue: parseFloat(r.metricValues[1].value) || 0, purchases: parseFloat(r.metricValues[2].value) || 0,
   }));
 }
 // date × campagne × landing page (campagne→landing filtrable par période).
 async function fetchCampaignLandingDaily(propertyId, startDate, endDate) {
-  const data = await postAll(propertyId, {
+  const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'sessionCampaignName' }, { name: 'landingPage' }, { name: 'country' }],
+    dimensions: [{ name: 'date' }, { name: 'sessionCampaignName' }, { name: 'landingPage' }],
     metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
     limit: 100000,
   });
   return (data.rows || []).map(r => ({
-    date: isoD(r.dimensionValues[0].value), campaign: r.dimensionValues[1].value, page: r.dimensionValues[2].value, country: r.dimensionValues[3].value,
+    date: isoD(r.dimensionValues[0].value), campaign: r.dimensionValues[1].value, page: r.dimensionValues[2].value,
     sessions: parseFloat(r.metricValues[0].value) || 0, purchases: parseFloat(r.metricValues[1].value) || 0,
   }));
 }
 // date × landing page (top landing pages filtrable par période).
 async function fetchLandingDaily(propertyId, startDate, endDate) {
-  const data = await postAll(propertyId, {
+  const data = await post(propertyId, {
     dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'date' }, { name: 'landingPage' }, { name: 'country' }],
+    dimensions: [{ name: 'date' }, { name: 'landingPage' }],
     metrics: [{ name: 'sessions' }, { name: 'ecommercePurchases' }, { name: 'totalRevenue' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
     limit: 100000,
   });
   return (data.rows || []).map(r => ({
-    date: isoD(r.dimensionValues[0].value), page: r.dimensionValues[1].value, country: r.dimensionValues[2].value,
+    date: isoD(r.dimensionValues[0].value), page: r.dimensionValues[1].value,
     sessions: parseFloat(r.metricValues[0].value) || 0, purchases: parseFloat(r.metricValues[1].value) || 0, revenue: parseFloat(r.metricValues[2].value) || 0,
   }));
 }
@@ -503,15 +509,19 @@ async function refresh(opts = {}) {
   // N-1 → le slot N couvre N ET N-1 ; le N-1 d'un report se dérive par filtre de date. Évite que la
   // comparaison N-1 échoue parce que les sessions N-1 vivaient dans un slot N1 d'une autre année.
   const mSess = (src, ds, s, e) => store.mergeDatasetWindow(src, 'N', ds, s, e);
+  // Fenêtre BORNÉE pour les jeux datés lourds (anti-OOM) : on ne ramène que les ~120 derniers jours de
+  // la fenêtre demandée (suffisant pour le period-correct des analyses récentes ; l'historique long
+  // reste couvert par les jeux datés légers ga/gasess/gacampdaily/gapagedaily).
+  const datedStart = (s, e) => { try { const d = new Date(e + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 120); const c = d.toISOString().slice(0, 10); return (c > s) ? c : s; } catch (x) { return s; } };
   // Liste des fetchers pour une période (P = 'N' ou 'N1') sur [s, e].
   const tasksFor = (P, s, e) => [
     () => safe(`sessions ${P}`, async () => mSess('gasess', toDataset(await fetchSessionsDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`sessions total ${P}`, async () => mSess('gatot', toDataset(await fetchSessionsTotal(propertyId, s, e), s, e), s, e)),
     () => safe(`pages ${P}`, async () => store.setDataset('gapages', P, { rows: await fetchPages(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`pagesrc ${P}`, async () => store.setDataset('gapagesrc', P, { rows: await fetchPagesBySource(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
-    () => safe(`pagesrc daté ${P}`, async () => store.setDataset('gapagesrcdaily', P, { rows: await fetchPagesBySourceDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
-    () => safe(`campland daté ${P}`, async () => store.setDataset('gacampaignlanddaily', P, { rows: await fetchCampaignLandingDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
-    () => safe(`landing daté ${P}`, async () => store.setDataset('galandingdaily', P, { rows: await fetchLandingDaily(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
+    () => safe(`pagesrc daté ${P}`, async () => { const ds = datedStart(s, e); store.setDataset('gapagesrcdaily', P, { rows: await fetchPagesBySourceDaily(propertyId, ds, e), date_min: ds, date_max: e, uploaded_at: ts() }); }),
+    () => safe(`campland daté ${P}`, async () => { const ds = datedStart(s, e); store.setDataset('gacampaignlanddaily', P, { rows: await fetchCampaignLandingDaily(propertyId, ds, e), date_min: ds, date_max: e, uploaded_at: ts() }); }),
+    () => safe(`landing daté ${P}`, async () => { const ds = datedStart(s, e); store.setDataset('galandingdaily', P, { rows: await fetchLandingDaily(propertyId, ds, e), date_min: ds, date_max: e, uploaded_at: ts() }); }),
     () => safe(`landing ${P}`, async () => store.setDataset('galanding', P, { rows: await fetchLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`items ${P}`, async () => store.setDataset('gaitems', P, { rows: await fetchItemFunnel(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
