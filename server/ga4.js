@@ -491,11 +491,20 @@ async function refresh(opts = {}) {
     else { nStart = '30daysAgo'; nEnd = 'yesterday'; }
   }
   const isoRe = /^\d{4}-\d{2}-\d{2}$/;
-  // Période N-1 : dates explicites > décalage d'un an (si dates ISO)
+  const warnings = [];
+  // PLAFOND DE PROFONDEUR (anti-OOM, hébergement free) : on n'importe pas plus de GA4_MAX_MONTHS mois
+  // (défaut 13) finissant à nEnd. GA4 ne conserve de toute façon pas de données très anciennes, donc
+  // ce plafond ne perd quasiment rien tout en bornant la taille du jeu `ga` en mémoire. Mettre 0 = illimité.
+  const MAX_MONTHS = parseInt(process.env.GA4_MAX_MONTHS || '13', 10);
+  if (MAX_MONTHS > 0 && isoRe.test(nStart) && isoRe.test(nEnd)) {
+    const e = new Date(nEnd + 'T00:00:00Z'); e.setUTCMonth(e.getUTCMonth() - MAX_MONTHS);
+    const floor = e.toISOString().slice(0, 10);
+    if (nStart < floor) { warnings.push(`Profondeur GA limitée à ${MAX_MONTHS} mois (depuis ${floor}) pour préserver la mémoire — ajustable via GA4_MAX_MONTHS (0 = illimité).`); nStart = floor; }
+  }
+  // Période N-1 : dates explicites > décalage d'un an (si dates ISO) — calculé APRÈS le plafond.
   let n1 = null;
   if (opts.cfrom && opts.cto) n1 = { start: opts.cfrom, end: opts.cto };
   else if (isoRe.test(nStart)) n1 = { start: shiftYear(nStart, -1), end: shiftYear(nEnd, -1) };
-  const warnings = [];
   const safe = async (label, fn) => { try { await fn(); } catch (e) { warnings.push(`${label}: ${e.message}`); } };
   const ts = () => new Date().toISOString();
   // Exécute des tâches avec une concurrence BORNÉE (les ~13 fetchers en parallèle, mais ≤ limit à la
