@@ -9,7 +9,7 @@ if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color =
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' €');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
 const fPct = v => (v == null ? '—' : (Math.round(v * 1000) / 10).toLocaleString('fr-FR') + ' %');
-const PALETTE = ['#4E79A7', '#59A14F', '#B07AA1', '#E15759', '#76B7B2', '#5B6BBF', '#FF9DA7', '#7C4DCB'];
+const PALETTE = (window.PIE_PALETTE || ['#4E6E8E', '#6FA28C', '#C58BA3', '#D98E73', '#8478B0', '#5B9AA6', '#E1A9A0', '#A0739A']);
 const _pcharts = {};
 function mkChart(id, cfg) { const el = document.getElementById(id); if (!el || !window.Chart) return; if (_pcharts[id]) _pcharts[id].destroy(); _pcharts[id] = new Chart(el.getContext('2d'), cfg); }
 
@@ -117,7 +117,7 @@ function drawWidget(w, cid) {
   if (['bars', 'donut', 'line'].indexOf(w.form) < 0) return;
   const rows = genData(w), labels = rows.map(r => r.label);
   if (w.form === 'donut') {
-    mkChart(cid, { type: 'doughnut', data: { labels, datasets: [{ data: rows.map(r => r.n), backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 2, borderColor: '#fff' }] }, options: window.pieOutOpts ? window.pieOutOpts() : { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } } } });
+    mkChart(cid, { type: 'doughnut', data: { labels, datasets: [{ data: rows.map(r => r.n), backgroundColor: labels.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 2, borderColor: '#fff' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } } } });
   } else if (w.form === 'line') {
     mkChart(cid, { type: 'line', data: { labels, datasets: [{ label: 'N', data: rows.map(r => r.n), borderColor: PALETTE[0], backgroundColor: 'transparent', tension: .25, pointRadius: 2, borderWidth: 2 }].concat(w.n1 ? [{ label: 'N-1', data: rows.map(r => r.n1), borderColor: PALETTE[1], borderDash: [5, 4], backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 1.5 }] : []) }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 16, font: { size: 10 } } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(20,22,28,.06)' } } } } });
   } else {

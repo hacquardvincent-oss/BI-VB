@@ -18,7 +18,7 @@ function delta(n, n1) {
   const p = (n - n1) / Math.abs(n1) * 100;
   return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
-const PALETTE = ['#4E79A7', '#59A14F', '#B07AA1', '#E15759', '#76B7B2', '#5B6BBF', '#FF9DA7', '#7C4DCB', '#86BCB6', '#9CA3AF', '#C98AB0', '#6E7B8B'];
+const PALETTE = (window.PIE_PALETTE || ['#4E6E8E', '#6FA28C', '#C58BA3', '#D98E73', '#8478B0', '#5B9AA6', '#E1A9A0', '#A0739A', '#7E8CA3', '#9AA3AE', '#B58DB0', '#6E8FA6']);
 
 // Rend un bloc (Global / France / Inter) : titre + camembert + table famille (drill-down nom→réfs).
 function block(id, title, d, withCountry) {
