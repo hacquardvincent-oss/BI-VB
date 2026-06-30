@@ -508,8 +508,8 @@ function render(d) {
   if (rf && rf.segments && rf.segments.length) {
     mk('ch_rfm', {
       type: 'doughnut',
-      data: { labels: rf.segments.map(s => s.segment), datasets: [{ data: rf.segments.map(s => s.ca), backgroundColor: rf.segments.map(s => SEG_COLOR[s.segment] || '#888'), borderColor: '#fff', borderWidth: 2 }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.label} : ${fEur(c.parsed)}` } } } },
+      data: { labels: rf.segments.map(s => s.segment), datasets: [{ data: rf.segments.map(s => s.ca), backgroundColor: rf.segments.map(s => SEG_COLOR[s.segment] || '#9CA3AF'), borderColor: '#fff', borderWidth: 2 }] },
+      options: window.pieOutOpts ? window.pieOutOpts(fEur) : { responsive: true, maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.label} : ${fEur(c.parsed)}` } } } },
     });
   }
   if (mkt && mkt.series && mkt.series.length) {
@@ -556,7 +556,7 @@ const MKT_PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8
 // Couleurs sémantiques par type de canal d'acquisition.
 const CHAN_COLOR = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
 // Couleurs par segment RFM.
-const SEG_COLOR = { Champions: '#1B9E6A', 'Fidèles': '#A8854A', Nouveaux: '#5B8DB8', Occasionnels: '#6E7B8B', 'À risque': '#C8A35B', Endormis: '#E2574D' };
+const SEG_COLOR = { Champions: '#59A14F', 'Fidèles': '#B07AA1', Nouveaux: '#5B8DB8', Occasionnels: '#6E7B8B', 'À risque': '#FF9DA7', Endormis: '#E2574D' };
 
 let COMPARE = true;   // comparatif N-1 actif par défaut
 async function run() {

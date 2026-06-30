@@ -374,7 +374,7 @@ function renderWidgetCharts() {
     const kfmt = v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v;
     let cfg;
     if (w.form === 'donut') {
-      cfg = { type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } };
+      cfg = { type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fmt === 'pct' ? (v => v + '%') : fInt) : { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } };
     } else if (w.form === 'line') {
       cfg = { type: 'line', data: { labels, datasets: [
         { label: 'N', data: vals, borderColor: '#A8854A', backgroundColor: 'transparent', tension: .3, pointRadius: 0, borderWidth: 2, spanGaps: true },
@@ -474,7 +474,7 @@ const esc = s => (s || '').toString().replace(/[<>&]/g, c => ({ '<': '&lt;', '>'
 const f2 = v => (v == null ? '—' : v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€');
 const pc = (n, n1) => (n == null || n1 == null || n1 === 0) ? null : (n - n1) / n1 * 100;
 const sgn = p => (p == null ? '' : (p >= 0 ? '+' : '') + p.toFixed(0) + '%');
-const PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#E2574D', '#9B8AA3', '#C0879B', '#5FA88C', '#D4B36A'];
+const PALETTE = ['#4E79A7', '#59A14F', '#B07AA1', '#E15759', '#76B7B2', '#5B6BBF', '#FF9DA7', '#7C4DCB', '#86BCB6', '#9CA3AF'];
 if (window.Chart) { Chart.defaults.font.family = 'Inter'; Chart.defaults.color = '#9CA1AB'; Chart.defaults.font.size = 11; }
 
 const SOURCES = [
@@ -2960,17 +2960,17 @@ function renderCharts(rep) {
 
   if (rep.ga && rep.ga.byCanal && rep.ga.byCanal.length) {
     const s = [...rep.ga.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
-    mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
+    mk('chDonut', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fInt) : donutOpts });
   }
   if (rep.gaN1 && rep.gaN1.byCanal && rep.gaN1.byCanal.length) {
     const s = [...rep.gaN1.byCanal].sort((a, b) => b.sessions - a.sessions).slice(0, 6);
-    mk('chDonutN1', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
+    mk('chDonutN1', { type: 'doughnut', data: { labels: s.map(x => x.canal), datasets: [{ data: s.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fInt) : donutOpts });
   }
   // Donut répartition CA (France / International / Marketplace)
   if (rep.ca && rep.ca.n) {
     const c = rep.ca.n, mkt = (rep.marketplace && rep.marketplace.n && rep.marketplace.n.total) || 0;
     const seg = [['EShop France', c.caFR || 0], ['EShop International', c.caInt || 0], ['Marketplace', mkt]].filter(x => x[1] > 0);
-    if (seg.length) mk('caDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
+    if (seg.length) mk('caDonut', { type: 'doughnut', data: { labels: seg.map(x => x[0]), datasets: [{ data: seg.map(x => Math.round(x[1])), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fEur) : donutOpts });
   }
   // Funnel e-commerce (barres décroissantes Sessions→Panier→Checkout→Achat)
   if (rep.gaFunnel && rep.gaFunnel.n && rep.gaFunnel.n.steps) {
@@ -2980,7 +2980,7 @@ function renderCharts(rep) {
   // Donut device (sessions)
   if (rep.device && rep.device.n && rep.device.n.length) {
     const d = rep.device.n;
-    mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: donutOpts });
+    mk('devDonut', { type: 'doughnut', data: { labels: d.map(x => x.device), datasets: [{ data: d.map(x => Math.round(x.sessions)), backgroundColor: PALETTE, borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fInt) : donutOpts });
   }
   // Barres CA par pays (top 10, hors France) — croissance/décroissance vs N-1
   if (rep.pays && rep.pays.length) {

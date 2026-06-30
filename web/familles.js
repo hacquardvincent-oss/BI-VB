@@ -18,7 +18,7 @@ function delta(n, n1) {
   const p = (n - n1) / Math.abs(n1) * 100;
   return `<span class="${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '+' : ''}${p.toFixed(0)}%</span>`;
 }
-const PALETTE = ['#A8854A', '#6E7B8B', '#1B9E6A', '#E2574D', '#9B8AA3', '#C9A24B', '#5B8C9E', '#B6705B', '#7E9B6F', '#8A7CA8', '#D08C5E', '#69A0A8', '#B0857A', '#7F8FA6'];
+const PALETTE = ['#4E79A7', '#59A14F', '#B07AA1', '#E15759', '#76B7B2', '#5B6BBF', '#FF9DA7', '#7C4DCB', '#86BCB6', '#9CA3AF', '#C98AB0', '#6E7B8B'];
 
 // Rend un bloc (Global / France / Inter) : titre + camembert + table famille (drill-down nom→réfs).
 function block(id, title, d, withCountry) {
@@ -51,7 +51,7 @@ function drawPie(id, d) {
   _charts[id] = new Chart(el.getContext('2d'), {
     type: 'doughnut',
     data: { labels: fam.map(f => f.famille), datasets: [{ data: fam.map(f => f.ca), backgroundColor: fam.map((f, i) => PALETTE[i % PALETTE.length]), borderColor: '#fff', borderWidth: 2 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 9 }, padding: 5, usePointStyle: true } }, tooltip: { callbacks: { label: c => `${c.label} : ${Math.round(c.raw / (d.total || 1) * 100)}%` } } } },
+    options: window.pieOutOpts ? window.pieOutOpts(fEur) : { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 9 }, padding: 5, usePointStyle: true } }, tooltip: { callbacks: { label: c => `${c.label} : ${Math.round(c.raw / (d.total || 1) * 100)}%` } } } },
   });
 }
 function wireDrill(id, d) {

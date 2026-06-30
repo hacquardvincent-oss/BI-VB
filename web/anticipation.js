@@ -202,7 +202,7 @@ function renderWeekBars(weeks) {
 }
 // Point 2 · donut CA par TYPE de canal (Paid / CRM / SEO / Direct / Social / Referral).
 function chanType(c) { const s = (c || '').toLowerCase(); if (/paid|display|shopping|cross-network|video|sea|cpc/.test(s)) return 'Paid'; if (/e-?mail|sms|crm|newsletter|mailing/.test(s)) return 'CRM'; if (/social/.test(s)) return 'Social'; if (s === 'direct' || s === '(direct)') return 'Direct'; if (/organic|search|seo/.test(s)) return 'SEO'; if (/referr|affil/.test(s)) return 'Referral'; return 'Autre'; }
-const CHAN_PIE = { Paid: '#1B9E6A', CRM: '#9B8AA3', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#A8854A', Referral: '#C8A35B', Autre: '#B0B5BD' };
+const CHAN_PIE = { Paid: '#59A14F', CRM: '#B07AA1', SEO: '#5B8DB8', Direct: '#6E7B8B', Social: '#7C4DCB', Referral: '#FF9DA7', Autre: '#9CA3AF' };
 function renderChanPie(channels) {
   const el = document.getElementById('prevChanPie'); if (!el || typeof Chart === 'undefined' || !channels || !channels.length) return;
   if (_pcharts.chanPie) _pcharts.chanPie.destroy();
@@ -210,8 +210,8 @@ function renderChanPie(channels) {
   const entries = Object.entries(by).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   _pcharts.chanPie = new Chart(el.getContext('2d'), {
     type: 'doughnut',
-    data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => Math.round(e[1])), backgroundColor: entries.map(e => CHAN_PIE[e[0]] || '#B0B5BD'), borderColor: '#fff', borderWidth: 2 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => { const t = entries.reduce((s, e) => s + e[1], 0); return ` ${c.label} : ${fEur(c.parsed)} (${t ? Math.round(c.parsed / t * 100) : 0}%)`; } } } } },
+    data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => Math.round(e[1])), backgroundColor: entries.map(e => CHAN_PIE[e[0]] || '#9CA3AF'), borderColor: '#fff', borderWidth: 2 }] },
+    options: window.pieOutOpts ? window.pieOutOpts(fEur) : { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } } } },
   });
 }
 // Point 2 · mini-courbe ROAS par semaine.
@@ -227,7 +227,7 @@ function renderRoasLine(weekAds) {
 }
 
 // Camembert CA par famille (top 8 + Autres).
-const PIE_COL = ['#A8854A', '#6E7B8B', '#1B9E6A', '#9B8AA3', '#E2574D', '#C8A35B', '#5B8DB8', '#D08B5B', '#B0B5BD'];
+const PIE_COL = (window.PIE_PALETTE || ['#4E79A7', '#59A14F', '#B07AA1', '#E15759', '#76B7B2', '#5B6BBF', '#FF9DA7', '#7C4DCB', '#9CA3AF']);
 function renderFamPie(famSrc, total) {
   const el = document.getElementById('prevFamPie'); if (!el || typeof Chart === 'undefined' || !famSrc || !famSrc.length) return;
   if (_pcharts.famPie) _pcharts.famPie.destroy();
@@ -238,7 +238,7 @@ function renderFamPie(famSrc, total) {
   _pcharts.famPie = new Chart(el.getContext('2d'), {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => PIE_COL[i % PIE_COL.length]), borderColor: '#fff', borderWidth: 2 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } }, tooltip: { callbacks: { label: c => { const t = data.reduce((s, v) => s + v, 0); return ` ${c.label} : ${fEur(c.parsed)} (${t ? Math.round(c.parsed / t * 100) : 0}%)`; } } } } },
+    options: window.pieOutOpts ? window.pieOutOpts(fEur) : { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { color: '#5b6068', font: { size: 10 }, boxWidth: 12 } } } },
   });
 }
 // Sommaire d'ancres à droite (réutilise le style #reportNav).

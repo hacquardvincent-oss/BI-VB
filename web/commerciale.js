@@ -412,7 +412,7 @@ function renderAll(rep, day) {
   box.innerHTML = banner + sections;
   // Donut off/full (Bilan)
   const c = rep.ca.n;
-  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#6E7B8B', '#A8854A'], borderColor: '#FFFFFF', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } });
+  if (c && (c.caFP > 0 || c.caOP > 0)) mk('opDonut', { type: 'doughnut', data: { labels: ['Full Price', 'Off Price'], datasets: [{ data: [Math.round(c.caFP), Math.round(c.caOP)], backgroundColor: ['#6E7B8B', '#B07AA1'], borderColor: '#FFFFFF', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(fEur) : { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA1AB', font: { size: 10 } } } } } });
   const bi = document.getElementById('bannerImport'); if (bi) bi.addEventListener('click', fullImport);
   if (EDIT) wireDnD(rep, day);
   balanceKgrids(box);
