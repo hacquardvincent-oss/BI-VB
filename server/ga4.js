@@ -150,6 +150,33 @@ async function postAll(propertyId, body) {
   return { rows, rowCount: total };
 }
 
+// Regroupe la longue traîne de pays du jeu `ga` (date×canal×pays) en « Autres » pour borner le
+// volume : on garde la France (toujours) + les TOP pays par sessions ; le reste est agrégé par
+// (date, canal). ⭐ Préserve EXACTEMENT les totaux France / International (France intacte ; « Autres »
+// = somme des petits pays, tous internationaux). engagementRate (ratio) est recomposé = engagées/sessions.
+// Indices ligne `ga` : 0 date · 1 canal · 2 pays · 3 sessions · 4 actifs · 5 nouveaux · 6 keyEvents ·
+// 7 revenu · 8 sessions engagées · 9 taux engagement · 10 ajouts panier · 11 checkouts · 12 achats.
+const GA_TOP_COUNTRIES = parseInt(process.env.GA4_TOP_COUNTRIES || '15', 10);
+function bucketGaCountries(rows) {
+  if (!(GA_TOP_COUNTRIES > 0) || !rows.length) return rows;
+  const CI = 2, SI = 3, ESI = 8, ERI = 9, SUM = [3, 4, 5, 6, 7, 8, 10, 11, 12];
+  const bySess = new Map();
+  for (const r of rows) bySess.set(r[CI], (bySess.get(r[CI]) || 0) + (parseFloat(r[SI]) || 0));
+  if (bySess.size <= GA_TOP_COUNTRIES) return rows;                       // rien à regrouper
+  const keep = new Set();
+  for (const c of bySess.keys()) if (String(c).toLowerCase() === 'france') keep.add(c);   // France toujours
+  for (const [c] of [...bySess.entries()].sort((a, b) => b[1] - a[1])) { if (keep.size >= GA_TOP_COUNTRIES) break; keep.add(c); }
+  const out = [], agg = new Map();
+  for (const r of rows) {
+    if (keep.has(r[CI])) { out.push(r); continue; }
+    const k = r[0] + '|' + r[1]; let a = agg.get(k);
+    if (!a) { a = r.slice(); a[CI] = 'Autres'; for (const i of SUM) a[i] = parseFloat(r[i]) || 0; agg.set(k, a); }
+    else { for (const i of SUM) a[i] += parseFloat(r[i]) || 0; }
+  }
+  for (const a of agg.values()) { a[ERI] = a[SI] > 0 ? a[ESI] / a[SI] : 0; out.push(a); }
+  return out;
+}
+
 // ── Rapport principal : date × canal × pays (device retiré pour alléger le volume) ──
 async function fetchGA4(propertyId, startDate, endDate) {
   const data = await postAll(propertyId, {
@@ -167,7 +194,7 @@ async function fetchGA4(propertyId, startDate, endDate) {
     const m = r.metricValues.map(x => x.value);
     return [d[0], d[1], d[2], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]];
   });
-  return { hdrs: HDRS.slice(), rows };
+  return { hdrs: HDRS.slice(), rows: bucketGaCountries(rows) };
 }
 
 // ── Landing pages × conversion (× pays → filtrable par dimension) ───────────
