@@ -566,8 +566,10 @@ async function refresh(opts = {}) {
     () => safe(`campaigns ${P}`, async () => store.setDataset('gacampaigns', P, { rows: await fetchCampaigns(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campnr ${P}`, async () => store.setDataset('gacampnr', P, { rows: await fetchCampaignsNewReturning(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
     () => safe(`campaignland ${P}`, async () => store.setDataset('gacampaignland', P, { rows: await fetchCampaignLanding(propertyId, s, e), date_min: s, date_max: e, uploaded_at: ts() })),
-    () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', P, toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
-    () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', P, toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
+    // Jeux DATÉS time-series (date×…) → slot N CONTINU comme l'OMS (et comme gasess/gatot) : la
+    // période N-1 s'AJOUTE au même slot, le N-1 d'un report se dérive par filtre de date. UN seul jeu.
+    () => safe(`campdaily ${P}`, async () => mDay('gacampdaily', 'N', toDataset(await fetchCampaignsDaily(propertyId, s, e), s, e), s, e)),
+    () => safe(`pagedaily ${P}`, async () => mDay('gapagedaily', 'N', toDataset(await fetchPageDaily(propertyId, s, e), s, e), s, e)),
     () => safe(`emailhour ${P}`, async () => store.setDataset('gaemailhour', P, toDataset(await fetchHourlyChannel(propertyId, s, e), s, e))),
     () => safe(`trafic horaire ${P}`, async () => mSess('gahourly', toDataset(await fetchHourlyTraffic(propertyId, s, e), s, e), s, e)),
   ];
@@ -585,8 +587,15 @@ async function refresh(opts = {}) {
   await runPool(nTasks, POOL);
   let n1Count = null;
   if (n1) {
-    await safe('GA N-1', async () => { let dataN1 = await fetchGA4(propertyId, n1.start, n1.end); n1Count = dataN1.rows.length; mDay('ga', 'N1', toDataset(dataN1, n1.start, n1.end), n1.start, n1.end); dataN1 = null; });
+    // N-1 du jeu `ga` → fusionné dans le MÊME slot N continu (pas de slot N1 séparé) : ga-N couvre N+N-1,
+    // le N-1 d'un report se dérive par tranche de date (comme l'OMS). Les jeux datés font de même ci-dessous.
+    await safe('GA N-1', async () => { let dataN1 = await fetchGA4(propertyId, n1.start, n1.end); n1Count = dataN1.rows.length; mDay('ga', 'N', toDataset(dataN1, n1.start, n1.end), n1.start, n1.end); dataN1 = null; });
     await runPool(tasksFor('N1', n1.start, n1.end), POOL);
+  }
+  // Nettoyage des anciens slots N1 des jeux time-series désormais CONTINUS (évite qu'un ga-N1 périmé
+  // d'un import précédent serve de repli alors que le N-1 se dérive maintenant du slot N continu).
+  for (const src of ['ga', 'gacampdaily', 'gapagedaily', 'gahourly', 'gasess', 'gatot']) {
+    try { store.delDataset(src, 'N1'); } catch (e) { /* best-effort */ }
   }
   return { period: { start: nStart, end: nEnd }, rowsN, rowsN1: n1Count, warnings };
 }
