@@ -104,15 +104,37 @@ async function renderState() {
     const omsMonths = Object.keys(cov.oms || {}).sort().map(frMonth);
     const omsGaps = gapsOf(cov.oms || {});
     const gapNote = omsMonths.length ? `<div class="note" style="margin-top:8px"><b>📅 OMS — ${omsMonths.length} mois en base :</b> ${esc(omsMonths.join(', '))}.${omsGaps.length ? `<br><span style="color:var(--t3)">Les mois non listés entre le 1ᵉʳ et le dernier sont vides (l'amplitude est souvent étirée par d'anciennes données isolées, ex. un mois chargé bien plus tard). Charge les plages voulues à gauche pour compléter — chaque bloc s'ajoute sans rien écraser.</span>` : ''}</div>` : '';
+    // 🧹 Maintenance : suppression par JEU (source + période) pour libérer de l'espace en base.
+    const SRCLBL = Object.fromEntries(SOURCES);
+    const maintRows = list.slice().sort((a, b) => (b.row_count || 0) - (a.row_count || 0)).map(d => {
+      const rng = (d.date_min || d.date_max) ? `${d.date_min ? frd(d.date_min) : '…'} → ${d.date_max ? frd(d.date_max) : '…'}` : '—';
+      return `<tr><td><b>${esc(SRCLBL[d.source] || d.source)}</b> <span class="note" style="font-size:10px">${esc(d.source)}-${esc(d.period)}</span></td><td style="text-align:right">${fInt(d.row_count || 0)} l.</td><td style="font-size:11px">${rng}</td><td style="text-align:right"><button class="btn" data-del="${esc(d.source)}¦${esc(d.period)}" style="padding:2px 9px;color:var(--r)">🗑 Supprimer</button></td></tr>`;
+    }).join('');
+    const maintPanel = maintRows ? `<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:700;color:var(--t2)">🧹 Libérer de l'espace en base — supprimer un jeu de données</summary>
+      <div class="note" style="margin:6px 0">Trié par volume (lignes). Supprime un jeu (<b>source + période</b>) de la base Postgres. ⚠️ <b>Irréversible</b> → il faudra le réimporter. Ex. <b>y2 / N1</b> = marketplace 2025. Les jeux <b>GA4 datés</b> (gapagesrcdaily, galandingdaily, gacampaignlanddaily) sont souvent les plus volumineux.</div>
+      <table style="font-size:12px;width:100%"><thead><tr><th>Jeu</th><th style="text-align:right">Lignes</th><th>Plage</th><th></th></tr></thead><tbody>${maintRows}</tbody></table></details>` : '';
     el.innerHTML = rows ? `<table style="font-size:12px;width:100%"><thead><tr><th>Source</th><th>Amplitude</th><th style="text-align:right">Lignes</th><th style="text-align:center">Couverture</th><th style="text-align:right">MAJ</th></tr></thead><tbody>${rows}</tbody></table>
       ${gapNote}
-      <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>`
-      : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>`;
+      <div class="note" style="margin-top:8px">« <b>Amplitude</b> » = du 1er au dernier jour chargé ; « <b>Couverture</b> » = mois réellement remplis (révèle les trous). Pour OMS / Retours / Y2, le N‑1 d'un report se déduit des dates sélectionnées dans le module.${missing.length ? ` · Non chargé : ${esc(missing.join(', '))}.` : ''}</div>
+      ${maintPanel}`
+      : `<div class="note">Aucune donnée en base. Charge une première période à gauche (OMS, GA4, Y2…).</div>${maintPanel}`;
     el.querySelectorAll('.cov-toggle').forEach(a => {
       a.onclick = ev => {
         ev.preventDefault(); const src = a.dataset.src; const d = document.getElementById('covd_' + src);
         if (!d) return; const open = d.style.display === 'none'; d.style.display = open ? '' : 'none';
         if (open) { const dd = document.getElementById('covdays_' + src); if (dd && dd.dataset.loaded === '0') { dd.dataset.loaded = '1'; loadDayDetail(src, dd); } }
+      };
+    });
+    // Suppression d'un jeu (libérer de l'espace).
+    el.querySelectorAll('[data-del]').forEach(b => {
+      b.onclick = async () => {
+        const [src, per] = b.dataset.del.split('¦');
+        if (!confirm(`Supprimer définitivement le jeu « ${src}-${per} » de la base ? Il faudra le réimporter.`)) return;
+        b.disabled = true; b.textContent = '⏳ …';
+        try {
+          const r = await fetch(`/api/ingest/${encodeURIComponent(src)}/${encodeURIComponent(per)}`, { method: 'DELETE' });
+          if (r.ok) renderState(); else { b.disabled = false; b.textContent = '🗑 Supprimer'; alert('Échec de la suppression.'); }
+        } catch (e) { b.disabled = false; b.textContent = '🗑 Supprimer'; alert('Erreur réseau.'); }
       };
     });
   } catch (e) { el.innerHTML = `<div class="note">État indisponible.</div>`; }
