@@ -21,6 +21,8 @@ let DEMO_REF_DATE = null;  // démo : dernière date couverte par le snapshot �
 function canEditView() { return IS_ADMIN || (isMyView(CURRENT_MODULE) && CAN_EDIT); }
 function canCreateView() { return IS_ADMIN || CAN_EDIT; }
 let EDIT_VIEW = null;      // mode édition WYSIWYG : clé de la vue en cours d'édition (null = rendu normal)
+let CURRENT_ENTITY = 'digital'; // espace/entité active (surcouche organisation)
+try { const _e = localStorage.getItem('bi_entity'); if (_e) CURRENT_ENTITY = _e; } catch (x) { /* localStorage indispo */ }
 let LAST_REP = null, LAST_STATUS = [];
 const DIM_LABEL = { global: 'FR + Inter', fr: 'France', inter: 'International' };
 // Libellé d'une dimension, y compris un pays précis (c:<pays> → « 🌍 <pays> »).
@@ -28,7 +30,30 @@ const dimLabelOf = d => (d && d.indexOf && d.indexOf('c:') === 0) ? ('🌍 ' + d
 
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
-const MODULE_ORDER = ['direction', 'dailysoft', 'hebdo', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full'];
+const MODULE_ORDER = ['direction', 'dailysoft', 'hebdo', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full',
+  'achats_reassort', 'achats_selltrough', 'achats_demarque'];
+// ── SURCOUCHE « ESPACES » (entités de l'entreprise) : chaque espace regroupe SES typologies de reporting.
+// Un module non tagué appartient à 'digital' (l'existant). Le sélecteur d'espace (pastille header) filtre
+// la liste des types d'analyse selon l'espace actif → 1 seul contrôle, pas de 2ᵉ barre de navigation.
+const ENTITIES = {
+  digital:    { icon: '💻', label: 'Digital',    desc: 'E-commerce : trafic, conversion, acquisition, offre en ligne.' },
+  direction:  { icon: '🏛️', label: 'Direction',  desc: 'Vue consolidée COMEX : CA multi-canal, marge, budget, atterrissage.' },
+  retail:     { icon: '🏬', label: 'Retail',     desc: 'Boutiques physiques : CA par magasin, indice de vente, ship-from-store, stock magasin.' },
+  achats:     { icon: '🛒', label: 'Achats',     desc: 'Merchandising / buying : sell-through, couverture, réassort, démarque, drops.' },
+  wholesale:  { icon: '🤝', label: 'Wholesale',  desc: 'B2B / revendeurs : CA par compte (GL, Printemps, PDT, Lulli), sell-in/out, arbitrage.' },
+  finance:    { icon: '💶', label: 'Finance',    desc: 'P&L simplifié : CA net, marge, démarque/retours, budget vs réalisé, variance.' },
+  collection: { icon: '👗', label: 'Collection', desc: 'Studio / produit : perf par collection/drop, PAP vs accessoires, retours & motifs, funnel produit.' },
+};
+const ENTITY_ORDER = ['digital', 'direction', 'retail', 'achats', 'wholesale', 'finance', 'collection'];
+const moduleEntity = k => (MODULES[k] && MODULES[k].entity) || 'digital';
+// Reportings prévus par espace (affichés en aperçu tant que l'espace n'a pas encore de modules livrés).
+const ENTITY_PLANNED = {
+  direction: ['Scorecard consolidé multi-canal (Digital + Retail + Wholesale) vs N-1 & budget', 'CA & poids par canal, croissance', 'Top alertes stratégiques (€) tous canaux', 'CA net & COS global, atterrissage saison'],
+  retail: ['CA par boutique vs N-1 vs objectif, top/flop magasins', 'KPI boutique : panier moyen, indice de vente, CA/vendeur', 'Ship-from-store (contribution e-com des boutiques)', 'Stock & ruptures magasin, réassort inter-magasins'],
+  wholesale: ['CA par compte (Galeries Lafayette, Printemps, PDT, Lulli) vs N-1', 'Corner vs SFS vs dropshipping', 'Arbitrage produit fort/faible par canal', 'Top produits par enseigne'],
+  finance: ['P&L simplifié : CA brut → net (retours, annulations, démarque) → marge', 'Impact € démarque / retours sur la marge, COS média', 'Budget vs réalisé & atterrissage', 'Décomposition de variance ΔCA'],
+  collection: ['Perf par collection / drop & catégorie (PAP vs accessoires)', 'Sell-through par modèle, nouveautés vs rééditions', 'Taux de retour par produit + motifs (taille / qualité)', 'Funnel produit (vues → panier → achat)'],
+};
 const MODULES = {
   direction: {
     icon: '🎯', label: 'Direction', preset: 'month',
@@ -119,6 +144,25 @@ const MODULES = {
     intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
     layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
+  },
+  // ── Espace ACHATS / Merchandising (buying, OTB, réassort) : recompose des cartes existantes ──
+  achats_reassort: {
+    entity: 'achats', icon: '🔔', label: 'Réassort & alertes', preset: 'month',
+    intro: 'Réassort prioritaire : demande « prévenez-moi » sur ruptures, couverture de stock et top produits à recommander.',
+    files: { required: ['oms'], optional: ['bis', 'ref'] },
+    layout: ['stockalerts', 'stockalertstop', 'stockcouv', 'piecesfamchannel', 'produits'],
+  },
+  achats_selltrough: {
+    entity: 'achats', icon: '📦', label: 'Sell-through & collection', preset: 'all',
+    intro: 'Écoulement de l\'offre : CA & pièces par famille, comparaison de saison (drops E26 vs E25), rentabilité, plein/démarqué.',
+    files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
+    layout: ['famille', 'saisoncompare', 'saison', 'renta', 'fulloff'],
+  },
+  achats_demarque: {
+    entity: 'achats', icon: '🏷️', label: 'Démarque & invendus', preset: 'all',
+    intro: 'Profondeur de démarque par famille, comparatif d\'offre (à réintégrer / démarqués sans vente) et invendus à écouler.',
+    files: { required: ['oms'], optional: ['offre', 'ref'] },
+    layout: ['demarque', 'fulloff', 'offrecompare', 'famille', 'produits'],
   },
 };
 
@@ -596,9 +640,40 @@ function switchModule(mod) {
   if (prBtn) { prBtn.click(); return; } // le raccourci applique la période ET recharge
   loadReport();
 }
+// Pastille « espace » dans le header (workspace switcher) : 1 contrôle, pas de 2ᵉ barre de nav.
+function renderEntitySwitch() {
+  const el = document.getElementById('entitySwitch'); if (!el) return;
+  const hasMods = e => MODULE_ORDER.some(k => MODULES[k] && moduleEntity(k) === e);
+  const opts = ENTITY_ORDER.map(e => { const m = ENTITIES[e]; return `<option value="${e}"${e === CURRENT_ENTITY ? ' selected' : ''}>${m.icon} ${esc(m.label)}${hasMods(e) ? '' : ' · à venir'}</option>`; }).join('');
+  el.innerHTML = `<select id="entitySelect" class="dt" title="Espace / entité de l'entreprise" style="font-weight:700;background:var(--accent-soft, #F3ECE0)">${opts}</select>`;
+  const s = document.getElementById('entitySelect'); if (s && !s._wired) { s._wired = true; s.addEventListener('change', () => switchEntity(s.value)); }
+}
+// Change d'espace : filtre les types de reporting, bascule sur le 1er module de l'espace (ou aperçu « à venir »).
+function switchEntity(e) {
+  if (!ENTITIES[e] || e === CURRENT_ENTITY) return;
+  CURRENT_ENTITY = e;
+  try { localStorage.setItem('bi_entity', e); } catch (x) { /* localStorage indispo */ }
+  const first = MODULE_ORDER.find(k => MODULES[k] && moduleEntity(k) === e && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(k)))
+    || Object.keys(MODULES).find(k => moduleEntity(k) === e);
+  if (first) { CURRENT_MODULE = first; initModules(); switchModule(first); }
+  else { initModules(); renderEntityPlaceholder(e); }
+}
+// Aperçu « espace en préparation » (structure prête, reportings à venir) — vend la vision en démo.
+function renderEntityPlaceholder(e) {
+  const box = document.getElementById('report'); if (!box) return;
+  const m = ENTITIES[e], planned = ENTITY_PLANNED[e] || [];
+  box.innerHTML = `<div class="card"><h3>${m.icon} Espace ${esc(m.label)} — reportings en préparation</h3>
+    <div class="note" style="margin:0 0 10px">${esc(m.desc)}</div>
+    <div class="note" style="margin:0 0 6px"><b>Reportings prévus pour cet espace :</b></div>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.8">${planned.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+    <div class="note" style="margin-top:12px">🚧 La surcouche « espaces » est en place. L'espace <b>🛒 Achats</b> est déjà fonctionnel — sélectionne-le pour un exemple peuplé avec tes vraies données.</div></div>`;
+  const mh = document.getElementById('modHint'); if (mh) mh.innerHTML = `<b>${m.icon} ${esc(m.label)}</b> — ${esc(m.desc)}`;
+}
 function initModules() {
+  renderEntitySwitch();
   const bar = document.getElementById('moduleBar');
   let order = MODULE_ORDER.filter(k => MODULES[k]).concat(Object.keys(MODULES).filter(k => !MODULE_ORDER.includes(k)));
+  order = order.filter(k => moduleEntity(k) === CURRENT_ENTITY);   // surcouche : types de l'espace actif
   if (ALLOWED_VIEWS) order = order.filter(k => ALLOWED_VIEWS.includes(k)); // RBAC : vues autorisées
   const myKeys = Object.keys(MY_VIEWS);
   const opt = (val, label) => `<option value="${esc(val)}"${val === CURRENT_MODULE ? ' selected' : ''}>${esc(label)}</option>`;
@@ -3772,7 +3847,13 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   await loadTables();        // registre global des tableaux réutilisables (page Création)
   // Lien profond ?view= : ouvre directement une vue donnée (si autorisée RBAC).
   const qView = new URLSearchParams(location.search).get('view');
-  if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) CURRENT_MODULE = qView;
+  if (qView && MODULES[qView] && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(qView))) { CURRENT_MODULE = qView; CURRENT_ENTITY = moduleEntity(qView); }
+  // Aligne l'espace actif (persisté) avec le module courant : si le module ne relève pas de l'espace,
+  // on bascule sur le 1er module de l'espace, ou on retombe sur Digital si l'espace n'a pas de module.
+  if (!isMyView(CURRENT_MODULE) && moduleEntity(CURRENT_MODULE) !== CURRENT_ENTITY) {
+    const first = MODULE_ORDER.find(k => MODULES[k] && moduleEntity(k) === CURRENT_ENTITY && (!ALLOWED_VIEWS || ALLOWED_VIEWS.includes(k)));
+    if (first) CURRENT_MODULE = first; else CURRENT_ENTITY = 'digital';
+  }
   initModules();
   const m = MODULES[CURRENT_MODULE] || {};
   CURRENT_DIM = m.dim || 'global';
