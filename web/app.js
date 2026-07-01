@@ -31,7 +31,8 @@ const dimLabelOf = d => (d && d.indexOf && d.indexOf('c:') === 0) ? ('🌍 ' + d
 // ── Briques métier : 1 moteur, des vues claires. Chaque brique = layout + fichiers ──
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
 const MODULE_ORDER = ['direction', 'dailysoft', 'hebdo', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full',
-  'achats_reassort', 'achats_selltrough', 'achats_demarque'];
+  'achats_reassort', 'achats_selltrough', 'achats_demarque',
+  'dir_synthese', 'dir_pilotage', 'ws_comptes', 'ws_arbitrage', 'col_saison', 'col_desir', 'col_retours'];
 // ── SURCOUCHE « ESPACES » (entités de l'entreprise) : chaque espace regroupe SES typologies de reporting.
 // Un module non tagué appartient à 'digital' (l'existant). Le sélecteur d'espace (pastille header) filtre
 // la liste des types d'analyse selon l'espace actif → 1 seul contrôle, pas de 2ᵉ barre de navigation.
@@ -56,8 +57,8 @@ const ENTITY_PLANNED = {
 };
 const MODULES = {
   direction: {
-    icon: '🎯', label: 'Direction', preset: 'month',
-    intro: 'Synthèse 360 pour la direction — bilan, KPI clés, cumul du mois et top produits en un écran.',
+    icon: '🎯', label: 'Synthèse 360', preset: 'month',
+    intro: 'Synthèse 360 e-commerce — bilan, KPI clés, cumul du mois et top produits en un écran.',
     files: { required: ['oms'], optional: ['ga', 'ads'] },
     layout: ['kpi', 'cumul', 'ca', 'ads', 'funnel', 'produits'],
   },
@@ -163,6 +164,51 @@ const MODULES = {
     intro: 'Profondeur de démarque par famille, comparatif d\'offre (à réintégrer / démarqués sans vente) et invendus à écouler.',
     files: { required: ['oms'], optional: ['offre', 'ref'] },
     layout: ['demarque', 'fulloff', 'offrecompare', 'famille', 'produits'],
+  },
+  // ── Espace DIRECTION (COMEX) : synthèse consolidée & pilotage ──
+  dir_synthese: {
+    entity: 'direction', icon: '🏛️', label: 'Synthèse groupe', preset: 'month',
+    intro: 'Vue consolidée : bilan & KPI, cumul du mois, CA e-commerce + marketplace, cross-canal et décomposition de variance vs N-1.',
+    files: { required: ['oms'], optional: ['ga', 'y2', 'ads'] },
+    layout: ['kpi', 'cumul', 'ca', 'marketplace', 'crosschannel', 'variance'],
+  },
+  dir_pilotage: {
+    entity: 'direction', icon: '🧭', label: 'Plan d\'action & leviers', preset: 'month',
+    intro: 'Leviers classés par impact €, plan d\'action par équipe, familles et top produits — pour arbitrer vite.',
+    files: { required: ['oms'], optional: ['ga', 'ads', 'ret'] },
+    layout: ['actionplan', 'variance', 'famille', 'produits'],
+  },
+  // ── Espace WHOLESALE (B2B / revendeurs) : comptes & arbitrage ──
+  ws_comptes: {
+    entity: 'wholesale', icon: '🤝', label: 'Comptes & enseignes', preset: 'all',
+    intro: 'CA par compte (Galeries Lafayette / Printemps / PDT / Lulli) vs N-1, corner vs ship-from-store vs dropshipping, familles par enseigne.',
+    files: { required: ['oms'], optional: ['y2', 'ref'] },
+    layout: ['marketplace', 'mpfamilles'],
+  },
+  ws_arbitrage: {
+    entity: 'wholesale', icon: '🔀', label: 'Cross-canal & arbitrage', preset: 'all',
+    intro: 'Lecture cross-canal (EShop / GL / Printemps / PDT / Lulli) et arbitrage produit fort sur un canal / faible sur l\'autre.',
+    files: { required: ['oms'], optional: ['y2', 'ref', 'impl'] },
+    layout: ['crosschannel', 'mpfamilles'],
+  },
+  // ── Espace COLLECTION (Studio / produit) : saison, désir, retours qualité ──
+  col_saison: {
+    entity: 'collection', icon: '👗', label: 'Collection & saison', preset: 'all',
+    intro: 'Performance de la collection : comparaison de saison (E26 vs E25), sell-through par famille, rentabilité.',
+    files: { required: ['oms'], optional: ['impl', 'ref', 'ret'] },
+    layout: ['saisoncompare', 'saison', 'famille', 'renta'],
+  },
+  col_desir: {
+    entity: 'collection', icon: '✨', label: 'Désir produit & funnel', preset: 'all',
+    intro: 'Désir produit : funnel GA (vues → panier → achat), top/reconquête produits et poids plein/démarqué.',
+    files: { required: ['oms'], optional: ['ga', 'ref'] },
+    layout: ['itemfunnel', 'produits', 'fulloff'],
+  },
+  col_retours: {
+    entity: 'collection', icon: '↩️', label: 'Retours & qualité', preset: 'all',
+    intro: 'Feedback création : motifs de retour (taille / qualité / coupe), produits les plus retournés et retours par marché.',
+    files: { required: ['oms'], optional: ['ret', 'ref'] },
+    layout: ['returnreasons', 'returnprod', 'returngeo'],
   },
 };
 
