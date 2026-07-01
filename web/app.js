@@ -1294,7 +1294,7 @@ function renderReport(rep) {
         <div class="grid cols2">${d.byCanal.map(c => `<div style="margin-bottom:6px"><div class="note" style="margin:0 0 3px"><b>${esc(c.canal)}</b> — ${fInt(c.qte)} pièces · ${fEur(c.ca)}</div><table style="font-size:11px"><tbody>${c.top.map(p => `<tr><td title="${esc(p.des)}">${esc((p.des || '').slice(0, 32))}</td><td style="text-align:right">${fInt(p.qte)}</td><td style="text-align:right">${fEur(p.ca)}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>` : '';
       detailHtml = split + incHtml + byStatut + `<div class="grid cols2" style="margin-top:6px"><div>${stores}</div><div>${prods}</div></div>` + byCanal;
     }
-    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes annulées (source OMS / WSHOP)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>3 lectures du taux</b> (même période, hors marketplace) : <b>commande</b> = commandes annulées ÷ commandes · <b>pièces</b> = ${fInt(cx.qteAnnulee)} pièces non livrées ÷ pièces commandées · <b>CA</b> = ${fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime)} non livré ÷ CA EShop (<b>c'est celui du scorecard</b>, croisé sur le CA comme le taux de retour). Si tu comptes en <b>pièces</b> (ton TCD), regarde la tuile « Taux annul. (pièces) ». <b>Annulations</b> = statut <b>Annulée</b> (Cancelled). Les <b>expéditions incomplètes</b> (ShippedIncomplete) sont comptées <b>à part</b> et n'entrent pas dans le taux. ⚠️ Couleur inversée. ℹ️ Statut WSHOP <b>live</b> ≠ export OMS figé. À ne pas confondre avec les retours.</div></div>`;
+    cancellationsCard = `<div class="card"><h3>⛔ Annulations EShop — commandes annulées (source OMS / WSHOP)</h3><div class="kgrid">${tiles}</div>${detailHtml}<div class="note"><b>Taux du scorecard</b> = <b>CA non livré total ÷ CA EShop</b> = (${fEur(cx.caNonLivre != null ? cx.caNonLivre : cx.caAnnuleEstime)} annulé + ${fEur(cx.caIncomplete || 0)} expédié incomplet) ÷ CA EShop — comme le TCD de référence, qui additionne les lignes <b>Quantité non livré &gt; 0</b> (Annulée <b>et</b> Expédiée Incomplète). Autres lectures (hors marketplace) : <b>commande</b> = commandes annulées ÷ commandes · <b>pièces</b> = ${fInt(cx.qteAnnulee)} pièces non livrées ÷ pièces commandées. Si tu comptes en <b>pièces</b> (ton TCD), regarde la tuile « Taux annul. (pièces) ». <b>Annulations</b> = statut <b>Annulée</b> (Cancelled). Les <b>expéditions incomplètes</b> (ShippedIncomplete) sont comptées <b>à part</b> et n'entrent pas dans le taux. ⚠️ Couleur inversée. ℹ️ Statut WSHOP <b>live</b> ≠ export OMS figé. À ne pas confondre avec les retours.</div></div>`;
   }
 
   // Retours
@@ -2615,10 +2615,10 @@ function renderScorecard(title, pack, showDetails, sig) {
   if (!pack || !pack.n || !pack.n.kpi) return '';
   const n = pack.n, n1 = pack.n1 || {};
   const k = n.kpi, k1 = n1.kpi || {};
-  // Taux d'annulation du scorecard = CA non livré ÷ CA EShop (croisé sur le CA, comme le taux de retour)
-  // → cohérent avec le report de référence (ex. 3 998 € non livré ÷ CA EShop). Le détail commande/pièces
-  // reste consultable dans la carte Annulations.
-  const annCA = (c, kk) => (c && kk && kk.ca > 0) ? (c.caNonLivre != null ? c.caNonLivre : c.caAnnuleEstime) / kk.ca : null;
+  // Taux d'annulation du scorecard = CA NON LIVRÉ TOTAL ÷ CA EShop, croisé sur le CA comme le report de
+  // référence (TCD) : le CA non livré additionne les commandes ANNULÉES *et* les expéditions INCOMPLÈTES
+  // (toute ligne avec Quantité non livré > 0). Le détail annulée / incomplète reste dans la carte Annulations.
+  const annCA = (c, kk) => (c && kk && kk.ca > 0) ? ((c.caNonLivre || 0) + (c.caIncomplete || 0)) / kk.ca : null;
   const ann = annCA(n.cancel, k);
   const ann1 = annCA(n1.cancel, k1);
   const cosD = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');

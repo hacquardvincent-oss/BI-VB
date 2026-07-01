@@ -743,18 +743,31 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     // taux. Le feed `ret` (orderRefund embarqué dans les commandes de la période) SOUS-COMPTE fortement :
     // il ne voit que les remboursements des commandes PLACÉES dans la période, alors que les retours
     // arrivent en différé (validés des semaines après la commande). → règle métier demandée : date de validation.
-    { const rp = store.getDataset('retprod', 'N');
-      if (rp && rp.rows && rp.map && rp.map.date !== undefined && rp.map.montant !== undefined) {
+    { const rp = store.getDataset('retprod', 'N'), rp1 = store.getDataset('retprod', 'N1');
+      const validOk = ds => ds && ds.rows && ds.map && ds.map.date !== undefined && ds.map.montant !== undefined;
+      if (validOk(rp)) {
         const money = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : 0; };
         const qOf = v => parseInt((v == null ? '0' : v).toString().replace(/\s/g, '')) || 0;
-        const rpRows = calc.filterRows(rp.rows, rp.map, from, to, isAll);   // filtré par DATE DE VALIDATION
-        if (rpRows.length) {
-          const caV = rpRows.reduce((s, r) => s + money(r[rp.map.montant]), 0);
-          const qteV = rpRows.reduce((s, r) => s + qOf(r[rp.map.qte]), 0);
-          const byR = {}; rpRows.forEach(r => { const rsn = ((rp.map.raison !== undefined ? r[rp.map.raison] : '') || '(non précisé)').toString().trim() || '(non précisé)'; const e = byR[rsn] || (byR[rsn] = { reason: rsn, montant: 0, count: 0, qte: 0 }); e.montant += money(r[rp.map.montant]); e.qte += qOf(r[rp.map.qte]); e.count += 1; });
+        // Retours validés (DATE DE VALIDATION) sur une fenêtre [a,b] pour un jeu donné → {caRetourne, qte, reasons}.
+        const validReturns = (ds, a, b, all) => {
+          const rows = calc.filterRows(ds.rows, ds.map, a, b, all);
+          if (!rows.length) return null;
+          const byR = {};
+          const caV = rows.reduce((s, r) => { const rsn = ((ds.map.raison !== undefined ? r[ds.map.raison] : '') || '(non précisé)').toString().trim() || '(non précisé)'; const m = money(r[ds.map.montant]); const e = byR[rsn] || (byR[rsn] = { reason: rsn, montant: 0, count: 0, qte: 0 }); e.montant += m; e.qte += qOf(r[ds.map.qte]); e.count += 1; return s + m; }, 0);
+          const qteV = rows.reduce((s, r) => s + qOf(r[ds.map.qte]), 0);
+          return { caRetourne: Math.round(caV), qte: qteV, reasons: Object.values(byR).sort((x, y) => y.montant - x.montant) };
+        };
+        const vN = validReturns(rp, from, to, isAll);
+        if (vN) {
           returns.validBased = true;
-          returns.n = Object.assign({}, rN, { caRetourne: Math.round(caV), qte: qteV, reasons: Object.values(byR).sort((a, b) => b.montant - a.montant) });
-          returns.tauxRetour = caN.caEShop > 0 ? caV / caN.caEShop : null;
+          returns.n = Object.assign({}, rN, vN);
+          returns.tauxRetour = caN.caEShop > 0 ? vN.caRetourne / caN.caEShop : null;
+          // N-1 aussi en date de validation (jeu retprod-N1 s'il existe, sinon retprod-N tranché sur la fenêtre
+          // N-1) → le « vs N-1 » compare deux taux datés VALIDATION cohérents (plus de -90% factice).
+          if (!noN1) {
+            const vN1 = validOk(rp1) ? validReturns(rp1, cf, ct, false) : validReturns(rp, cf, ct, false);
+            if (vN1) returns.n1 = Object.assign({}, returns.n1 || {}, vN1);
+          }
         }
       }
     }
