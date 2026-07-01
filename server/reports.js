@@ -743,9 +743,13 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     // taux. Le feed `ret` (orderRefund embarqué dans les commandes de la période) SOUS-COMPTE fortement :
     // il ne voit que les remboursements des commandes PLACÉES dans la période, alors que les retours
     // arrivent en différé (validés des semaines après la commande). → règle métier demandée : date de validation.
+    // Si le jeu `ret` uploadé porte déjà une colonne « Date validation » (export figé du client), il FAIT
+    // FOI : on ne l'écrase pas par le retprod reconstruit de WSHOP (qui sous-compte). Sinon (ret = feed
+    // WSHOP embarqué, daté création), on le remplace par retprod (daté validation, plus complet).
+    const retAlreadyValidation = retN && retN.map && retN.map.date_valid !== undefined;
     { const rp = store.getDataset('retprod', 'N'), rp1 = store.getDataset('retprod', 'N1');
       const validOk = ds => ds && ds.rows && ds.map && ds.map.date !== undefined && ds.map.montant !== undefined;
-      if (validOk(rp)) {
+      if (validOk(rp) && !retAlreadyValidation) {
         const money = v => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : 0; };
         const qOf = v => parseInt((v == null ? '0' : v).toString().replace(/\s/g, '')) || 0;
         // Retours validés (DATE DE VALIDATION) sur une fenêtre [a,b] pour un jeu donné → {caRetourne, qte, reasons}.
