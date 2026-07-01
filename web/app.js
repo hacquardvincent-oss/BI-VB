@@ -1436,10 +1436,11 @@ function renderReport(rep) {
       <div class="kc"><div class="l">Demandes (abonnements)</div><div class="v">${fInt(totAbo)}</div></div>
       <div class="kc"><div class="l">En attente (toujours en rupture)</div><div class="v">${fInt(totWait)}</div></div></div>`;
     const hasRayon = all.some(a => a.rayon);
-    const ar = all.slice(0, 20).map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 44))}</td>${hasRayon ? `<td>${esc(a.rayon || '—')}</td>` : ''}<td>${fInt(a.count)}</td><td>${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
-    stockAlertsCard = `<div class="card"><h3>🔔 Produits les plus demandés en rupture (back-in-stock)</h3>${kpis}
-      <table style="margin-top:10px"><thead><tr><th>#</th><th>Produit</th>${hasRayon ? '<th>Rayon</th>' : ''}<th>Abonnements</th><th>En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table>
-      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP, ou export uploadé — email écarté) → demande non servie, à prioriser au réassort. <b>Abonnements</b> = nombre de demandes sur le produit ; <b>En attente</b> = clients pas encore notifiés (produit toujours en rupture). Top 20 par nombre de demandes.</div></div>`;
+    // Liste COMPLÈTE des produits/références en alerte sur la période (triée par nb d'inscrits), scrollable.
+    const ar = all.map((a, i) => `<tr><td>${i + 1}</td><td title="${esc(a.name)}">${esc((a.name || '').slice(0, 60))}</td>${hasRayon ? `<td>${esc(a.rayon || '—')}</td>` : ''}<td style="text-align:right">${fInt(a.count)}</td><td style="text-align:right">${fInt(a.waiting)}</td><td>${esc(a.last || '—')}</td></tr>`).join('');
+    stockAlertsCard = `<div class="card"><h3>🔔 Références en alerte stock (back-in-stock) — ${fInt(totProd)} produits sur la période</h3>${kpis}
+      <div style="max-height:520px;overflow:auto;margin-top:10px;border:1px solid var(--br);border-radius:8px"><table style="margin:0"><thead><tr style="position:sticky;top:0;background:var(--s);z-index:1"><th>#</th><th>Produit / référence</th>${hasRayon ? '<th>Rayon</th>' : ''}<th style="text-align:right">Inscrits</th><th style="text-align:right">En attente</th><th>Dernier</th></tr></thead><tbody>${ar}</tbody></table></div>
+      <div class="note">Clients ayant demandé « prévenez-moi quand dispo » sur les ruptures (source API back-in-stock WSHOP, ou export uploadé — email écarté) → demande non servie, à prioriser au réassort. <b>Inscrits</b> = nombre de personnes inscrites sur le produit ; <b>En attente</b> = pas encore notifiées (produit toujours en rupture). <b>Liste complète</b> triée par nombre d'inscrits (fais défiler).</div></div>`;
   }
 
   // 🔔 Top 20 produits par alertes stock sur les 2 dernières semaines (jeu daté `bisprod`, repli sur l'agrégat `bis`).
