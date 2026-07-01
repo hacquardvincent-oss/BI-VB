@@ -2641,6 +2641,38 @@ function calcByCountry(rows, map) {
     pm: v.orders.size > 0 ? v.ca / v.orders.size : 0,
   })).sort((a, b) => b.ca - a.ca);
 }
+// Ventilation par MAGASIN (Retail) : groupe le CA par NOM MAGASIN (hors marketplace). L'entrepôt
+// (« webstore… ») = e-commerce pur ; les autres magasins = ship-from-store + commandes prises en
+// boutique (Instore). Sert l'espace Retail. Attendu : lignes AVANT filtre Outstore (pour inclure l'Instore).
+function calcByStore(rows, map) {
+  const pi = map.prix, qi = map.qte, ni = map.num, ti = map.type, mi = map.mag, li = map.lieu;
+  if (mi === undefined) return null;
+  const isEnt = s => /webstore|entrep|e-?shop|^web\b/i.test(s);
+  const by = {};
+  rows.forEach(r => {
+    if (isMkt((r[ti] || '').trim())) return;
+    const store = ((r[mi] || '') + '').trim() || '(inconnu)';
+    const e = by[store] || (by[store] = { store, ca: 0, pieces: 0, orders: new Set(), instore: 0 });
+    const prix = fN(r[pi]);
+    e.ca += prix;
+    e.pieces += parseInt((r[qi] || '0').toString().replace(/\s/g, '')) || 0;
+    if (ni !== undefined && r[ni]) e.orders.add(r[ni]);
+    if (li !== undefined && /instore/i.test((r[li] || '').toString())) e.instore += prix;
+  });
+  const stores = Object.values(by).map(e => ({
+    store: e.store, ca: Math.round(e.ca), pieces: e.pieces, commandes: e.orders.size,
+    pm: e.orders.size ? e.ca / e.orders.size : 0, iv: e.orders.size ? e.pieces / e.orders.size : 0,
+    instoreCA: Math.round(e.instore), isEntrepot: isEnt(e.store),
+  })).sort((a, b) => b.ca - a.ca);
+  const boutiques = stores.filter(s => !s.isEntrepot);
+  return {
+    stores, boutiques,
+    caEntrepot: stores.filter(s => s.isEntrepot).reduce((s, x) => s + x.ca, 0),
+    caBoutiques: boutiques.reduce((s, x) => s + x.ca, 0),
+    caInstore: stores.reduce((s, x) => s + x.instoreCA, 0),
+    nbBoutiques: boutiques.length,
+  };
+}
 
 // ── Bornes de dates d'un jeu OMS ────────────────────────────────────────────
 function dateBounds(rows, map) {
@@ -2668,7 +2700,7 @@ module.exports = {
   getTotalSessions, getGADaily, gaSliceByDate, getSessionsForPeriod, calcGA,
   channelPerf, channelType, calcChannelTypes, calcByDevice, dailySeries, gaDailyMetrics, campaignDailySeries, campaignPeriodSummary, emailPeakHour, hourlySeries, sessionsByHour, cartsByHour,
   isFullPriceLine, discountDepthOf, isCancelStatus,
-  buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, dateBounds,
+  buildRefMap, buildSeasonDetail, calcCAFamille, calcFamilleMarket, calcUnreferencedProducts, calcFamilleDetail, calcFamilleParPays, calcFullOffByFamille, calcFullOffByProduct, fullOffSplit, buildTopProdMap, calcByCountry, calcByStore, dateBounds,
   productGap, salesByRef, returnsByRef, productProfitability,
   normCountry, gaSessionsByCountry, gaMetricsByZone, calcZoneCompare, ttByCountry,
   baseRef, implItems, calcSeasonCompare, implRefSet, filterToRefs, salesByRefFam,

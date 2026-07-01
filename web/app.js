@@ -32,7 +32,8 @@ const dimLabelOf = d => (d && d.indexOf && d.indexOf('c:') === 0) ? ('🌍 ' + d
 // Ordre d'affichage de la barre de vues (récit : synthèse → pilotage → acquisition → offre → on-site → géo → veille → tout)
 const MODULE_ORDER = ['direction', 'dailysoft', 'hebdo', 'estore', 'onsite', 'acquisition', 'international', 'marketplace', 'croisees', 'saisonprod', 'produit', 'omnicanal', 'crosscanal', 'quotidien', 'full',
   'achats_reassort', 'achats_selltrough', 'achats_demarque',
-  'dir_synthese', 'dir_pilotage', 'ws_comptes', 'ws_arbitrage', 'col_saison', 'col_desir', 'col_retours'];
+  'dir_synthese', 'dir_pilotage', 'ws_comptes', 'ws_arbitrage', 'col_saison', 'col_desir', 'col_retours',
+  'retail_reseau', 'retail_stock', 'fin_pnl', 'fin_pilotage'];
 // ── SURCOUCHE « ESPACES » (entités de l'entreprise) : chaque espace regroupe SES typologies de reporting.
 // Un module non tagué appartient à 'digital' (l'existant). Le sélecteur d'espace (pastille header) filtre
 // la liste des types d'analyse selon l'espace actif → 1 seul contrôle, pas de 2ᵉ barre de navigation.
@@ -210,15 +211,41 @@ const MODULES = {
     files: { required: ['oms'], optional: ['ret', 'ref'] },
     layout: ['returnreasons', 'returnprod', 'returngeo'],
   },
+  // ── Espace RETAIL (réseau boutiques) : CA par magasin (ship-from-store + Instore) ──
+  retail_reseau: {
+    entity: 'retail', icon: '🏬', label: 'Réseau & magasins', preset: 'month',
+    intro: 'Performance du réseau : CA par boutique vs N-1, panier moyen & indice de vente par magasin, entrepôt vs boutiques.',
+    files: { required: ['oms'], optional: ['ref'] },
+    layout: ['retailstores', 'famille', 'produits'],
+  },
+  retail_stock: {
+    entity: 'retail', icon: '📦', label: 'Stock & réassort magasin', preset: 'all',
+    intro: 'Stock & couverture, pièces par famille Entrepôt vs Magasins, demande de réassort (back-in-stock).',
+    files: { required: ['oms'], optional: ['bis', 'ref'] },
+    layout: ['stockcouv', 'piecesfamchannel', 'stockalerts'],
+  },
+  // ── Espace FINANCE : P&L simplifié + pilotage marge/budget ──
+  fin_pnl: {
+    entity: 'finance', icon: '💶', label: 'P&L & marge', preset: 'month',
+    intro: 'Compte de résultat simplifié : CA brut → net (retours) → marge brute (hypothèse) → contribution après média. Réglez le taux de marge.',
+    files: { required: ['oms'], optional: ['ret', 'ads', 'y2'] },
+    layout: ['pnl', 'variance', 'cumul'],
+  },
+  fin_pilotage: {
+    entity: 'finance', icon: '🧮', label: 'Marge & leviers', preset: 'all',
+    intro: 'Leviers de marge : démarque, codes promo, retours et coût média (COS) — ce qui grignote la marge.',
+    files: { required: ['oms'], optional: ['ret', 'ads', 'offre'] },
+    layout: ['pnl', 'demarque', 'promo', 'retours', 'ads'],
+  },
 };
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
   P: '🎯 Pilotage 360', PA: '🧭 Plan d\'action', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
-  IN: '🌍 International', MP: '🏬 Marketplace', CR: '🔀 Analyses croisées',
-  OF: '👗 Offre & Merchandising', Z: '🗂️ À trier',
+  IN: '🌍 International', MP: '🏬 Marketplace', RT: '🏬 Réseau boutiques', CR: '🔀 Analyses croisées',
+  OF: '👗 Offre & Merchandising', FI: '💶 Finance', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'CR', 'OF', 'Z'];
+const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'RT', 'CR', 'OF', 'FI', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'PA', cumul: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
@@ -231,6 +258,7 @@ const THEME_OF = {
   pagesrc: 'CR', // top sources × pages → Analyses croisées
   zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP', mpfamilles: 'MP',
+  retailstores: 'RT', pnl: 'FI',
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
@@ -250,12 +278,12 @@ const CARD_LABELS = {
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockalertstop: 'Top alertes 2 sem.', piecesfamchannel: 'Pièces Entrepôt/Magasins', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
-  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
@@ -548,6 +576,9 @@ async function resetLayout(m) {
 
 const fEur = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + '\u00A0€');
 const fInt = v => (v == null ? '—' : Math.round(v).toLocaleString('fr-FR'));
+// Taux de marge brute (hypothèse Finance) — réglable via la carte P&L, persisté en localStorage.
+function getMargin() { try { const m = parseFloat(localStorage.getItem('bi_margin')); if (Number.isFinite(m) && m >= 0) return m; } catch (e) { /* localStorage indispo */ } return 62; }
+window.setMargin = function (v) { const m = Math.max(0, Math.min(100, parseFloat(v) || 0)); try { localStorage.setItem('bi_margin', m); } catch (e) { /* indispo */ } if (LAST_REP) renderReport(LAST_REP); };
 const fPct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
 function delta(n, n1) {
   if (n == null || n1 == null || n1 === 0) return '<span class="na">—</span>';
@@ -2226,6 +2257,57 @@ function renderReport(rep) {
     const note = `<div class="note">Décomposition déterministe : <b>CA = Sessions × Taux de transfo × Panier moyen</b>. La ${v.dCA >= 0 ? 'hausse' : 'baisse'} de CA vient surtout du <b>${esc(top[0].replace(/^[^\s]+\s/, '').toLowerCase())}</b> (${sgnEur(top[1])}). Les trois effets somment exactement à la variation totale.</div>`;
     return `<div class="card"><h3>🧮 Pourquoi le CA bouge vs N-1 ?</h3>${tiles}${note}</div>`;
   })();
+  // 🏬 Réseau boutiques (espace Retail) : CA par magasin (ship-from-store + Instore) vs N-1.
+  const retailStoresCard = (() => {
+    const st = rep.stores && rep.stores.n; if (!st || !st.stores || !st.stores.length) return '';
+    const st1 = rep.stores && rep.stores.n1;
+    const b1 = {}; if (st1 && st1.stores) st1.stores.forEach(s => { b1[s.store] = s; });
+    const boutiques = st.boutiques || [];
+    if (!boutiques.length) return '';
+    const kpis = `<div class="kgrid">
+      <div class="kc"><div class="l">CA boutiques (hors entrepôt)</div><div class="v">${fEur(st.caBoutiques)} ${st1 && st1.caBoutiques ? delta(st.caBoutiques, st1.caBoutiques) : ''}</div></div>
+      <div class="kc"><div class="l">Boutiques actives</div><div class="v">${fInt(st.nbBoutiques)}</div></div>
+      <div class="kc"><div class="l">CA entrepôt (e-com pur)</div><div class="v">${fEur(st.caEntrepot)} ${st1 && st1.caEntrepot ? delta(st.caEntrepot, st1.caEntrepot) : ''}</div></div></div>`;
+    const rows = boutiques.slice(0, 30).map((s, i) => { const p = b1[s.store] || {}; return `<tr><td>${i + 1}</td><td title="${esc(s.store)}">${esc((s.store || '').slice(0, 40))}</td><td style="text-align:right">${fEur(s.ca)}</td><td style="text-align:right">${p.ca ? delta(s.ca, p.ca) : '—'}</td><td style="text-align:right">${fInt(s.commandes)}</td><td style="text-align:right">${fEur(s.pm)}</td><td style="text-align:right">${s.iv ? s.iv.toFixed(2).replace('.', ',') : '—'}</td></tr>`; }).join('');
+    return `<div class="card"><h3>🏬 Réseau boutiques — CA par magasin (ship-from-store & Instore)</h3>${kpis}
+      <div style="height:230px;margin-top:10px"><canvas id="retailStoreChart"></canvas></div>
+      <div style="max-height:420px;overflow:auto;margin-top:10px;border:1px solid var(--br);border-radius:8px"><table style="margin:0"><thead><tr style="position:sticky;top:0;background:var(--s);z-index:1"><th>#</th><th>Boutique</th><th style="text-align:right">CA</th><th style="text-align:right">vs N-1</th><th style="text-align:right">Commandes</th><th style="text-align:right">Panier moyen</th><th style="text-align:right">Indice de vente</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="note">CA ventilé par <b>NOM MAGASIN</b> (hors marketplace) : les boutiques = ship-from-store e-commerce + commandes prises en boutique (Instore) ; l'<b>entrepôt</b> (webstore) = e-commerce pur, exclu du classement. ⚠️ Vue issue de l'OMS e-commerce — un reporting <b>POS/caisse complet</b> nécessiterait la source retail dédiée.</div></div>`;
+  })();
+  // 💶 P&L simplifié (espace Finance) : CA brut → net → marge brute (hypothèse) → contribution après média.
+  const pnlCard = (() => {
+    const ca = rep.ca && rep.ca.n; if (!ca) return '';
+    const ca1 = rep.ca && rep.ca.n1;
+    const M = getMargin() / 100;
+    const mkt = n => (rep.marketplace && rep.marketplace[n] && rep.marketplace[n].total) || 0;
+    const caBrut = (ca.caEShop || 0) + mkt('n');
+    const caBrut1 = ca1 ? (ca1.caEShop || 0) + mkt('n1') : null;
+    const ret = (rep.returns && rep.returns.n && rep.returns.n.caRetourne) || 0;
+    const ret1 = (rep.returns && rep.returns.n1 && rep.returns.n1.caRetourne) || 0;
+    const cosN = (rep.ads && rep.ads.cos && rep.ads.cos.n) || 0, cosN1 = (rep.ads && rep.ads.cos && rep.ads.cos.n1) || 0;
+    const mcosN = (rep.metaAds && rep.metaAds.cos && rep.metaAds.cos.n) || 0, mcosN1 = (rep.metaAds && rep.metaAds.cos && rep.metaAds.cos.n1) || 0;
+    const media = (cosN + mcosN) * (ca.caEShop || 0), media1 = ca1 ? (cosN1 + mcosN1) * (ca1.caEShop || 0) : null;
+    const line = (label, v, v1, opts = {}) => {
+      const pct = caBrut > 0 ? Math.round(v / caBrut * 100) : null;
+      const d = (v1 != null && Number.isFinite(v1)) ? (opts.inv ? deltaInv(v, v1) : delta(v, v1)) : '';
+      return `<tr${opts.strong ? ' style="font-weight:700;background:var(--s2)"' : ''}><td>${opts.sub ? '&nbsp;&nbsp;' : ''}${esc(label)}</td><td style="text-align:right">${opts.neg ? '−' : ''}${fEur(Math.abs(v))}</td><td style="text-align:right;color:var(--t2)">${pct != null ? pct + '%' : ''}</td><td style="text-align:right">${d}</td></tr>`;
+    };
+    const caNet = caBrut - ret, caNet1 = caBrut1 != null ? caBrut1 - ret1 : null;
+    const marge = caNet * M, marge1 = caNet1 != null ? caNet1 * M : null;
+    const contrib = marge - media, contrib1 = (marge1 != null && media1 != null) ? marge1 - media1 : null;
+    return `<div class="card"><h3>💶 P&L simplifié — de la vente à la contribution</h3>
+      <div class="toolbar" style="margin:0 0 8px"><label class="note" style="margin:0">Taux de marge brute (hypothèse) :</label>
+        <input type="number" min="0" max="100" step="1" value="${(M * 100).toFixed(0)}" onchange="setMargin(this.value)" class="dt" style="width:78px"> %</div>
+      <table><thead><tr><th>Poste</th><th style="text-align:right">Montant</th><th style="text-align:right">% CA</th><th style="text-align:right">vs N-1</th></tr></thead><tbody>
+        ${line('CA brut (e-commerce + marketplace)', caBrut, caBrut1, { strong: true })}
+        ${line('Retours', ret, ret1, { neg: true, sub: true, inv: true })}
+        ${line('= CA net', caNet, caNet1, { strong: true })}
+        ${line(`Marge brute (${(M * 100).toFixed(0)}%)`, marge, marge1, { sub: true })}
+        ${line('Coût média (Google + Meta, via COS)', media, media1, { neg: true, sub: true, inv: true })}
+        ${line('= Contribution (après média)', contrib, contrib1, { strong: true })}
+      </tbody></table>
+      <div class="note">CA brut = e-commerce + marketplace. <b>Marge brute = hypothèse configurable</b> (coût d'achat non fourni → règle le curseur, ou branche un taux par famille). Coût média estimé via le <b>COS</b> (dépense ÷ CA). Retours & média en <b>rouge quand ça monte</b>. ⚠️ P&L indicatif : hors logistique, remises hors média, frais généraux.</div></div>`;
+  })();
   // 📅 Cumul mensuel (MTD) + atterrissage projeté sur le profil N-1 + suivi d'objectif
   const cumulCard = (() => {
     const c = rep.cumul; if (!c || !c.ca) return '';
@@ -2275,7 +2357,7 @@ function renderReport(rep) {
     demarque: demarqueCard, promo: promoCard, offrecompare: offreCompareCard, comalerts: comAlertsCard,
     fulloff: fullOffCard, variance: varianceCard, perimsynth: perimSynthCard,
     kpi: kpiCard, actionplan: actionPlanCard, cumul: cumulCard, funnel: funnelCard, gafunnel: gaFunnelCard, daily: dailyCard, dailyads: dailyAdsCard, timeline: '', timeline2: '', ca: caCard,
-    channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard, mpfamilles: mpFamCard,
+    channels: channelsCard, canaltype: canalTypeCard, device: deviceCard, marketplace: mktCard, crosschannel: crossChannelCard, mpfamilles: mpFamCard, retailstores: retailStoresCard, pnl: pnlCard,
     zonecompare: zoneCompareCard, pays: paysCard, ttpays: ttPaysCard, fampays: fampaysCard, saison: saisonCard, saisoncompare: seasonCompareCard, annulations: cancellationsCard,
     retours: returnsCard, returnreasons: returnReasonsCard, returngeo: returnGeoCard, returnprod: returnProdCard, stockalerts: stockAlertsCard, stockalertstop: stockAlertsTopCard, piecesfamchannel: piecesFamChannelCard, stockcouv: stockCouvCard, produits: produitsCard, itemfunnel: itemFunnelCard, renta: rentaCard,
     pages: pagesCard, landing: landingCard, pagesrc: pagesrcCard, famille: familleCard, ga: gaCard,
@@ -3111,6 +3193,11 @@ function renderCharts(rep) {
   if (rep.pays && rep.pays.length) {
     const p = rep.pays.filter(x => (x.pays || '').trim().toLowerCase() !== 'france').slice(0, 10);
     growShrink('paysChart', p.map(x => ({ label: x.pays, n: x.n.ca, n1: x.n1 ? x.n1.ca : null })));
+  }
+  // Barres CA par boutique (top 12) — croissance/décroissance vs N-1 (espace Retail)
+  if (rep.stores && rep.stores.n && rep.stores.n.boutiques && rep.stores.n.boutiques.length) {
+    const b1 = {}; if (rep.stores.n1 && rep.stores.n1.stores) rep.stores.n1.stores.forEach(s => { b1[s.store] = s; });
+    growShrink('retailStoreChart', rep.stores.n.boutiques.slice(0, 12).map(s => ({ label: s.store, n: s.ca, n1: b1[s.store] ? b1[s.store].ca : null })));
   }
   // Saison : modèles par famille E26 vs E25 (barres groupées)
   if (rep.seasonCompare && rep.seasonCompare.familles && rep.seasonCompare.familles.length) {

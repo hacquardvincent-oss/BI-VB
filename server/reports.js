@@ -695,6 +695,13 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
   // Pièces vendues par famille × canal (Entrepôt vs Magasins/SFS), périmètre EShop.
   const piecesByFamChannel = calc.calcPiecesByFamChannel(rowsN, omsN.map, refMap);
 
+  // ── Réseau boutiques (espace Retail) : CA par NOM MAGASIN, périmètre AVANT Outstore (inclut Instore) ──
+  const storeRowsN = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, from, to, isAll), omsN.map, dim);
+  let storeRowsN1 = null;
+  if (omsN1 && omsN1.rows) storeRowsN1 = calc.filterDim(isAll ? omsN1.rows : calc.filterRows(omsN1.rows, mapN1, cf, ct, false), mapN1, dim);
+  else if (!isAll && !noN1) storeRowsN1 = calc.filterDim(calc.filterRows(omsN.rows, omsN.map, cf, ct, false), omsN.map, dim);
+  const stores = { n: calc.calcByStore(storeRowsN, omsN.map), n1: storeRowsN1 ? calc.calcByStore(storeRowsN1, mapN1 || omsN.map) : null };
+
   // ── Saison (via référentiel) ──
   const seasonMap = ref ? calc.buildSeasonMap(ref) : {};
   const saisonNobj = calc.calcBySeason(rowsN, omsN.map, seasonMap);
@@ -1014,7 +1021,7 @@ async function buildReport({ preset, from, to, isAll, dim, cfrom, cto, scope, co
     dailyCampaigns,
     campaignSummary,
     timeline, timeline2,
-    stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel,
+    stockAlerts, stockInv, stockAlertsTop, piecesByFamChannel, stores,
     hourly,
     gaFunnel,
     ttPays,
