@@ -158,7 +158,7 @@ const MODULES = {
     entity: 'achats', icon: '📦', label: 'Sell-through & collection', preset: 'all',
     intro: 'Écoulement de l\'offre : CA & pièces par famille, comparaison de saison (drops E26 vs E25), rentabilité, plein/démarqué.',
     files: { required: ['oms'], optional: ['impl', 'ref', 'y2', 'ret'] },
-    layout: ['famille', 'saisoncompare', 'saison', 'renta', 'fulloff'],
+    layout: ['achats_wssi', 'famille', 'saisoncompare', 'saison', 'renta', 'fulloff'],
   },
   achats_demarque: {
     entity: 'achats', icon: '🏷️', label: 'Démarque & invendus', preset: 'all',
@@ -171,7 +171,7 @@ const MODULES = {
     entity: 'direction', icon: '🏛️', label: 'Synthèse groupe', preset: 'month',
     intro: 'Vue consolidée : bilan & KPI, cumul du mois, CA e-commerce + marketplace, cross-canal et décomposition de variance vs N-1.',
     files: { required: ['oms'], optional: ['ga', 'y2', 'ads'] },
-    layout: ['dir_overview', 'kpi', 'cumul', 'ca', 'marketplace', 'crosschannel', 'variance'],
+    layout: ['dir_overview', 'fin_cockpit', 'kpi', 'cumul', 'ca', 'marketplace', 'crosschannel', 'variance'],
   },
   dir_pilotage: {
     entity: 'direction', icon: '🧭', label: 'Plan d\'action & leviers', preset: 'month',
@@ -197,7 +197,7 @@ const MODULES = {
     entity: 'collection', icon: '👗', label: 'Collection & saison', preset: 'all',
     intro: 'Performance de la collection : comparaison de saison (E26 vs E25), sell-through par famille, rentabilité.',
     files: { required: ['oms'], optional: ['impl', 'ref', 'ret'] },
-    layout: ['col_perf', 'saisoncompare', 'saison', 'famille', 'renta'],
+    layout: ['col_perf', 'col_style', 'saisoncompare', 'saison', 'famille', 'renta'],
   },
   col_desir: {
     entity: 'collection', icon: '✨', label: 'Désir produit & funnel', preset: 'all',
@@ -229,7 +229,7 @@ const MODULES = {
     entity: 'finance', icon: '💶', label: 'P&L & marge', preset: 'month',
     intro: 'Compte de résultat simplifié : CA brut → net (retours) → marge brute (hypothèse) → contribution après média. Réglez le taux de marge.',
     files: { required: ['oms'], optional: ['ret', 'ads', 'y2'] },
-    layout: ['fin_bridge', 'pnl', 'variance', 'cumul'],
+    layout: ['fin_cockpit', 'fin_bridge', 'pnl', 'variance', 'cumul'],
   },
   fin_pilotage: {
     entity: 'finance', icon: '🧮', label: 'Marge & leviers', preset: 'all',
@@ -259,7 +259,7 @@ const THEME_OF = {
   zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP', mpfamilles: 'MP',
   retailstores: 'RT', pnl: 'FI',
-  dir_overview: 'HE', retail_parc: 'HE', retail_cockpit: 'HE', ws_matrix: 'HE', ws_cockpit: 'HE', achats_otb: 'HE', achats_saison: 'HE', fin_bridge: 'HE', col_perf: 'HE', // cartes métier (démo)
+  dir_overview: 'HE', retail_parc: 'HE', retail_cockpit: 'HE', ws_matrix: 'HE', ws_cockpit: 'HE', achats_otb: 'HE', achats_saison: 'HE', fin_bridge: 'HE', col_perf: 'HE', achats_wssi: 'HE', fin_cockpit: 'HE', col_style: 'HE', // cartes métier (démo)
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
@@ -279,12 +279,12 @@ const CARD_LABELS = {
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockalertstop: 'Top alertes 2 sem.', piecesfamchannel: 'Pièces Entrepôt/Magasins', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
-  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', dir_overview: 'Vue d\'ensemble groupe (démo)', retail_parc: 'Parc magasin (démo)', retail_cockpit: 'Cockpit magasin (démo)', ws_matrix: 'Qui vend quoi (démo)', ws_cockpit: 'Cockpit wholesale (démo)', achats_otb: 'Open-to-Buy (démo)', achats_saison: 'Bilan saison (démo)', fin_bridge: 'Budget & marge (démo)', col_perf: 'Performance collection (démo)', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', dir_overview: 'Vue d\'ensemble groupe (démo)', retail_parc: 'Parc magasin (démo)', retail_cockpit: 'Cockpit magasin (démo)', ws_matrix: 'Qui vend quoi (démo)', ws_cockpit: 'Cockpit wholesale (démo)', achats_otb: 'Open-to-Buy (démo)', achats_saison: 'Bilan saison (démo)', fin_bridge: 'Budget & marge (démo)', col_perf: 'Performance collection (démo)', achats_wssi: 'WSSI (démo)', fin_cockpit: 'Cockpit financier (démo)', col_style: 'Style & prix (démo)', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'dir_overview', 'retail_parc', 'retail_cockpit', 'ws_matrix', 'ws_cockpit', 'achats_otb', 'achats_saison', 'fin_bridge', 'col_perf', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'dir_overview', 'retail_parc', 'retail_cockpit', 'ws_matrix', 'ws_cockpit', 'achats_otb', 'achats_saison', 'fin_bridge', 'col_perf', 'achats_wssi', 'fin_cockpit', 'col_style', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──

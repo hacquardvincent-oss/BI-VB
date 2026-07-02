@@ -317,6 +317,112 @@
     };
   }
 
+  // ── ACHATS — WSSI (Weekly Sales, Stock & Intake) : l'outil de planning merch ──
+  DEMO_achats_wssi();
+  function DEMO_achats_wssi() {
+    const W = ['S18', 'S19', 'S20', 'S21', 'S22', 'S23', 'S24', 'S25', 'S26', 'S27'];
+    const sales = [95, 102, 88, 110, 120, 105, 98, 115, 130, 112], intake = [0, 180, 0, 0, 220, 0, 0, 160, 0, 0];
+    let open = 1180; const rowsD = [];
+    W.forEach((w, i) => { const close = open + intake[i] - sales[i]; rowsD.push({ w, open, sales: sales[i], intake: intake[i], close, cov: +(close / sales[i]).toFixed(1) }); open = close; });
+    const last = rowsD[rowsD.length - 1], intakeFut = sum(intake);
+    const rows = rowsD.map(r => `<tr><td>${r.w}</td><td style="text-align:right">${r.sales} k€</td><td style="text-align:right">${r.open} k€</td><td style="text-align:right">${r.intake ? '+' + r.intake + ' k€' : '—'}</td><td style="text-align:right">${r.close} k€</td><td style="text-align:right;color:${r.cov < 6 ? 'var(--r)' : r.cov > 14 ? 'var(--a)' : 'var(--t)'}">${r.cov.toFixed(1).replace('.', ',')} sem.</td></tr>`).join('');
+    const kpis = `<div class="kgrid">
+      ${tile('Stock actuel (valeur)', last.close + ' k€')}
+      ${tile('Couverture de stock', last.cov.toFixed(1).replace('.', ',') + ' sem.', last.cov < 6 ? dn('sous-stock') : last.cov > 14 ? up('sur-stock') : '✅ sain')}
+      ${tile('Réceptions saison', '+' + intakeFut + ' k€', 'intake planifié')}
+      ${tile('Ventes moy. / sem.', Math.round(sum(sales) / sales.length) + ' k€', dl(4))}</div>`;
+    const body = kpis
+      + `<div style="height:250px;margin-top:12px"><canvas id="dm_wssi"></canvas></div>
+      <div class="note" style="margin:12px 0 4px"><b>WSSI</b> — Ventes · Stock · Réceptions, semaine par semaine (valeur retail) :</div>
+      <table style="margin:0"><thead><tr><th>Semaine</th><th style="text-align:right">Ventes</th><th style="text-align:right">Stock ouverture</th><th style="text-align:right">Réception</th><th style="text-align:right">Stock clôture</th><th style="text-align:right">Couverture</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.achats_wssi = wrap('🛒 WSSI — ventes · stock · réceptions (planning merch)', body);
+    window._demoDrawers.achats_wssi = () => {
+      mk('dm_wssi', { type: 'bar', data: { labels: W, datasets: [
+        { label: 'Ventes', data: sales, backgroundColor: P[0], borderRadius: 3, order: 3 },
+        { label: 'Réceptions', data: intake, backgroundColor: P[1], borderRadius: 3, order: 2 },
+        { label: 'Stock clôture', type: 'line', data: rowsD.map(r => r.close), borderColor: '#A8854A', backgroundColor: 'rgba(168,133,74,.10)', fill: true, tension: .2, pointRadius: 0, order: 1 },
+        { label: 'Couverture (sem.)', type: 'line', data: rowsD.map(r => r.cov), borderColor: '#6E7B8B', backgroundColor: 'transparent', borderDash: [4, 3], tension: .2, pointRadius: 2, yAxisID: 'y1', order: 0 },
+      ] }, options: Object.assign(baropts(false, v => v + 'k'), { scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { grid: { color: 'rgba(20,22,28,.06)' }, ticks: { font: { size: 9 }, callback: v => v + 'k' } }, y1: { position: 'right', min: 0, grid: { display: false }, ticks: { font: { size: 9 }, callback: v => v + ' sem' } } } }) });
+    };
+  }
+
+  // ── FINANCE/DIRECTION — cockpit P&L complet + atterrissage + cash / BFR ──
+  DEMO_fin_cockpit();
+  function DEMO_fin_cockpit() {
+    // Réalisé YTD, Budget, Atterrissage (projection) en k€ (annuel).
+    const PL = [
+      ['CA net', 7850, 7600, 8020, 1],
+      ['− Coût produit (COGS)', -3030, -2960, -3095, 0],
+      ['= Marge brute', 4820, 4640, 4925, 1],
+      ['− Loyers', -820, -810, -835, 0],
+      ['− Masse salariale', -1180, -1150, -1205, 0],
+      ['− Logistique', -390, -380, -400, 0],
+      ['− Média / marketing', -560, -600, -575, 0],
+      ['− Autres opex', -430, -420, -440, 0],
+      ['= EBITDA', 1440, 1280, 1470, 1],
+      ['− Amortissements', -320, -320, -320, 0],
+      ['= EBIT', 1120, 960, 1150, 1],
+    ];
+    const fk = v => (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('fr-FR') + ' k€';
+    const rows = PL.map(([l, r, b, a, strong]) => { const vsB = b ? Math.round((r / b - 1) * 100) : null; return `<tr${strong ? ' style="font-weight:700;background:var(--s2)"' : ''}><td>${esc(l)}</td><td style="text-align:right">${fk(r)}</td><td style="text-align:right;color:var(--t2)">${fk(b)}</td><td style="text-align:right">${fk(a)}</td><td style="text-align:right">${vsB == null ? '' : (l.includes('COGS') || l.includes('−') && !l.includes('=') ? (vsB <= 0 ? up(vsB + '%') : dn('+' + vsB + '%')) : (vsB >= 0 ? up('+' + vsB + '%') : dn(vsB + '%')))}</td></tr>`; }).join('');
+    const DIO = 96, DSO = 34, DPO = 58, CCC = DIO + DSO - DPO;
+    const kpis = `<div class="kgrid">
+      ${tile('CA net', '7,85 M€', dl(9))}
+      ${tile('Marge brute', '61,4%', dl(1))}
+      ${tile('EBITDA', '18,3%', 'atterrissage 18,3%')}
+      ${tile('Atterrissage vs budget', '+5,5%', up('au-dessus'))}
+      ${tile('Cash Conversion Cycle', CCC + ' j', 'stock ' + DIO + ' · clients ' + DSO + ' · fourn. ' + DPO)}
+      ${tile('Stock net', '2,06 M€', dn('+4%'))}</div>`;
+    const body = kpis
+      + `<div class="grid cols2" style="margin-top:12px">
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Du CA à l'EBIT (% du CA)</div><div style="height:230px"><canvas id="dm_finWall"></canvas></div></div>
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Cycle de trésorerie (jours)</div><div style="height:230px"><canvas id="dm_finCash"></canvas></div></div></div>
+      <div class="note" style="margin:12px 0 4px"><b>Compte de résultat</b> — Réalisé YTD · Budget · Atterrissage projeté :</div>
+      <table style="margin:0"><thead><tr><th>Poste</th><th style="text-align:right">Réalisé</th><th style="text-align:right">Budget</th><th style="text-align:right">Atterrissage</th><th style="text-align:right">vs Budget</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.fin_cockpit = wrap('💶 Cockpit financier — P&L, atterrissage & trésorerie (BFR)', body);
+    window._demoDrawers.fin_cockpit = () => {
+      waterfall('dm_finWall', [['CA', 0, 100, P[1]], ['− COGS', 61, 100, '#E2574D'], ['Marge brute', 0, 61, P[0]], ['− Opex', 18, 61, '#E2574D'], ['EBITDA', 0, 18, P[5]], ['− Amort.', 14, 18, '#E2574D'], ['EBIT', 0, 14, P[4]]]);
+      mk('dm_finCash', { type: 'bar', data: { labels: ['Jours de stock', 'Délai clients (DSO)', 'Délai fourn. (DPO)', 'Cycle net (CCC)'], datasets: [{ data: [DIO, DSO, -DPO, CCC], backgroundColor: [P[3], P[2], P[1], P[0]], borderRadius: 3 }] }, options: Object.assign(baropts(false, v => v + 'j'), { indexAxis: 'y', plugins: { legend: { display: false } } }) });
+    };
+  }
+
+  // ── COLLECTION — niveau style/coloris + architecture de prix ──
+  const STYLES = [
+    { s: 'Sac Holly', c: 'Camel', ca: 212, st: 0.84, m: 0.64, t: 'hero' },
+    { s: 'Robe Nina', c: 'Encre', ca: 184, st: 0.72, m: 0.60, t: 'hero' },
+    { s: 'Cabas Moon', c: 'Noir', ca: 168, st: 0.79, m: 0.62, t: 'carry' },
+    { s: 'Blouse Faye', c: 'Écru', ca: 146, st: 0.68, m: 0.58, t: 'new' },
+    { s: 'Veste Cintia', c: 'Kaki', ca: 132, st: 0.51, m: 0.55, t: 'new' },
+    { s: 'Jupe Lou', c: 'Prune', ca: 96, st: 0.44, m: 0.52, t: 'flop' },
+  ];
+  const BANDS = [{ b: 'Entrée (< 150 €)', vol: 42, ca: 0.22, m: 0.55 }, { b: 'Cœur (150–350 €)', vol: 44, ca: 0.51, m: 0.61 }, { b: 'Premium (> 350 €)', vol: 14, ca: 0.27, m: 0.66 }];
+  DEMO_col_style();
+  function DEMO_col_style() {
+    const tag = t => t === 'hero' ? '<span class="up">★ hero</span>' : t === 'flop' ? '<span class="dn">⚠ flop</span>' : t === 'carry' ? 'carry-over' : 'nouveauté';
+    const rows = STYLES.map(s => `<tr><td><b>${esc(s.s)}</b> · ${esc(s.c)}</td><td style="text-align:right">${s.ca} k€</td><td style="text-align:right">${pct(s.st)}</td><td style="text-align:right">${pct(s.m)}</td><td>${tag(s.t)}</td></tr>`).join('');
+    const newShare = STYLES.filter(s => s.t === 'new' || s.t === 'hero').reduce((a, s) => a + s.ca, 0) / sum(STYLES.map(s => s.ca));
+    const kpis = `<div class="kgrid">
+      ${tile('Styles actifs', String(STYLES.length * 14), 'options × coloris')}
+      ${tile('Best-seller', 'Sac Holly · Camel', up('84% sell-through'))}
+      ${tile('Prix moyen (cœur de gamme)', '245 €', 'zone la plus dense')}
+      ${tile('Part nouveautés', pct(newShare), 'vs carry-over')}</div>`;
+    const body = kpis
+      + `<div class="grid cols2" style="margin-top:12px">
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Architecture de prix — volume & CA par tranche</div><div style="height:220px"><canvas id="dm_colBands"></canvas></div></div>
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Nouveauté vs carry-over (CA)</div><div style="height:220px"><canvas id="dm_colNew"></canvas></div></div></div>
+      <div class="note" style="margin:12px 0 4px"><b>Top styles × coloris</b> — sell-through & marge (feedback création) :</div>
+      <table style="margin:0"><thead><tr><th>Style · coloris</th><th style="text-align:right">CA</th><th style="text-align:right">Sell-through</th><th style="text-align:right">Marge</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.col_style = wrap('👗 Style, coloris & architecture de prix', body);
+    window._demoDrawers.col_style = () => {
+      mk('dm_colBands', { type: 'bar', data: { labels: BANDS.map(b => b.b), datasets: [
+        { label: 'Volume (%)', data: BANDS.map(b => b.vol), backgroundColor: P[8], borderRadius: 3 },
+        { label: 'Part de CA (%)', data: BANDS.map(b => Math.round(b.ca * 100)), backgroundColor: P[0], borderRadius: 3 },
+      ] }, options: baropts(false, v => v + '%') });
+      const nv = STYLES.filter(s => s.t === 'new' || s.t === 'hero').reduce((a, s) => a + s.ca, 0), co = sum(STYLES.map(s => s.ca)) - nv;
+      mk('dm_colNew', { type: 'doughnut', data: { labels: ['Nouveauté', 'Carry-over'], datasets: [{ data: [nv, co], backgroundColor: [P[0], P[9]], borderColor: '#fff', borderWidth: 2 }] }, options: window.pieOutOpts ? window.pieOutOpts(v => v + ' k€') : { responsive: true, maintainAspectRatio: false, cutout: '58%' } });
+    };
+  }
+
   // Dessine les graphes des cartes démo présentes dans le DOM (mk() no-op si canvas absent).
   window.drawDemoCharts = function () { const dr = window._demoDrawers || {}; Object.keys(dr).forEach(k => { try { dr[k](); } catch (e) { /* carte absente */ } }); };
 })();
