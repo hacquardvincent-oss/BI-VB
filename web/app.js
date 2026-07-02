@@ -3985,7 +3985,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   const m = MODULES[CURRENT_MODULE] || {};
   CURRENT_DIM = m.dim || 'global';
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
-  if (!m.dates && m.preset) applyRangePreset(m.preset); // dates par défaut adaptées à la vue au 1er chargement
+  if (!m.dates && m.preset && applyRangePreset(m.preset)) applyCurrentPeriod(); // dates par défaut de la vue → commit DATES (sinon loadReport garde « Tout »)
   await loadStatus();
   await ga4Status();
   await wshopStatus();
