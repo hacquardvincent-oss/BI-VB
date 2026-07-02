@@ -451,7 +451,7 @@
     const IE = [[-6.0, 52.2], [-10.2, 51.5], [-9.5, 54.3], [-6.0, 55.2], [-6.3, 53.4]];
     const landP = pts => `<path d="${path(pts, projEU)}" fill="url(#landE)" stroke="#b3bece" stroke-width="0.5"/>`;
     const euMk = INTL.map(i => { const [x, y] = projEU(i.ll); return mrk(x, y, i.ca, i.lfl, `${i.city} · ${keur(i.ca)} · LFL ${i.lfl >= 0 ? '+' : ''}${i.lfl}%`) + lbl(x, y, i.city); }).join('');
-    const euSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:310px">${DEFS('E')}<rect x="1" y="1" width="98" height="98" rx="7" fill="url(#seaE)"/><g filter="url(#dsE)">${landP(EU_MAIN)}${landP(GB)}${landP(IE)}</g>${euMk}<text x="50" y="98" font-size="2.8" text-anchor="middle" fill="#9aa1aa">Europe de l'Ouest — positions réelles</text></svg>`;
+    const euSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:310px">${DEFS('E')}<g filter="url(#dsE)">${landP(EU_MAIN)}${landP(GB)}${landP(IE)}</g>${euMk}<text x="50" y="98" font-size="2.8" text-anchor="middle" fill="#9aa1aa">Europe de l'Ouest — positions réelles</text></svg>`;
     const bestReg = regions[0], worstReg = regions.slice().sort((a, b) => a.lfl - b.lfl)[0];
     const kpis = `<div class="kgrid">
       ${tile('Magasins France', String(STORES.length), regions.length + ' régions')}
