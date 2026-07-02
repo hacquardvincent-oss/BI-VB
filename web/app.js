@@ -142,8 +142,8 @@ const MODULES = {
     layout: ['mpfamilles', 'crosschannel'],
   },
   full: {
-    icon: '🔬', label: 'Full', preset: 'all',
-    intro: 'Toutes les analyses, sans filtre — pour les grandes revues de fond.',
+    icon: '🔬', label: 'Full', preset: 'yesterday',
+    intro: 'Toutes les analyses. Par défaut sur hier vs N-1 ; clique « Tout » pour la revue de fond sur toute la période.',
     files: { required: ['oms'], optional: ['ga', 'ads', 'ret', 'ref', 'y2', 'impl'] },
     layout: ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'demarque', 'fulloff', 'promo', 'offrecompare', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'ca'],
   },
@@ -181,7 +181,7 @@ const MODULES = {
   },
   // ── Espace WHOLESALE (B2B / revendeurs) : comptes & arbitrage ──
   ws_comptes: {
-    entity: 'wholesale', icon: '🤝', label: 'Comptes & enseignes', preset: 'all',
+    entity: 'wholesale', icon: '🤝', label: 'Comptes & enseignes', preset: 'month',
     intro: 'CA par compte (Galeries Lafayette / Printemps / PDT / Lulli) vs N-1, corner vs ship-from-store vs dropshipping, familles par enseigne.',
     files: { required: ['oms'], optional: ['y2', 'ref'] },
     layout: ['marketplace', 'mpfamilles'],
