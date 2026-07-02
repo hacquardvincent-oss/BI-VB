@@ -16,6 +16,9 @@
   const up = v => `<span class="up">▲ ${v}</span>`, dn = v => `<span class="dn">▼ ${v}</span>`;
   const dl = v => v >= 0 ? up('+' + v + '%') : dn(v + '%');
   const tile = (l, v, sub) => `<div class="kc"><div class="l">${l}</div><div class="v">${v}</div>${sub ? `<div class="note" style="margin:2px 0 0">${sub}</div>` : ''}</div>`;
+  const sig = (tone, icon, txt) => `<div class="sig ${tone}"><span>${icon}</span><div>${txt}</div></div>`;
+  const alerts = arr => `<div class="bilan-sigs" style="margin-top:12px">${arr.join('')}</div>`;
+  const waterfall = (id, steps) => mk(id, { type: 'bar', data: { labels: steps.map(s => s[0]), datasets: [{ data: steps.map(s => [s[1], s[2]]), backgroundColor: steps.map(s => s[3]), borderRadius: 3 }] }, options: Object.assign(baropts(false, v => v + '%'), { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => Math.abs(c.raw[1] - c.raw[0]) + ' pts → ' + Math.max(c.raw[0], c.raw[1]) + '% du CA' } } } }) });
   const wrap = (h3, body) => `<div class="card"><h3>${h3}<span class="demo-badge">Démo</span></h3>${body}<div class="note" style="margin-top:8px">🎛️ <b>Données de démonstration</b> — maquette d'interface métier. Branchable sur les vraies sources (POS, ERP, EDI wholesale, plan d'achat) le moment venu.</div></div>`;
   const baropts = (stacked, kfmt) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } } }, scales: { x: { stacked, grid: { display: false }, ticks: { font: { size: 9 } } }, y: { stacked, grid: { color: 'rgba(20,22,28,.06)' }, ticks: { font: { size: 9 }, callback: kfmt || (v => v) } } } });
   const MONTHS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
@@ -233,6 +236,84 @@
         { label: 'Cumul saison', type: 'line', data: cumData, borderColor: '#A8854A', backgroundColor: 'rgba(168,133,74,.12)', fill: true, tension: .25, pointRadius: 2, order: 1 },
       ] }, options: baropts(false, v => v + 'k') });
       mk('dm_achFam', { type: 'bar', data: { labels: ACH_FAM.map(f => f[0]), datasets: [{ data: ACH_FAM.map(f => Math.round(f[1] * 100)), backgroundColor: ACH_FAM.map(f => f[1] >= 0.65 ? '#1B9E6A' : f[1] < 0.55 ? '#E2574D' : P[3]), borderRadius: 3 }] }, options: Object.assign(baropts(false, v => v + '%'), { indexAxis: 'y', plugins: { legend: { display: false } } }) });
+    };
+  }
+
+  // ── RETAIL — cockpit magasin standard : LFL · entonnoir · P&L 4-murs · alertes ──
+  DEMO_retail_cockpit();
+  function DEMO_retail_cockpit() {
+    const UPT = [1.9, 2.1, 1.8, 1.7, 1.6, 1.7, 1.8, 2.2], C4 = [27, 25, 24, 22, 19, 21, 23, 29];
+    const st = STORES.map((s, i) => ({ ...s, lfl: s.g, upt: UPT[i], c4: C4[i] }));
+    const caTot = sum(st.map(s => s.ca)), trafTot = sum(st.map(s => s.traf));
+    const txTot = Math.round(sum(st.map(s => s.traf * s.tt / 100)));
+    const pcs = Math.round(sum(st.map(s => s.traf * s.tt / 100 * s.upt)));
+    const lflW = st.reduce((a, s) => a + s.ca * s.lfl, 0) / caTot;
+    const convMoy = st.reduce((a, s) => a + s.traf * s.tt, 0) / trafTot;
+    const atv = Math.round(caTot * 1000 / txTot), uptMoy = pcs / txTot, c4W = st.reduce((a, s) => a + s.ca * s.c4, 0) / caTot;
+    const al = [];
+    st.filter(s => s.lfl < 0).forEach(s => al.push(sig('dn', '🔴', `<b>${esc(s.s)}</b> — LFL ${s.lfl}% : revoir vitrine / réassort tailles, plan d'animation.`)));
+    const worst = st.slice().sort((a, b) => a.tt - b.tt)[0];
+    al.push(sig('dn', '🟠', `<b>${esc(worst.s)}</b> — conversion ${worst.tt.toFixed(1).replace('.', ',')}% (plus basse du réseau) : coaching équipe & accueil.`));
+    const best = st.slice().sort((a, b) => b.lfl - a.lfl)[0];
+    al.push(sig('up', '🟢', `<b>${esc(best.s)}</b> — LFL +${best.lfl}% : dupliquer les bonnes pratiques (implantation, clienteling).`));
+    const rows = st.slice().sort((a, b) => b.ca - a.ca).map(s => `<tr><td>${esc(s.s)}</td><td style="text-align:right">${keur(s.ca)}</td><td style="text-align:right">${s.lfl >= 0 ? up('+' + s.lfl + '%') : dn(s.lfl + '%')}</td><td style="text-align:right">${s.tt.toFixed(1).replace('.', ',')}%</td><td style="text-align:right">${s.upt.toFixed(1).replace('.', ',')}</td><td style="text-align:right">${s.pm} €</td><td style="text-align:right">${(s.ca * 1000 / s.m2).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €</td><td style="text-align:right">${s.c4}%</td></tr>`).join('');
+    const kpis = `<div class="kgrid">
+      ${tile('CA réseau', keur(caTot), 'LFL ' + (lflW >= 0 ? up('+' + lflW.toFixed(1).replace('.', ',') + '%') : dn(lflW.toFixed(1).replace('.', ',') + '%')))}
+      ${tile('Trafic', (trafTot / 1000).toFixed(0) + 'k visiteurs')}
+      ${tile('Taux de conversion', convMoy.toFixed(1).replace('.', ',') + '%', dl(0.2))}
+      ${tile('UPT (pièces/ticket)', uptMoy.toFixed(2).replace('.', ','))}
+      ${tile('Panier moyen (ATV)', atv + ' €', dl(3))}
+      ${tile('Contribution 4-murs', c4W.toFixed(0) + '%', 'après loyer & masse sal.')}</div>`;
+    const body = kpis + alerts(al)
+      + `<div class="grid cols2" style="margin-top:12px">
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Entonnoir boutique : trafic → transactions → pièces</div><div style="height:220px"><canvas id="dm_rcFunnel"></canvas></div></div>
+        <div><div class="note" style="text-align:center;margin:0 0 4px">P&L 4-murs du réseau (% du CA)</div><div style="height:220px"><canvas id="dm_rcWall"></canvas></div></div></div>
+      <table style="margin-top:10px"><thead><tr><th>Magasin</th><th style="text-align:right">CA</th><th style="text-align:right">LFL</th><th style="text-align:right">Conv.</th><th style="text-align:right">UPT</th><th style="text-align:right">Panier</th><th style="text-align:right">CA/m²</th><th style="text-align:right">Contrib. 4-murs</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.retail_cockpit = wrap('🏬 Cockpit magasin — pilotage du réseau (LFL · entonnoir · 4-murs)', body);
+    window._demoDrawers.retail_cockpit = () => {
+      mk('dm_rcFunnel', { type: 'bar', data: { labels: ['Trafic', 'Transactions', 'Pièces vendues'], datasets: [{ data: [trafTot, txTot, pcs], backgroundColor: [P[9], P[5], P[1]], borderRadius: 3 }] }, options: Object.assign(baropts(false, v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v), { indexAxis: 'y', plugins: { legend: { display: false } } }) });
+      waterfall('dm_rcWall', [['CA', 0, 100, P[1]], ['− Coût produit', 62, 100, '#E2574D'], ['Marge brute', 0, 62, P[0]], ['− Loyer', 48, 62, '#E2574D'], ['− Masse sal.', 30, 48, '#E2574D'], ['− Autres', 24, 30, '#E2574D'], ['Contribution', 0, 24, P[4]]]);
+    };
+  }
+
+  // ── WHOLESALE — cockpit B2B : sell-in / sell-out, sell-through, carnet, réassort ──
+  const WSC = [
+    { p: 'Galeries Lafayette', si: 640, so: 558, carnet: 180, marge: 0.42, dso: 62 },
+    { p: 'Printemps', si: 520, so: 410, carnet: 120, marge: 0.38, dso: 58 },
+    { p: 'Le Bon Marché', si: 410, so: 381, carnet: 95, marge: 0.45, dso: 45 },
+    { p: '24S', si: 340, so: 299, carnet: 70, marge: 0.40, dso: 40 },
+    { p: 'Zalando', si: 380, so: 251, carnet: 60, marge: 0.31, dso: 48 },
+  ];
+  const WSC_SI = [210, 190, 230, 250, 270, 300, 280, 240, 310, 330, 360, 410];
+  const WSC_SO = [170, 175, 200, 220, 240, 268, 250, 210, 280, 300, 322, 360];
+  DEMO_ws_cockpit();
+  function DEMO_ws_cockpit() {
+    const siTot = sum(WSC.map(w => w.si)), soTot = sum(WSC.map(w => w.so)), carnet = sum(WSC.map(w => w.carnet));
+    const stG = soTot / siTot;
+    const margeW = WSC.reduce((a, w) => a + w.so * w.marge, 0) / soTot;
+    const al = [];
+    WSC.filter(w => w.so / w.si >= 0.88).forEach(w => al.push(sig('up', '🟢', `<b>${esc(w.p)}</b> — sell-through ${pct(w.so / w.si)} : proposer un <b>réassort</b> (la marchandise part vite).`)));
+    WSC.filter(w => w.so / w.si < 0.7).forEach(w => al.push(sig('dn', '🔴', `<b>${esc(w.p)}</b> — sell-through ${pct(w.so / w.si)} : risque d'invendus → négocier <b>markdown money</b> / réduire la prochaine commande.`)));
+    const slow = WSC.slice().sort((a, b) => b.dso - a.dso)[0];
+    al.push(sig('dn', '🟠', `<b>${esc(slow.p)}</b> — DSO ${slow.dso} j : encours client à surveiller (trésorerie).`));
+    const rows = WSC.map(w => { const stx = w.so / w.si; return `<tr><td><b>${esc(w.p)}</b></td><td style="text-align:right">${w.si} k€</td><td style="text-align:right">${w.so} k€</td><td style="text-align:right">${pct(stx)}</td><td style="text-align:right">${w.carnet} k€</td><td style="text-align:right">${pct(w.marge)}</td><td style="text-align:right">${w.dso} j</td><td>${stx >= 0.88 ? '🔁 réassort' : stx < 0.7 ? '🏷️ markdown money' : '✅ suivre'}</td></tr>`; }).join('');
+    const kpis = `<div class="kgrid">
+      ${tile('Sell-in (livré, 12 mois)', keur(siTot))}
+      ${tile('Sell-out (vendu partenaires)', keur(soTot), dl(7))}
+      ${tile('Sell-through global', pct(stG), dl(3))}
+      ${tile('Carnet de commandes', keur(carnet), 'à livrer')}
+      ${tile('Marge nette moyenne', pct(margeW), 'après remises / markdown')}</div>`;
+    const body = kpis + alerts(al)
+      + `<div style="height:240px;margin-top:12px"><canvas id="dm_wsFlow"></canvas></div>
+      <div class="note" style="margin:12px 0 4px"><b>Sell-in vs sell-out & signal de réassort par partenaire</b> :</div>
+      <table style="margin:0"><thead><tr><th>Partenaire</th><th style="text-align:right">Sell-in</th><th style="text-align:right">Sell-out</th><th style="text-align:right">Sell-through</th><th style="text-align:right">Carnet</th><th style="text-align:right">Marge nette</th><th style="text-align:right">DSO</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.ws_cockpit = wrap('🤝 Cockpit wholesale — sell-in / sell-out & carnet de commandes', body);
+    window._demoDrawers.ws_cockpit = () => {
+      mk('dm_wsFlow', { type: 'bar', data: { labels: MONTHS, datasets: [
+        { label: 'Sell-in (livré)', data: WSC_SI, backgroundColor: P[9], borderRadius: 3, order: 3 },
+        { label: 'Sell-out (vendu)', data: WSC_SO, backgroundColor: P[1], borderRadius: 3, order: 2 },
+        { label: 'Sell-through %', type: 'line', data: WSC_SI.map((v, i) => Math.round(WSC_SO[i] / v * 100)), borderColor: '#A8854A', backgroundColor: 'transparent', tension: .25, pointRadius: 2, yAxisID: 'y1', order: 1 },
+      ] }, options: Object.assign(baropts(false, v => v + 'k'), { scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { grid: { color: 'rgba(20,22,28,.06)' }, ticks: { font: { size: 9 }, callback: v => v + 'k' } }, y1: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { font: { size: 9 }, callback: v => v + '%' } } } }) });
     };
   }
 
