@@ -423,6 +423,65 @@
     };
   }
 
+  // ── RETAIL — cartographie du parc (France régional + International) ──
+  const FR_PATH = 'M50,3 C60,3 66,7 72,12 C79,18 84,24 85,33 C86,42 83,49 85,57 C87,66 84,75 79,82 C74,89 66,93 57,95 C49,97 42,96 35,92 C27,88 20,83 15,75 C9,66 6,57 8,47 C10,37 15,31 20,25 C26,18 32,12 40,8 C45,5 45,3 50,3 Z';
+  const FR_GEO = { 'Paris': { x: 50, y: 30, r: 'Île-de-France' }, 'Lyon': { x: 64, y: 55, r: 'Auvergne-Rhône-Alpes' }, 'Bordeaux': { x: 31, y: 66, r: 'Nouvelle-Aquitaine' }, 'Marseille': { x: 66, y: 82, r: 'PACA' }, 'Nice': { x: 80, y: 78, r: 'PACA' }, 'Lille': { x: 55, y: 13, r: 'Hauts-de-France' }, 'Nantes': { x: 25, y: 46, r: 'Pays de la Loire' } };
+  const REG_BEST = { 'Île-de-France': 'Sacs', 'Auvergne-Rhône-Alpes': 'Robes', 'Nouvelle-Aquitaine': 'Blouses', 'PACA': 'Accessoires', 'Hauts-de-France': 'Vestes & manteaux', 'Pays de la Loire': 'Robes' };
+  const INTL = [{ city: 'Londres', x: 30, y: 30, ca: 820, lfl: 6, best: 'Sacs' }, { city: 'Bruxelles', x: 47, y: 24, ca: 410, lfl: -3, best: 'Vestes' }, { city: 'Milan', x: 63, y: 58, ca: 640, lfl: 11, best: 'Robes' }, { city: 'Genève', x: 55, y: 50, ca: 360, lfl: 4, best: 'Accessoires' }, { city: 'Madrid', x: 18, y: 76, ca: 530, lfl: 8, best: 'Blouses' }];
+  DEMO_retail_map();
+  function DEMO_retail_map() {
+    const byCity = {}; STORES.forEach(s => { const g = FR_GEO[s.v]; if (!g) return; const e = byCity[s.v] || (byCity[s.v] = { city: s.v, x: g.x, y: g.y, region: g.r, ca: 0, lw: 0 }); e.ca += s.ca; e.lw += s.ca * s.g; });
+    const cities = Object.values(byCity).map(c => ({ ...c, lfl: Math.round(c.lw / c.ca) }));
+    const maxCA = Math.max(...cities.map(c => c.ca), ...INTL.map(i => i.ca));
+    const byReg = {}; cities.forEach(c => { const e = byReg[c.region] || (byReg[c.region] = { region: c.region, ca: 0, lw: 0 }); e.ca += c.ca; e.lw += c.lfl * c.ca; });
+    const regions = Object.values(byReg).map(r => ({ region: r.region, ca: r.ca, lfl: Math.round(r.lw / r.ca), best: REG_BEST[r.region] || '—' })).sort((a, b) => b.ca - a.ca);
+    const mrk = (x, y, ca, lfl, label) => { const r = (2.6 + Math.sqrt(ca / maxCA) * 5).toFixed(1); const col = lfl >= 0 ? '#1B9E6A' : '#E2574D'; return `<circle cx="${x}" cy="${y}" r="${r}" fill="${col}" fill-opacity="0.24" stroke="${col}" stroke-width="0.7"/><circle cx="${x}" cy="${y}" r="1.1" fill="${col}"/><title>${esc(label)}</title>`; };
+    const lbl = (x, y, t) => `<text x="${x}" y="${(y - 6).toFixed(1)}" font-size="3" text-anchor="middle" fill="#3a3f47" font-weight="600" style="paint-order:stroke;stroke:#fff;stroke-width:.8">${esc(t)}</text>`;
+    const frSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:300px"><path d="${FR_PATH}" fill="#eef1f4" stroke="#c8d0d9" stroke-width="0.7"/>${cities.map(c => mrk(c.x, c.y, c.ca, c.lfl, `${c.city} · ${keur(c.ca)} · LFL ${c.lfl >= 0 ? '+' : ''}${c.lfl}%`)).join('')}${cities.map(c => lbl(c.x, c.y, c.city.replace('Nice', 'Nice/Cannes'))).join('')}</svg>`;
+    const euSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:300px"><rect x="2" y="2" width="96" height="96" rx="6" fill="#eef1f4" stroke="#c8d0d9" stroke-width="0.6"/>${INTL.map(i => mrk(i.x, i.y, i.ca, i.lfl, `${i.city} · ${keur(i.ca)} · LFL ${i.lfl >= 0 ? '+' : ''}${i.lfl}%`)).join('')}${INTL.map(i => lbl(i.x, i.y, i.city)).join('')}<text x="50" y="96" font-size="3.2" text-anchor="middle" fill="#8a9099">Europe</text></svg>`;
+    const bestReg = regions[0], worstReg = regions.slice().sort((a, b) => a.lfl - b.lfl)[0];
+    const kpis = `<div class="kgrid">
+      ${tile('Magasins France', String(STORES.length), regions.length + ' régions')}
+      ${tile('Magasins International', String(INTL.length), '5 pays')}
+      ${tile('Région n°1', bestReg.region, up(keur(bestReg.ca)))}
+      ${tile('Région à redresser', worstReg.region, worstReg.lfl >= 0 ? '· stable' : dn('LFL ' + worstReg.lfl + '%'))}</div>`;
+    const rows = regions.map(r => `<tr><td>${esc(r.region)}</td><td style="text-align:right">${keur(r.ca)}</td><td style="text-align:right">${r.lfl >= 0 ? up('+' + r.lfl + '%') : dn(r.lfl + '%')}</td><td>${esc(r.best)}</td></tr>`).join('');
+    const body = kpis
+      + `<div class="grid cols2" style="margin-top:12px">
+        <div><div class="note" style="text-align:center;margin:0 0 4px"><b>France</b> — taille = CA · couleur = LFL (vert ↑ / rouge ↓)</div>${frSvg}</div>
+        <div><div class="note" style="text-align:center;margin:0 0 4px"><b>International</b> — parc Europe</div>${euSvg}</div></div>
+      <div class="note" style="margin:12px 0 4px"><b>Performance & best-seller par région</b> :</div>
+      <table style="margin:0"><thead><tr><th>Région</th><th style="text-align:right">CA</th><th style="text-align:right">LFL</th><th>Famille n°1</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.retail_map = wrap('🗺️ Cartographie du parc — France régional & International', body);
+  }
+
+  // ── RETAIL — diagnostic d'UN magasin : ce qui marche / ne marche pas (interactif) ──
+  const STORE_BEST = { 'Paris': [['Sacs', 34], ['Robes', 22], ['Blouses', 15]], 'Lyon': [['Robes', 30], ['Sacs', 24], ['Vestes & manteaux', 16]], 'Bordeaux': [['Blouses', 28], ['Robes', 22], ['Sacs', 18]], 'Marseille': [['Accessoires', 26], ['Sacs', 24], ['Robes', 20]], 'Nice': [['Sacs', 38], ['Accessoires', 22], ['Robes', 18]], 'Lille': [['Vestes & manteaux', 30], ['Sacs', 20], ['Blouses', 18]], 'Nantes': [['Robes', 28], ['Blouses', 22], ['Jupes & pantalons', 16]] };
+  const DEMO_RUPT = [['Sac Holly · Camel', 'best-seller', 'rupture depuis 6 j'], ['Robe Nina · Encre', 'cœur de gamme', 'tailles S/M manquantes'], ['Cabas Moon · Noir', 'permanent', 'réassort en cours'], ['Blouse Faye · Écru', 'nouveauté', 'rupture taille 38']];
+  window.demoStore = function (name) {
+    const s = STORES.find(x => x.s === name) || STORES[0];
+    const el = document.getElementById('dm_storePanel'); if (!el) return;
+    const plus = [], moins = [];
+    if (s.tt >= 3) plus.push(sig('up', '🟢', `Conversion forte (${s.tt.toFixed(1).replace('.', ',')}%) — accueil & clienteling efficaces.`)); else moins.push(sig('dn', '🔴', `Conversion faible (${s.tt.toFixed(1).replace('.', ',')}%) — travailler l'accueil & l'essayage.`));
+    if (s.g >= 0) plus.push(sig('up', '🟢', `LFL +${s.g}% — dynamique positive vs N-1.`)); else moins.push(sig('dn', '🔴', `LFL ${s.g}% — trafic ou transformation en repli.`));
+    if (s.pm >= 210) plus.push(sig('up', '🟢', `Panier élevé (${s.pm} €) — bon mix / montée en gamme.`)); else moins.push(sig('dn', '🟠', `Panier ${s.pm} € sous la moyenne — pousser les ventes complémentaires (UPT).`));
+    moins.push(sig('dn', '🟠', `${DEMO_RUPT.length} ruptures sur best-sellers — manque à gagner estimé ~${Math.round(s.ca * 0.04)} k€.`));
+    const best = STORE_BEST[s.v] || [['Sacs', 30], ['Robes', 22], ['Blouses', 16]];
+    const kpi = `<div class="kgrid">
+      ${tile('CA magasin', keur(s.ca), s.g >= 0 ? up('+' + s.g + '%') : dn(s.g + '%'))}
+      ${tile('Taux de transfo', s.tt.toFixed(1).replace('.', ',') + '%')}
+      ${tile('Panier moyen', s.pm + ' €')}
+      ${tile('CA / m²', (s.ca * 1000 / s.m2).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €')}</div>`;
+    const rupt = `<div class="note" style="margin:12px 0 4px"><b>🚨 Ruptures / disponibilité</b> (manque à gagner) :</div><table style="margin:0"><thead><tr><th>Produit</th><th>Type</th><th>Statut</th></tr></thead><tbody>${DEMO_RUPT.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td style="color:var(--r)">${esc(r[2])}</td></tr>`).join('')}</tbody></table>`;
+    const bestTbl = `<div class="note" style="margin:12px 0 4px"><b>🏆 Familles qui performent ici</b> (part du CA) :</div><table style="margin:0"><tbody>${best.map(b => `<tr><td>${esc(b[0])}</td><td style="text-align:right"><div style="display:inline-block;height:8px;width:${b[1] * 3}px;background:var(--a);border-radius:4px;vertical-align:middle;margin-right:6px"></div>${b[1]}%</td></tr>`).join('')}</tbody></table>`;
+    el.innerHTML = kpi
+      + `<div class="grid cols2" style="margin-top:12px"><div><div class="note" style="margin:0 0 4px"><b>✅ Ce qui marche</b></div><div class="bilan-sigs">${plus.join('') || '<div class="note">—</div>'}</div></div><div><div class="note" style="margin:0 0 4px"><b>⚠️ Ce qui ne marche pas</b></div><div class="bilan-sigs">${moins.join('')}</div></div></div>`
+      + `<div class="grid cols2">${bestTbl}${rupt}</div>`;
+  };
+  window.DEMO_HTML.retail_store = wrap('🏬 Diagnostic magasin — ce qui marche / ne marche pas',
+    `<div class="toolbar" style="margin:0 0 6px"><label class="note" style="margin:0">Magasin :</label><select class="dt" onchange="demoStore(this.value)">${STORES.map(s => `<option>${esc(s.s)}</option>`).join('')}</select></div><div id="dm_storePanel"></div>`);
+  window._demoDrawers.retail_store = () => { if (document.getElementById('dm_storePanel')) demoStore(STORES[0].s); };
+
   // Dessine les graphes des cartes démo présentes dans le DOM (mk() no-op si canvas absent).
   window.drawDemoCharts = function () { const dr = window._demoDrawers || {}; Object.keys(dr).forEach(k => { try { dr[k](); } catch (e) { /* carte absente */ } }); };
 })();
