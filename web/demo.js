@@ -206,6 +206,36 @@
     };
   }
 
+  // ── ACHATS — bilan saison : cumul CA par drop + taux d'écoulement par famille ──
+  const ACH_DROPS = [{ d: 'Drop 1 · Fév', ca: 420, st: 0.71 }, { d: 'Drop 2 · Mars', ca: 560, st: 0.64 }, { d: 'Drop 3 · Avr', ca: 610, st: 0.58 }, { d: 'Drop 4 · Mai', ca: 540, st: 0.49 }, { d: 'Drop 5 · Juin', ca: 480, st: 0.42 }];
+  const ACH_FAM = [['Sacs', 0.74], ['Robes', 0.61], ['Blouses', 0.68], ['Vestes & manteaux', 0.52], ['Jupes & pantalons', 0.58], ['Accessoires', 0.71]];
+  DEMO_achats_saison();
+  function DEMO_achats_saison() {
+    const caTot = sum(ACH_DROPS.map(d => d.ca));
+    const stMoy = ACH_DROPS.reduce((a, d) => a + d.ca * d.st, 0) / caTot;
+    const best = ACH_DROPS.slice().sort((a, b) => b.st - a.st)[0];
+    let cum = 0; const rows = ACH_DROPS.map(d => { cum += d.ca; return `<tr><td>${esc(d.d)}</td><td style="text-align:right">${d.ca} k€</td><td style="text-align:right">${cum} k€</td><td style="text-align:right">${pct(d.st)}</td><td style="text-align:right">${d.st >= 0.6 ? '✅ bien écoulé' : d.st < 0.5 ? '🏷️ à démarquer' : '· en cours'}</td></tr>`; }).join('');
+    const kpis = `<div class="kgrid">
+      ${tile('CA saison cumulé', keur(caTot), dl(6))}
+      ${tile('Taux d\'écoulement moyen', pct(stMoy), dl(2))}
+      ${tile('Meilleur drop', best.d, up(pct(best.st)))}
+      ${tile('Invendus estimés', pct(1 - stMoy), 'à écouler / démarquer')}</div>`;
+    const body = kpis
+      + `<div class="grid cols2" style="margin-top:12px">
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Cumul du CA de la saison (k€) par drop</div><div style="height:230px"><canvas id="dm_achCum"></canvas></div></div>
+        <div><div class="note" style="text-align:center;margin:0 0 4px">Taux d'écoulement par famille</div><div style="height:230px"><canvas id="dm_achFam"></canvas></div></div></div>
+      <table style="margin-top:10px"><thead><tr><th>Drop</th><th style="text-align:right">CA</th><th style="text-align:right">Cumul</th><th style="text-align:right">Écoulement</th><th style="text-align:right">Statut</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.DEMO_HTML.achats_saison = wrap('🛒 Bilan saison — cumul CA par drop & écoulement par famille', body);
+    window._demoDrawers.achats_saison = () => {
+      let c = 0; const cumData = ACH_DROPS.map(d => (c += d.ca));
+      mk('dm_achCum', { type: 'bar', data: { labels: ACH_DROPS.map(d => d.d), datasets: [
+        { label: 'CA du drop', data: ACH_DROPS.map(d => d.ca), backgroundColor: P[0], borderRadius: 3, order: 2 },
+        { label: 'Cumul saison', type: 'line', data: cumData, borderColor: '#A8854A', backgroundColor: 'rgba(168,133,74,.12)', fill: true, tension: .25, pointRadius: 2, order: 1 },
+      ] }, options: baropts(false, v => v + 'k') });
+      mk('dm_achFam', { type: 'bar', data: { labels: ACH_FAM.map(f => f[0]), datasets: [{ data: ACH_FAM.map(f => Math.round(f[1] * 100)), backgroundColor: ACH_FAM.map(f => f[1] >= 0.65 ? '#1B9E6A' : f[1] < 0.55 ? '#E2574D' : P[3]), borderRadius: 3 }] }, options: Object.assign(baropts(false, v => v + '%'), { indexAxis: 'y', plugins: { legend: { display: false } } }) });
+    };
+  }
+
   // Dessine les graphes des cartes démo présentes dans le DOM (mk() no-op si canvas absent).
   window.drawDemoCharts = function () { const dr = window._demoDrawers || {}; Object.keys(dr).forEach(k => { try { dr[k](); } catch (e) { /* carte absente */ } }); };
 })();

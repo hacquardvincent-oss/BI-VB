@@ -152,7 +152,7 @@ const MODULES = {
     entity: 'achats', icon: '🔔', label: 'Réassort & alertes', preset: 'month',
     intro: 'Réassort prioritaire : demande « prévenez-moi » sur ruptures, couverture de stock et top produits à recommander.',
     files: { required: ['oms'], optional: ['bis', 'ref'] },
-    layout: ['achats_otb', 'stockalerts', 'stockalertstop', 'stockcouv', 'piecesfamchannel', 'produits'],
+    layout: ['achats_saison', 'achats_otb', 'stockalerts', 'stockalertstop', 'stockcouv', 'piecesfamchannel', 'produits'],
   },
   achats_selltrough: {
     entity: 'achats', icon: '📦', label: 'Sell-through & collection', preset: 'all',
@@ -259,7 +259,7 @@ const THEME_OF = {
   zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP', mpfamilles: 'MP',
   retailstores: 'RT', pnl: 'FI',
-  dir_overview: 'HE', retail_parc: 'HE', ws_matrix: 'HE', achats_otb: 'HE', fin_bridge: 'HE', col_perf: 'HE', // cartes métier (démo)
+  dir_overview: 'HE', retail_parc: 'HE', ws_matrix: 'HE', achats_otb: 'HE', achats_saison: 'HE', fin_bridge: 'HE', col_perf: 'HE', // cartes métier (démo)
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
@@ -279,12 +279,12 @@ const CARD_LABELS = {
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockalertstop: 'Top alertes 2 sem.', piecesfamchannel: 'Pièces Entrepôt/Magasins', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
-  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', dir_overview: 'Vue d\'ensemble groupe (démo)', retail_parc: 'Parc magasin (démo)', ws_matrix: 'Qui vend quoi (démo)', achats_otb: 'Open-to-Buy (démo)', fin_bridge: 'Budget & marge (démo)', col_perf: 'Performance collection (démo)', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', dir_overview: 'Vue d\'ensemble groupe (démo)', retail_parc: 'Parc magasin (démo)', ws_matrix: 'Qui vend quoi (démo)', achats_otb: 'Open-to-Buy (démo)', achats_saison: 'Bilan saison (démo)', fin_bridge: 'Budget & marge (démo)', col_perf: 'Performance collection (démo)', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'dir_overview', 'retail_parc', 'ws_matrix', 'achats_otb', 'fin_bridge', 'col_perf', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'dir_overview', 'retail_parc', 'ws_matrix', 'achats_otb', 'achats_saison', 'fin_bridge', 'col_perf', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
@@ -2394,7 +2394,10 @@ function renderReport(rep) {
       return (showBanners ? `<div class="section-head" id="sec-${s.theme}">${s.label}</div>` : '') + cards;
     }).join('\n');
   }
-  return buildBilan(rep) + body; // Bilan épinglé en tête (scorecard N/N-1 + signaux auto + synthèse IA)
+  // Bilan 360 épinglé en tête : le scorecard e-commerce est PROPRE AU DIGITAL. Les autres espaces
+  // ont leur PROPRE bilan métier (carte « hero » en tête de leur vue) → on n'impose plus la vue digitale.
+  const digitalBilan = (CURRENT_ENTITY === 'digital') || isMyView(CURRENT_MODULE);
+  return (digitalBilan ? buildBilan(rep) : '') + body;
 }
 
 // ── Sommaire latéral à ancres (navigation dans la longue page Reporting) ──────────
