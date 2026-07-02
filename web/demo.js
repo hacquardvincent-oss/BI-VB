@@ -433,7 +433,7 @@
   DEMO_retail_map();
   function DEMO_retail_map() {
     const projFR = ([lng, lat]) => [((lng + 5) * 0.69 / 10.35 * 88 + 6), ((51.5 - lat) / 10.5 * 88 + 6)];      // France + Corse
-    const projEU = ([lng, lat]) => [((lng + 10) * 0.66 / 19.8 * 88 + 6), ((58 - lat) / 22 * 88 + 6)];           // Europe
+    const projEU = ([lng, lat]) => [((lng + 11) * 0.64 / 19.84 * 88 + 6), ((59 - lat) / 24 * 88 + 6)];          // Europe
     const path = (pts, proj) => 'M' + pts.map(p => proj(p).map(v => v.toFixed(1)).join(',')).join(' L') + ' Z';
     const byCity = {}; STORES.forEach(s => { const g = CITY_LL[s.v]; if (!g) return; const e = byCity[s.v] || (byCity[s.v] = { city: s.v, ll: g, region: g[2], ca: 0, lw: 0 }); e.ca += s.ca; e.lw += s.ca * s.g; });
     const cities = Object.values(byCity).map(c => ({ ...c, lfl: Math.round(c.lw / c.ca) }));
@@ -445,9 +445,13 @@
     const DEFS = i => `<defs><filter id="ds${i}" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0.7" stdDeviation="0.9" flood-color="#5a6472" flood-opacity="0.35"/></filter><linearGradient id="land${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef3f7"/><stop offset="1" stop-color="#dde5ec"/></linearGradient><linearGradient id="sea${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f6fa"/><stop offset="1" stop-color="#e7eef4"/></linearGradient></defs>`;
     const frMk = cities.map(c => { const [x, y] = projFR(c.ll); return mrk(x, y, c.ca, c.lfl, `${c.city} · ${keur(c.ca)} · LFL ${c.lfl >= 0 ? '+' : ''}${c.lfl}%`) + lbl(x, y, c.city === 'Nice' ? 'Nice' : c.city); }).join('');
     const frSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:310px">${DEFS('F')}<g filter="url(#dsF)"><path d="${path(FR_BORDER, projFR)}" fill="url(#landF)" stroke="#b3bece" stroke-width="0.5"/><path d="${path(CORSE, projFR)}" fill="url(#landF)" stroke="#b3bece" stroke-width="0.5"/></g>${frMk}</svg>`;
-    const grid = [24, 42, 60, 78].map(x => `<line x1="${x}" y1="6" x2="${x}" y2="94" stroke="#d6dde4" stroke-width="0.3"/>`).join('') + [26, 44, 62, 80].map(y => `<line x1="6" y1="${y}" x2="94" y2="${y}" stroke="#d6dde4" stroke-width="0.3"/>`).join('');
+    // Tracés Europe de l'Ouest (littoral réel en [lng,lat]) : continent + Grande-Bretagne + Irlande.
+    const EU_MAIN = [[8.5, 55.0], [7.0, 53.6], [4.8, 53.2], [4.2, 51.9], [3.1, 51.3], [1.6, 50.9], [0.2, 49.7], [-1.3, 49.3], [-1.9, 48.6], [-4.7, 48.3], [-4.2, 47.8], [-2.2, 47.3], [-1.2, 46.2], [-1.2, 44.6], [-1.6, 43.4], [-1.9, 43.4], [-3.0, 43.5], [-5.7, 43.6], [-8.9, 43.3], [-9.3, 42.0], [-9.5, 38.7], [-8.9, 37.0], [-7.4, 37.2], [-6.3, 36.2], [-2.2, 36.7], [-0.5, 38.3], [0.6, 40.6], [2.2, 41.4], [3.0, 42.4], [4.2, 43.4], [6.0, 43.1], [7.5, 43.7], [8.8, 44.4], [10.3, 43.9], [11.2, 42.4], [13.0, 40.9], [15.6, 40.0], [16.0, 38.0], [17.2, 39.0], [18.4, 40.1], [16.0, 41.9], [13.5, 43.6], [12.4, 44.8], [13.5, 45.7], [15.0, 46.5], [16.5, 48.0], [15.5, 51.0], [14.2, 53.9], [11.0, 54.4], [9.5, 54.8]];
+    const GB = [[-1.8, 50.7], [-5.5, 50.1], [-5.0, 51.7], [-4.8, 53.3], [-3.0, 54.9], [-5.0, 56.7], [-3.0, 58.5], [-2.0, 57.5], [-1.5, 55.0], [0.4, 52.9], [1.4, 51.4], [-0.5, 50.8]];
+    const IE = [[-6.0, 52.2], [-10.2, 51.5], [-9.5, 54.3], [-6.0, 55.2], [-6.3, 53.4]];
+    const landP = pts => `<path d="${path(pts, projEU)}" fill="url(#landE)" stroke="#b3bece" stroke-width="0.5"/>`;
     const euMk = INTL.map(i => { const [x, y] = projEU(i.ll); return mrk(x, y, i.ca, i.lfl, `${i.city} · ${keur(i.ca)} · LFL ${i.lfl >= 0 ? '+' : ''}${i.lfl}%`) + lbl(x, y, i.city); }).join('');
-    const euSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:310px">${DEFS('E')}<rect x="4" y="4" width="92" height="92" rx="7" fill="url(#seaE)" stroke="#c6cfd8" stroke-width="0.5"/>${grid}${euMk}<text x="50" y="97.5" font-size="3" text-anchor="middle" fill="#9aa1aa">Europe — positions géographiques réelles</text></svg>`;
+    const euSvg = `<svg viewBox="0 0 100 100" style="width:100%;height:310px">${DEFS('E')}<rect x="1" y="1" width="98" height="98" rx="7" fill="url(#seaE)"/><g filter="url(#dsE)">${landP(EU_MAIN)}${landP(GB)}${landP(IE)}</g>${euMk}<text x="50" y="98" font-size="2.8" text-anchor="middle" fill="#9aa1aa">Europe de l'Ouest — positions réelles</text></svg>`;
     const bestReg = regions[0], worstReg = regions.slice().sort((a, b) => a.lfl - b.lfl)[0];
     const kpis = `<div class="kgrid">
       ${tile('Magasins France', String(STORES.length), regions.length + ' régions')}
