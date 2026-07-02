@@ -259,6 +259,12 @@ table.pivot tr.pv-total td{font-weight:700;background:var(--accent-soft);border-
   h1,h2{font-size:19px}
 }
 
+/* Badge « Démo » (cartes métier à données de démonstration) */
+.demo-badge{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8a6d3b;background:#fff4d6;border:1px solid #f0d98a;border-radius:99px;padding:1px 8px;margin-left:9px;vertical-align:2px}
+/* Matrice « heatmap » (wholesale : qui vend quoi) */
+table.heat td{border:2px solid #fff;font-weight:600;font-variant-numeric:tabular-nums}
+table.heat th{font-size:10.5px;color:var(--t3);font-weight:600}
+
 /* Lignes de total (tfoot Objectifs, etc.) */
 tfoot tr.tot td{border-top:1.5px solid var(--br);border-bottom:none;font-weight:600;padding-top:11px;background:var(--s2)}
 

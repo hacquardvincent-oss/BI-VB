@@ -152,7 +152,7 @@ const MODULES = {
     entity: 'achats', icon: '🔔', label: 'Réassort & alertes', preset: 'month',
     intro: 'Réassort prioritaire : demande « prévenez-moi » sur ruptures, couverture de stock et top produits à recommander.',
     files: { required: ['oms'], optional: ['bis', 'ref'] },
-    layout: ['stockalerts', 'stockalertstop', 'stockcouv', 'piecesfamchannel', 'produits'],
+    layout: ['achats_otb', 'stockalerts', 'stockalertstop', 'stockcouv', 'piecesfamchannel', 'produits'],
   },
   achats_selltrough: {
     entity: 'achats', icon: '📦', label: 'Sell-through & collection', preset: 'all',
@@ -171,7 +171,7 @@ const MODULES = {
     entity: 'direction', icon: '🏛️', label: 'Synthèse groupe', preset: 'month',
     intro: 'Vue consolidée : bilan & KPI, cumul du mois, CA e-commerce + marketplace, cross-canal et décomposition de variance vs N-1.',
     files: { required: ['oms'], optional: ['ga', 'y2', 'ads'] },
-    layout: ['kpi', 'cumul', 'ca', 'marketplace', 'crosschannel', 'variance'],
+    layout: ['dir_overview', 'kpi', 'cumul', 'ca', 'marketplace', 'crosschannel', 'variance'],
   },
   dir_pilotage: {
     entity: 'direction', icon: '🧭', label: 'Plan d\'action & leviers', preset: 'month',
@@ -184,7 +184,7 @@ const MODULES = {
     entity: 'wholesale', icon: '🤝', label: 'Comptes & enseignes', preset: 'month',
     intro: 'CA par compte (Galeries Lafayette / Printemps / PDT / Lulli) vs N-1, corner vs ship-from-store vs dropshipping, familles par enseigne.',
     files: { required: ['oms'], optional: ['y2', 'ref'] },
-    layout: ['marketplace', 'mpfamilles'],
+    layout: ['ws_matrix', 'marketplace', 'mpfamilles'],
   },
   ws_arbitrage: {
     entity: 'wholesale', icon: '🔀', label: 'Cross-canal & arbitrage', preset: 'all',
@@ -197,7 +197,7 @@ const MODULES = {
     entity: 'collection', icon: '👗', label: 'Collection & saison', preset: 'all',
     intro: 'Performance de la collection : comparaison de saison (E26 vs E25), sell-through par famille, rentabilité.',
     files: { required: ['oms'], optional: ['impl', 'ref', 'ret'] },
-    layout: ['saisoncompare', 'saison', 'famille', 'renta'],
+    layout: ['col_perf', 'saisoncompare', 'saison', 'famille', 'renta'],
   },
   col_desir: {
     entity: 'collection', icon: '✨', label: 'Désir produit & funnel', preset: 'all',
@@ -216,7 +216,7 @@ const MODULES = {
     entity: 'retail', icon: '🏬', label: 'Réseau & magasins', preset: 'month',
     intro: 'Performance du réseau : CA par boutique vs N-1, panier moyen & indice de vente par magasin, entrepôt vs boutiques.',
     files: { required: ['oms'], optional: ['ref'] },
-    layout: ['retailstores', 'famille', 'produits'],
+    layout: ['retail_parc', 'retailstores', 'famille', 'produits'],
   },
   retail_stock: {
     entity: 'retail', icon: '📦', label: 'Stock & réassort magasin', preset: 'all',
@@ -229,7 +229,7 @@ const MODULES = {
     entity: 'finance', icon: '💶', label: 'P&L & marge', preset: 'month',
     intro: 'Compte de résultat simplifié : CA brut → net (retours) → marge brute (hypothèse) → contribution après média. Réglez le taux de marge.',
     files: { required: ['oms'], optional: ['ret', 'ads', 'y2'] },
-    layout: ['pnl', 'variance', 'cumul'],
+    layout: ['fin_bridge', 'pnl', 'variance', 'cumul'],
   },
   fin_pilotage: {
     entity: 'finance', icon: '🧮', label: 'Marge & leviers', preset: 'all',
@@ -241,11 +241,11 @@ const MODULES = {
 
 // ── Taxonomie : sections dans l'ordre de la structure cible (recette) ──
 const THEME_META = {
-  P: '🎯 Pilotage 360', PA: '🧭 Plan d\'action', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
+  HE: '📊 Vue métier', P: '🎯 Pilotage 360', PA: '🧭 Plan d\'action', CO: '💰 Pilotage commercial', T: '📈 Suivi temporel', ES: '🛒 E-Store', AN: '🚫 Annulations & Remboursements', SK: '🔔 Alertes stock', OS: '🧭 Parcours on-site', AQ: '📡 Acquisition',
   IN: '🌍 International', MP: '🏬 Marketplace', RT: '🏬 Réseau boutiques', CR: '🔀 Analyses croisées',
   OF: '👗 Offre & Merchandising', FI: '💶 Finance', Z: '🗂️ À trier',
 };
-const THEME_ORDER = ['P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'RT', 'CR', 'OF', 'FI', 'Z'];
+const THEME_ORDER = ['HE', 'P', 'PA', 'CO', 'T', 'ES', 'AN', 'SK', 'OS', 'AQ', 'IN', 'MP', 'RT', 'CR', 'OF', 'FI', 'Z'];
 const THEME_OF = {
   kpi: 'P', actionplan: 'PA', cumul: 'P', variance: 'P', perimsynth: 'P',
   demarque: 'CO', fulloff: 'CO', promo: 'CO', offrecompare: 'CO', comalerts: 'CO',
@@ -259,6 +259,7 @@ const THEME_OF = {
   zonecompare: 'IN', pays: 'IN', ttpays: 'IN', fampays: 'IN',
   marketplace: 'MP', crosschannel: 'MP', mpfamilles: 'MP',
   retailstores: 'RT', pnl: 'FI',
+  dir_overview: 'HE', retail_parc: 'HE', ws_matrix: 'HE', achats_otb: 'HE', fin_bridge: 'HE', col_perf: 'HE', // cartes métier (démo)
   campaignland: 'CR',
   saisoncompare: 'OF', saison: 'OF', renta: 'OF',
   ca: 'Z', funnel: 'Z', // redondants avec le nouveau Bilan → à trier
@@ -278,12 +279,12 @@ const CARD_LABELS = {
   device: 'Mobile vs Desktop', annulations: 'Annulations', retours: 'Retours clients', returnreasons: 'Motifs de retour & taille', returngeo: 'Retours par marché & paiement', returnprod: 'Produits les plus retournés', stockalerts: 'Alertes stock', stockalertstop: 'Top alertes 2 sem.', piecesfamchannel: 'Pièces Entrepôt/Magasins', stockcouv: 'Stock & couverture',
   ga: 'Trafic (GA)', canaltype: 'Récap par type de canal', channels: 'Efficacité par canal', ads: 'Google Ads (COS/ROAS)', metaads: 'Meta Ads (FB/Insta)', metasocial: 'Meta organique (social)',
   campaigns: 'Campagnes (UTM)', zonecompare: 'France vs International', pays: 'CA par pays', ttpays: 'TT par pays', fampays: 'Familles par pays',
-  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
+  marketplace: 'CA Marketplace', crosschannel: 'Cross-canal', mpfamilles: 'Top familles / marketplace', retailstores: 'Réseau boutiques', pnl: 'P&L & marge', dir_overview: 'Vue d\'ensemble groupe (démo)', retail_parc: 'Parc magasin (démo)', ws_matrix: 'Qui vend quoi (démo)', achats_otb: 'Open-to-Buy (démo)', fin_bridge: 'Budget & marge (démo)', col_perf: 'Performance collection (démo)', campaignland: 'Campagne → landing', pagesrc: 'Source → page',
   saisoncompare: 'Comparaison de saison', saison: 'CA par saison', renta: 'Rentabilité produit', ca: 'Détail CA',
   funnel: 'Funnel conversion', fulloff: 'Full vs Off price',
   demarque: 'Performance démarque', promo: 'Codes promo (usage & impact)', offrecompare: 'Comparatif d\'offre N vs N-1', comalerts: 'Alertes commerciales',
 };
-const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
+const ALL_CARDS = ['kpi', 'actionplan', 'cumul', 'perimsynth', 'variance', 'demarque', 'fulloff', 'promo', 'offrecompare', 'comalerts', 'daily', 'dailyads','famille', 'produits', 'pages', 'landing', 'lostpages', 'itemfunnel', 'gafunnel', 'device', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'stockalertstop', 'piecesfamchannel', 'stockcouv', 'ga', 'canaltype', 'channels', 'ads', 'metaads', 'metasocial', 'campaigns', 'zonecompare', 'pays', 'ttpays', 'fampays', 'marketplace', 'mpfamilles', 'crosschannel', 'retailstores', 'pnl', 'dir_overview', 'retail_parc', 'ws_matrix', 'achats_otb', 'fin_bridge', 'col_perf', 'campaignland', 'pagesrc', 'saisoncompare', 'saison', 'renta', 'funnel', 'ca'];
 const FULL_LAYOUT = ['kpi', 'actionplan', 'perimsynth', 'variance', 'gafunnel', 'daily', 'dailyads','ca', 'channels', 'device', 'marketplace', 'mpfamilles', 'zonecompare', 'pays', 'ttpays', 'saison', 'produits', 'itemfunnel', 'renta', 'annulations', 'retours', 'returnreasons', 'returngeo', 'returnprod', 'stockalerts', 'pages', 'landing', 'pagesrc', 'famille', 'ga'];
 
 // ── Taxonomie « data-analyse » (catégories de regroupement) + format de base par tableau ──
@@ -2358,6 +2359,7 @@ function renderReport(rep) {
     campaigns: campaignsCard, lostpages: lostPagesCard, campaignland: campaignLandingCard,
     ads: adsCard, metaads: metaadsCard, metasocial: metasocialCard,
   };
+  if (window.DEMO_HTML) Object.assign(C, window.DEMO_HTML); // cartes métier de démonstration (statiques)
   const layout = getLayout(CURRENT_MODULE);
   const card = k => {
     let html = C[k] || ''; if (!html) return '';
@@ -3193,6 +3195,7 @@ function renderCharts(rep) {
     const b1 = {}; if (rep.stores.n1 && rep.stores.n1.stores) rep.stores.n1.stores.forEach(s => { b1[s.store] = s; });
     growShrink('retailStoreChart', rep.stores.n.boutiques.slice(0, 12).map(s => ({ label: s.store, n: s.ca, n1: b1[s.store] ? b1[s.store].ca : null })));
   }
+  if (window.drawDemoCharts) window.drawDemoCharts(); // graphes des cartes métier de démonstration
   // Saison : modèles par famille E26 vs E25 (barres groupées)
   if (rep.seasonCompare && rep.seasonCompare.familles && rep.seasonCompare.familles.length) {
     const f = rep.seasonCompare.familles.slice(0, 8);
