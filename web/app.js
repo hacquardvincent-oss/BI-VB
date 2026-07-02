@@ -717,14 +717,9 @@ function switchModule(mod) {
   if (prBtn) { prBtn.click(); return; } // le raccourci applique la période ET recharge
   loadReport();
 }
-// Pastille « espace » dans le header (workspace switcher) : 1 contrôle, pas de 2ᵉ barre de nav.
-function renderEntitySwitch() {
-  const el = document.getElementById('entitySwitch'); if (!el) return;
-  const hasMods = e => MODULE_ORDER.some(k => MODULES[k] && moduleEntity(k) === e);
-  const opts = ENTITY_ORDER.map(e => { const m = ENTITIES[e]; return `<option value="${e}"${e === CURRENT_ENTITY ? ' selected' : ''}>${m.icon} ${esc(m.label)}${hasMods(e) ? '' : ' · à venir'}</option>`; }).join('');
-  el.innerHTML = `<select id="entitySelect" class="dt" title="Espace / entité de l'entreprise" style="font-weight:700;background:var(--accent-soft, #F3ECE0)">${opts}</select>`;
-  const s = document.getElementById('entitySelect'); if (s && !s._wired) { s._wired = true; s.addEventListener('change', () => switchEntity(s.value)); }
-}
+// Le sélecteur d'espace + le sous-menu sont désormais rendus par le composant COMMUN entitybar.js
+// (visible sur toutes les pages). On délègue ; app.js ne garde que le filtrage du moduleSelect par espace.
+function renderEntitySwitch() { if (window.renderEntityBar) window.renderEntityBar(); }
 // Change d'espace : filtre les types de reporting, bascule sur le 1er module de l'espace (ou aperçu « à venir »).
 function switchEntity(e) {
   if (!ENTITIES[e] || e === CURRENT_ENTITY) return;
