@@ -221,12 +221,42 @@ table.pivot tr.pv-sub .pv-ind{color:var(--t3)}
 table.pivot tr.pv-total td{font-weight:700;background:var(--accent-soft);border-top:2px solid var(--a);color:var(--t)}
 
 /* Mobile */
+/* ── Tablette / petit desktop : header sur 2 lignes, sous-menu d'espace scrollable ── */
+@media(max-width:960px){
+  #hdr{height:auto;min-height:52px;flex-wrap:wrap;gap:8px;padding:8px 14px}
+  #hdr #logo{font-size:15px}
+  #hdr .spacer{display:none}            /* plus de poussée à droite : les éléments s'enchaînent */
+  #entitySwitch{margin-left:4px}
+  #entitySwitch select{max-width:46vw}
+  /* Sous-menu propre à l'espace : sa propre ligne, défilement horizontal tactile */
+  #hdr nav.entity-nav,#hdr nav{order:10;flex:1 0 100%;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-left:0;padding-bottom:3px;scrollbar-width:thin}
+  #hdr nav::-webkit-scrollbar{height:4px}
+  #hdr nav::-webkit-scrollbar-thumb{background:var(--br);border-radius:99px}
+  #hdr nav .pb{flex:0 0 auto;white-space:nowrap}
+  #who{display:none}
+}
+/* ── Mobile : 1 colonne, rapport en tête, grilles & tables compactées ── */
 @media(max-width:760px){
-  .wrap{padding:16px}
-  #hdr{padding:0 16px;gap:10px}
+  .wrap{padding:12px}
+  #hdr{padding:8px 12px}
+  #hdr .btn{padding:6px 9px;font-size:12px}
   .cols2{grid-template-columns:1fr}
-  .card{padding:16px}
+  .grid.cols2,.grid.cols3{grid-template-columns:1fr}
+  .card{padding:14px;overflow-x:auto}         /* tables larges → défilement horizontal dans la carte */
   .card.scrollx{overflow-x:auto}
+  .card h3{font-size:11.5px;margin-bottom:11px}
+  /* Le RAPPORT passe avant le paramétrage (vedette ; les dates par défaut sont déjà auto par vue) */
+  #mainCol{order:1}
+  #setupCol{order:2}
+  .kgrid{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:8px}
+  .kc .v{font-size:17px}
+  table{font-size:11.5px}
+  th,td{padding:6px 7px}
+  /* Sommaire flottant : plus discret et bas de l'écran */
+  #reportNav{right:10px;left:10px;width:auto;bottom:10px;max-height:52vh}
+  /* Barres d'outils qui débordent → autorise le retour à la ligne */
+  .toolbar{flex-wrap:wrap}
+  h1,h2{font-size:19px}
 }
 
 /* Lignes de total (tfoot Objectifs, etc.) */

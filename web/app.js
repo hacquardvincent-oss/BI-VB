@@ -713,8 +713,7 @@ function switchModule(mod) {
   // Cadence du module : si le module déclare un preset (ex. 'yesterday', 'week', 'month'), on cale la
   // période via le raccourci correspondant (réutilise dates + N-1 comparable + reload). Ignoré si le
   // module fixe ses propres dates, ou si le preset n'a pas de raccourci ('all'/'today' → inchangé).
-  const prBtn = (!m.dates && m.preset) ? document.querySelector(`[data-range="${m.preset}"]`) : null;
-  if (prBtn) { prBtn.click(); return; } // le raccourci applique la période ET recharge
+  if (!m.dates && m.preset && applyRangePreset(m.preset)) { applyCurrentPeriod(); loadReport(); return; } // dates par défaut de la vue
   loadReport();
 }
 // Le sélecteur d'espace + le sous-menu sont désormais rendus par le composant COMMUN entitybar.js
@@ -3842,33 +3841,33 @@ document.getElementById('applyDates').addEventListener('click', () => {
 // Consentement cookies (sessions) + cible COS : recharge le rapport au changement
 ['consentN', 'consentN1', 'cosTarget'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', loadReport); });
 // Raccourcis de période : remplissent N (et N-1 = comparable −364 j, jour pour jour) puis appliquent
-document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+// Calcule + applique une période « preset » adaptée à la vue : today / yesterday / week (S-1 complète)
+// / month (cumul mois-à-date) / ytd (année-à-date). N-1 = −364 j (52 semaines pile → MÊME JOUR DE
+// SEMAINE, années bissextiles gérées : ex. 01/07/2026 → 02/07/2025). Retourne false pour 'all'/inconnu
+// (période inchangée). Réutilisé au clic sur un raccourci ET au chargement d'une vue (dates par défaut).
+function applyRangePreset(kind) {
   const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const shiftYearStr = s => { const p = s.split('-'); return `${+p[0] - 1}-${p[1]}-${p[2]}`; };
-  // En démo, « aujourd'hui » = dernière date du snapshot (ancre les raccourcis sur les données figées).
   const anchor = (IS_DEMO && DEMO_REF_DATE) ? new Date(DEMO_REF_DATE + 'T00:00:00') : new Date();
   const today = new Date(anchor); let from = new Date(anchor), to = new Date(anchor);
-  const kind = b.dataset.range;
-  // calendarCompare=true → N-1 = mêmes dates l'an dernier (mois/cumul/année) ;
-  // sinon comparable −364 j (même jour de semaine : hier, semaine, fenêtres glissantes).
-  let calendarCompare = false;
-  if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
-  else if (kind === 'week') { // SEMAINE DERNIÈRE complète (lundi → dimanche précédents)
-    const dow = (today.getDay() + 6) % 7; // 0 = lundi
-    to = new Date(today); to.setDate(today.getDate() - dow - 1);   // dimanche dernier
-    from = new Date(to); from.setDate(to.getDate() - 6);           // lundi de cette semaine-là
-  }
-  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; calendarCompare = true; } // cumul du mois EN COURS
-  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; calendarCompare = true; }                  // cumul de l'année EN COURS
+  if (kind === 'today') { /* from = to = aujourd'hui */ }
+  else if (kind === 'yesterday') { from.setDate(today.getDate() - 1); to.setDate(today.getDate() - 1); }
+  else if (kind === 'week') { const dow = (today.getDay() + 6) % 7; to = new Date(today); to.setDate(today.getDate() - dow - 1); from = new Date(to); from.setDate(to.getDate() - 6); } // S-1 lun→dim
+  else if (kind === 'month') { from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; }  // cumul mois-à-date
+  else if (kind === 'ytd') { from = new Date(today.getFullYear(), 0, 1); to = today; }                    // cumul année-à-date
+  else return false;
   const nf = ymd(from), nt = ymd(to);
   document.getElementById('dNfrom').value = nf; document.getElementById('dNto').value = nt;
-  document.getElementById('dCfrom').value = calendarCompare ? shiftYearStr(nf) : comparable364(nf);
-  document.getElementById('dCto').value = calendarCompare ? shiftYearStr(nt) : comparable364(nt);
-  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on')); b.classList.add('on');
-  document.getElementById('datesAll').classList.remove('on');
+  document.getElementById('dCfrom').value = comparable364(nf);      // N-1 = −364 j (jour de semaine aligné)
+  document.getElementById('dCto').value = comparable364(nt);
+  document.querySelectorAll('[data-range]').forEach(x => x.classList.remove('on'));
+  const btn = document.querySelector(`[data-range="${kind}"]`); if (btn) btn.classList.add('on');
+  const da = document.getElementById('datesAll'); if (da) da.classList.remove('on');
   setN1Manual(false); // un raccourci rétablit la comparaison N-1 auto
-  syncNPicker(); syncN1Picker();
-  applyCurrentPeriod(); loadReport();
+  try { syncNPicker(); syncN1Picker(); } catch (e) { /* flatpickr pas encore prêt */ }
+  return true;
+}
+document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+  if (applyRangePreset(b.dataset.range)) { applyCurrentPeriod(); loadReport(); }
 }));
 // Saisie manuelle de N : en mode AUTO, N-1 suit (−364 j) ; en mode manuel, on respecte la période N-1 saisie.
 ['dNfrom', 'dNto'].forEach(id => document.getElementById(id).addEventListener('change', () => {
@@ -3986,6 +3985,7 @@ document.querySelectorAll('[data-season]').forEach(b => b.addEventListener('clic
   const m = MODULES[CURRENT_MODULE] || {};
   CURRENT_DIM = m.dim || 'global';
   document.querySelectorAll('[data-dim]').forEach(x => x.classList.toggle('on', x.dataset.dim === CURRENT_DIM));
+  if (!m.dates && m.preset) applyRangePreset(m.preset); // dates par défaut adaptées à la vue au 1er chargement
   await loadStatus();
   await ga4Status();
   await wshopStatus();
